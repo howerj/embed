@@ -286,7 +286,6 @@ static void h2_free(h2_t *h)
 {
 	if(!h)
 		return;
-	free(h->bp.points);
 	memset(h, 0, sizeof(*h));
 	free(h);
 }
@@ -453,17 +452,11 @@ static int putch(int c)
 #endif
 #endif /** __unix__ **/
 
-static int wrap_getch(bool *debug_on)
+static int wrap_getch()
 {
 	int ch = getch();
-	assert(debug_on);
-	if(ch == EOF) {
-		note("End Of Input - exiting", ESCAPE);
+	if(ch == EOF || ch == ESCAPE)
 		exit(EXIT_SUCCESS);
-	}
-	if(ch == ESCAPE && debug_on)
-		*debug_on = true;
-
 	return ch == DELETE ? BACKSPACE : ch;
 }
 
@@ -520,15 +513,6 @@ static symbol_t *symbol_table_lookup(symbol_table_t *t, const char *id)
 {
 	for(size_t i = 0; i < t->length; i++)
 		if(!strcmp(t->symbols[i]->id, id))
-			return t->symbols[i];
-	return NULL;
-}
-
-/** @note There can be multiple symbols with the same value of the same type */
-static symbol_t *symbol_table_reverse_lookup(symbol_table_t *t, symbol_type_e type, word_t value)
-{
-	for(size_t i = 0; i < t->length; i++)
-		if(t->symbols[i]->type == type && t->symbols[i]->value == value)
 			return t->symbols[i];
 	return NULL;
 }
@@ -621,194 +605,7 @@ fail:
 }
 /* ========================== Symbol Table ================================= */
 
-/* ========================== Disassembler ================================= */
-
-static const char *instruction_to_string(word_t i)
-{
-	switch(i) {
-#define X(NAME, STRING, DEFINE, INSTRUCTION) case CODE_ ## NAME : return STRING ;
-	X_MACRO_INSTRUCTIONS
-#undef X
-	default:          break;
-	}
-	return NULL;
-}
-
-static const char *alu_op_to_string(word_t instruction)
-{
-	switch(ALU_OP(instruction)) {
-	case ALU_OP_T:                  return "T";
-	case ALU_OP_N:                  return "N";
-	case ALU_OP_T_PLUS_N:           return "T+N";
-	case ALU_OP_T_AND_N:            return "T&N";
-	case ALU_OP_T_OR_N:             return "T|N";
-	case ALU_OP_T_XOR_N:            return "T^N";
-	case ALU_OP_T_INVERT:           return "~T";
-	case ALU_OP_T_EQUAL_N:          return "N=T";
-	case ALU_OP_N_LESS_T:           return "T>N";
-	case ALU_OP_N_RSHIFT_T:         return "N>>T";
-	case ALU_OP_T_DECREMENT:        return "T-1";
-	case ALU_OP_R:                  return "R";
-	case ALU_OP_T_LOAD:             return "[T]";
-	case ALU_OP_N_LSHIFT_T:         return "N<<T";
-	case ALU_OP_DEPTH:              return "depth";
-	case ALU_OP_N_ULESS_T:          return "Tu>N";
-	case ALU_OP_RDEPTH:             return "rdepth";
-	case ALU_OP_T_EQUAL_0:          return "0=";
-	default:                        return "unknown";
-	}
-}
-
-static char *disassembler_alu(word_t instruction)
-{
-	char buf[256] = {0};
-	const char *r = instruction_to_string(OP_ALU_OP | instruction);
-	if(r)
-		return duplicate(r);
-	sprintf(buf, "%04x:%s:%s:%s:%s:%s:%u:%u",
-			(unsigned)instruction,
-			alu_op_to_string(instruction),
-			instruction & T_TO_N ? "T->N" : "",
-			instruction & T_TO_R ? "T->R" : "",
-			instruction & N_TO_ADDR_T ? "N->[T]" : "",
-			instruction & R_TO_PC ? "R->PC" : "",
-			(unsigned)(instruction & 0x000C),
-			(unsigned)(instruction & 0x0003));
-	return duplicate(buf);
-}
-
-static const char *disassemble_jump(symbol_table_t *symbols, symbol_type_e type, word_t address)
-{
-	static const char *r = "";
-	symbol_t *found = NULL;
-	if(!symbols)
-		return r;
-	if((found = symbol_table_reverse_lookup(symbols, type, address)))
-		return found->id;
-	return r;
-}
-
-static int disassembler_instruction(word_t instruction, FILE *output, symbol_table_t *symbols)
-{
-	int r = 0;
-	unsigned short literal, address;
-	char *s = NULL;
-	assert(output);
-
-	literal = instruction & 0x7FFF;
-	address = instruction & 0x1FFF;
-
-	if (IS_LITERAL(instruction))
-		r = fprintf(output, "%hx", literal);
-	else if (IS_ALU_OP(instruction))
-		r = fprintf(output, "%s", s = disassembler_alu(instruction));
-	else if (IS_CALL(instruction))
-		r = fprintf(output, "call %hx %s",    address, disassemble_jump(symbols, SYMBOL_TYPE_CALL, address));
-	else if (IS_0BRANCH(instruction))
-		r = fprintf(output, "0branch %hx %s", address, disassemble_jump(symbols, SYMBOL_TYPE_LABEL, address));
-	else if (IS_BRANCH(instruction))
-		r = fprintf(output, "branch %hx %s",  address, disassemble_jump(symbols, SYMBOL_TYPE_LABEL, address));
-	else
-		r = fprintf(output, "?(%hx)", instruction);
-	free(s);
-	return r < 0 ? -1 : 0;
-}
-
-static int h2_disassemble(FILE *input, FILE *output, symbol_table_t *symbols)
-{
-	assert(input);
-	assert(output);
-	char line[80] = {0};
-	while(!feof(input)) {
-		memset(line, 0, sizeof(line));
-		fscanf(input, "%79s", line);
-		if(line[0]) {
-			word_t instruction;
-			if(string_to_cell(16, &instruction, line)) {
-				error("invalid input to disassembler: %s", line);
-				return -1;
-			}
-			if(disassembler_instruction(instruction, output, symbols) < 0) {
-				error("disassembly failed");
-				return -1;
-			}
-			if(fputc('\n', output) != '\n') {
-				error("disassembly failed");
-				return -1;
-			}
-			fflush(output);
-		}
-	}
-	return 0;
-}
-
-/* ========================== Disassembler ================================= */
-
 /* ========================== Simulation And Debugger ====================== */
-
-/* @note At the moment I/O is not timing accurate, the UART behaves as if reads
- * and writes happened instantly, along with the PS/2 keyboard. Also the UART
- * has a FIFO which is not simulated. It should be easy enough to delay for
- * the roughly the right number of cycles, but not to get exact cycle
- * accurate timing */
-
-static char to_char(uint8_t c)
-{
-	return isprint(c) ? c : '.';
-}
-
-static void memory_print(FILE *out, word_t start, word_t *p, word_t length, bool chars)
-{
-	const word_t line_length = 16;
-	assert(out);
-	assert(p);
-	for(word_t i = 0; i < length; i += line_length) {
-		fprintf(out, "%04"PRIx16 ": ", i + start);
-		for(word_t j = 0; j < line_length && j + i < length; j++)
-			fprintf(out, "%04"PRIx16 " ", p[j + i]);
-		fputc('\t', out);
-		if(chars) /* correct endianess? */
-			for(word_t j = 0; j < line_length && j + i < length; j++)
-				fprintf(out, "%c%c", to_char(p[j + i] >> 8), to_char(p[j + i]));
-
-		putc('\n', out);
-	}
-	putc('\n', out);
-}
-
-static bool break_point_find(break_point_t *bp, word_t find_me)
-{
-	assert(bp);
-	for(size_t i = 0; i < bp->length; i++)
-		if(bp->points[i] == find_me)
-			return true;
-	return false;
-}
-
-static void break_point_add(break_point_t *bp, word_t point)
-{
-	assert(bp);
-	size_t a;
-	word_t *r;
-	if(break_point_find(bp, point))
-		return;
-
-	a = (bp->length + 1) * sizeof(bp->points[0]);
-	r = realloc(bp->points, a);
-	if(!r || a < bp->length)
-		fatal("realloc of size %zu failed", a);
-	r[bp->length] = point;
-	bp->length++;
-	bp->points = r;
-}
-
-static int break_point_print(FILE *out, break_point_t *bp)
-{
-	for(size_t i = 0; i < bp->length; i++)
-		if(fprintf(out, "\t0x%04"PRIx16 "\n", bp->points[i]) < 0)
-			return -1;
-	return 0;
-}
 
 word_t h2_io_memory_read_operation(h2_soc_state_t *soc)
 {
@@ -826,11 +623,10 @@ word_t h2_io_memory_read_operation(h2_soc_state_t *soc)
 	return 0;
 }
 
-static word_t h2_io_get_default(h2_soc_state_t *soc, word_t addr, bool *debug_on)
+static word_t h2_io_get_default(h2_soc_state_t *soc, word_t addr)
 {
 	assert(soc);
 	debug("IO read addr: %"PRIx16, addr);
-	(void)debug_on;
 	switch(addr) {
 	case iUart:         return UART_TX_FIFO_EMPTY | soc->uart_getchar_register;
 	case iMemDin:       return h2_io_memory_read_operation(soc);
@@ -840,7 +636,7 @@ static word_t h2_io_get_default(h2_soc_state_t *soc, word_t addr, bool *debug_on
 	return 0;
 }
 
-static void h2_io_set_default(h2_soc_state_t *soc, word_t addr, word_t value, bool *debug_on)
+static void h2_io_set_default(h2_soc_state_t *soc, word_t addr, word_t value)
 {
 	assert(soc);
 	debug("IO write addr/value: %"PRIx16"/%"PRIx16, addr, value);
@@ -850,7 +646,7 @@ static void h2_io_set_default(h2_soc_state_t *soc, word_t addr, word_t value, bo
 			if(value & UART_TX_WE)
 				putch(0xFF & value);
 			if(value & UART_RX_RE)
-				soc->uart_getchar_register = wrap_getch(debug_on);
+				soc->uart_getchar_register = wrap_getch();
 			break;
 	case oMemControl:
 	{
@@ -950,380 +746,18 @@ static word_t stack_delta(word_t d)
 	return i[d];
 }
 
-static int trace(FILE *output, word_t instruction, symbol_table_t *symbols, const char *fmt, ...)
+int h2_run(h2_t *h, h2_io_t *io)
 {
-	int r = 0;
-	va_list ap;
-	assert(output);
-	if(!output)
-		return r;
-	assert(fmt);
-	va_start(ap, fmt);
-	r = vfprintf(output, fmt, ap);
-	va_end(ap);
-	if(r < 0)
-		return r;
-	if(fputc('\t', output) != '\t')
-		return -1;
-	r = disassembler_instruction(instruction, output, symbols);
-	if(r < 0)
-		return r;
-	if(fputc('\n', output) != '\n')
-		return -1;
-	if(fflush(output) == EOF)
-		return -1;
-	return r;
-}
-
-typedef struct {
-	FILE *input;
-	FILE *output;
-	bool step;
-	bool trace_on;
-} debug_state_t;
-
-static const char *debug_prompt = "debug> ";
-
-static int number(char *s, word_t *o, size_t length);
-
-static void h2_print(FILE *out, h2_t *h)
-{
-	fputs("Return Stack:\n", out);
-	memory_print(out, 0, h->rstk, STK_SIZE, false);
-	fputs("Variable Stack:\n", out);
-	fprintf(out, "tos:  %04"PRIx16"\n", h->tos);
-	memory_print(out, 1, h->dstk, STK_SIZE, false);
-
-	fprintf(out, "pc:   %04"PRIx16"\n", h->pc);
-	fprintf(out, "rp:   %04"PRIx16" (max %04"PRIx16")\n", h->rp, h->rpm);
-	fprintf(out, "dp:   %04"PRIx16" (max %04"PRIx16")\n", h->sp, h->spm);
-}
-
-typedef enum {
-	DBG_CMD_NO_ARG,
-	DBG_CMD_NUMBER,
-	DBG_CMD_STRING,
-	DBG_CMD_EITHER,
-} debug_command_type_e;
-
-typedef struct
-{
-	int cmd;
-	int argc;
-	debug_command_type_e arg1;
-	debug_command_type_e arg2;
-	char *description;
-} debug_command_t;
-
-static const debug_command_t debug_commands[] = {
-	{ .cmd = 'a', .argc = 1, .arg1 = DBG_CMD_NUMBER, .arg2 = DBG_CMD_NO_ARG, .description = "assemble               " },
-	{ .cmd = 'b', .argc = 1, .arg1 = DBG_CMD_EITHER, .arg2 = DBG_CMD_NO_ARG, .description = "set break point        " },
-	{ .cmd = 'c', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "continue               " },
-	{ .cmd = 'd', .argc = 2, .arg1 = DBG_CMD_NUMBER, .arg2 = DBG_CMD_NUMBER, .description = "dump                   " },
-	{ .cmd = 'f', .argc = 1, .arg1 = DBG_CMD_EITHER, .arg2 = DBG_CMD_NO_ARG, .description = "save to file           " },
-	{ .cmd = 'g', .argc = 1, .arg1 = DBG_CMD_EITHER, .arg2 = DBG_CMD_NO_ARG, .description = "goto address           " },
-	{ .cmd = 'h', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "help                   " },
-	{ .cmd = 'i', .argc = 1, .arg1 = DBG_CMD_NUMBER, .arg2 = DBG_CMD_NO_ARG, .description = "input (port)           " },
-	{ .cmd = 'k', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "list all breakpoints   " },
-	{ .cmd = 'l', .argc = 1, .arg1 = DBG_CMD_NUMBER, .arg2 = DBG_CMD_NO_ARG, .description = "set debug level        " },
-	{ .cmd = 'o', .argc = 2, .arg1 = DBG_CMD_NUMBER, .arg2 = DBG_CMD_NUMBER, .description = "output (port value)    " },
-	{ .cmd = 'p', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "print IO state         " },
-	{ .cmd = 'q', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "quit                   " },
-	{ .cmd = 'r', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "remove all break points" },
-	{ .cmd = 's', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "step                   " },
-	{ .cmd = 't', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "toggle tracing         " },
-	{ .cmd = 'u', .argc = 2, .arg1 = DBG_CMD_NUMBER, .arg2 = DBG_CMD_NUMBER, .description = "unassemble             " },
-	{ .cmd = 'y', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "list symbols           " },
-	{ .cmd = 'P', .argc = 1, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "push value             " },
-	{ .cmd = 'D', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "pop value              " },
-	{ .cmd = 'G', .argc = 1, .arg1 = DBG_CMD_EITHER, .arg2 = DBG_CMD_NO_ARG, .description = "call function/location " },
-	{ .cmd = '!', .argc = 2, .arg1 = DBG_CMD_NUMBER, .arg2 = DBG_CMD_NUMBER, .description = "set value              " },
-	{ .cmd = -1,  .argc = 0, .arg1 = DBG_CMD_EITHER, .arg2 = DBG_CMD_NO_ARG, .description = NULL },
-};
-
-static void debug_command_print_help(FILE *out, const debug_command_t *dc)
-{
-	assert(out);
-	assert(dc);
-
-	static const char *debug_help = "\
-Debugger Help: \n\n\
-Hit 'Escape' when the simulation is and is reading from input to exit \n\
-into the back debugger.\n\n\
-Command list:\n\n";
-
-	static const char *arg_type[] = {
-		[DBG_CMD_NO_ARG] = "             ",
-		[DBG_CMD_NUMBER] = "number       ",
-		[DBG_CMD_STRING] = "string       ",
-		[DBG_CMD_EITHER] = "number/string"
-	};
-	fputs(debug_help, out);
-	for(unsigned i = 0; dc[i].cmd != -1; i++)
-		fprintf(out, " %c %s\t%d\t%s %s\n", dc[i].cmd, dc[i].description, dc[i].argc, arg_type[dc[i].arg1], arg_type[dc[i].arg2]);
-}
-
-static int debug_command_check(FILE *out, const debug_command_t *dc, int cmd, int argc, bool is_numeric1, bool is_numeric2)
-{
-	assert(out);
-	assert(dc);
-	for(unsigned i = 0; dc[i].cmd != -1 ; i++) {
-		if(dc[i].cmd == cmd) {
-			if(dc[i].argc != argc) {
-				fprintf(out, "command '%c' expects %d arguments, got %d\n", cmd, dc[i].argc, argc);
-				return -1;
-			}
-
-			if(dc[i].argc == 0)
-				return 0;
-
-			if(dc[i].arg1 == DBG_CMD_NUMBER && !is_numeric1) {
-				fprintf(out, "command '%c' expects arguments one to be numeric\n", cmd);
-				return -1;
-			}
-
-			if(dc[i].argc == 1)
-				return 0;
-
-			if(dc[i].arg2 == DBG_CMD_NUMBER && !is_numeric2) {
-				fprintf(out, "command '%c' expects arguments two to be numeric\n", cmd);
-				return -1;
-			}
-
-			return 0;
-		}
-	}
-	fprintf(out, "unrecognized command '%c'\n", cmd);
-	return -1;
-}
-
-static int debug_resolve_symbol(FILE *out, char *symbol, symbol_table_t *symbols, word_t *value)
-{
-	assert(out);
-	assert(symbol);
-	assert(symbols);
-	assert(value);
-	symbol_t *sym;
-	*value = 0;
-	if(!(sym = symbol_table_lookup(symbols, symbol))) {
-		fprintf(out, "symbol '%s' not found\n", symbol);
-		return -1;
-	}
-	if(sym->type != SYMBOL_TYPE_LABEL && sym->type != SYMBOL_TYPE_CALL) {
-		fprintf(out, "symbol is not call or label\n");
-		return -1;
-	}
-	*value = sym->value;
-	return 0;
-}
-
-static int h2_debugger(debug_state_t *ds, h2_t *h, h2_io_t *io, symbol_table_t *symbols, word_t point)
-{
-	bool breaks = false;
 	assert(h);
-	assert(ds);
+	assert(io);
 
-	breaks = break_point_find(&h->bp, point);
-	if(breaks)
-		fprintf(ds->output, "\n === BREAK(0x%04"PRIx16") ===\n", h->pc);
-
-	if(ds->step || breaks) {
-		char line[256];
-		char op[256], arg1[256], arg2[256];
-		int argc;
-		bool is_numeric1, is_numeric2;
-		word_t num1, num2;
-
-		ds->step = true;
-
-again:
-		memset(line, 0, sizeof(line));
-		memset(op,   0, sizeof(op));
-		memset(arg1, 0, sizeof(arg1));
-		memset(arg2, 0, sizeof(arg2));
-
-		fputs(debug_prompt, ds->output);
-		if(!fgets(line, sizeof(line), ds->input)) {
-			fputs("End Of Input - exiting\n", ds->output);
-			return -1;
-		}
-
-		argc = sscanf(line, "%256s %256s %256s", op, arg1, arg2);
-		if(argc < 1)
-			goto again;
-
-		is_numeric1 = number(arg1, &num1, strlen(arg1));
-		is_numeric2 = number(arg2, &num2, strlen(arg2));
-
-		if(!(strlen(op) == 1)) {
-			fprintf(ds->output, "invalid command '%s'\n", op);
-			goto again;
-		}
-
-		if(debug_command_check(ds->output, debug_commands, op[0], argc-1, is_numeric1, is_numeric2) < 0)
-			goto again;
-
-		switch(op[0]) {
-		case ' ':
-		case '\t':
-		case '\r':
-		case '\n':
-			break;
-		case 'a':
-			fprintf(ds->output, "command '%c' not implemented yet!\n", op[0]);
-			break;
-		case 'f':
-		{
-			FILE *o = fopen(arg1, "wb");
-			if(!o) {
-				fprintf(ds->output, "could not open file '%s 'for writing: %s", arg1, strerror(errno));
-				break;
-			}
-			h2_save(h, o, true);
-			fclose(o);
-			break;
-		}
-		case 'd':
-			if(((long)num1 + (long)num2) > MAX_CORE)
-				fprintf(ds->output, "overflow in RAM dump\n");
-			else
-				memory_print(ds->output, num1, h->core + num1, num2, true);
-			break;
-		case 'l':
-			if(!is_numeric1) {
-				fprintf(ds->output, "set log level expects one numeric argument\n");
-				break;
-			}
-			log_level = num1;
-			break;
-		case 'b':
-			if(!is_numeric1) {
-				if(debug_resolve_symbol(ds->output, arg1, symbols, &num1))
-					break;
-			}
-			break_point_add(&h->bp, num1);
-			break;
-
-		case 'g':
-			if(!is_numeric1) {
-				if(debug_resolve_symbol(ds->output, arg1, symbols, &num1))
-					break;
-			}
-			h->pc = num1;
-			break;
-		case 'G':
-			if(!is_numeric1) {
-				if(debug_resolve_symbol(ds->output, arg1, symbols, &num1))
-					break;
-			}
-			rpush(h, h->pc);
-			h->pc = num1;
-			break;
-		case '.':
-			h2_print(ds->output, h);
-			break;
-
-		case '!':
-			if(num1 >= MAX_CORE) {
-				fprintf(ds->output, "invalid write\n");
-				break;
-			}
-			h->core[num1] = num2;
-			break;
-		case 'P':
-			dpush(h, num1);
-			break;
-		case 'D':
-			fprintf(ds->output, "popped: %04u\n", (unsigned)dpop(h));
-			break;
-
-		case 'r':
-			free(h->bp.points);
-			h->bp.points = NULL;
-			h->bp.length = 0;
-			break;
-		case 'u':
-			if(num2 >= MAX_CORE || num1 > num2) {
-				fprintf(ds->output, "invalid range\n");
-				break;
-			}
-			for(word_t i = num1; i < num2; i++) {
-				fprintf(ds->output, "%04"PRIx16 ":\t", i);
-				disassembler_instruction(h->core[i], ds->output, symbols);
-				fputc('\n', ds->output);
-			}
-			break;
-
-		case 'o':
-			if(!io) {
-				fprintf(ds->output, "I/O unavailable\n");
-				break;
-			}
-			io->out(io->soc, num1, num2, NULL);
-
-			break;
-
-		case 'i':
-			if(!io) {
-				fprintf(ds->output, "I/O unavailable\n");
-				break;
-			}
-			fprintf(ds->output, "read: %"PRIx16"\n", io->in(io->soc, num1, NULL));
-			break;
-
-		case 'k':
-			break_point_print(ds->output, &h->bp);
-			break;
-		case 'h':
-			debug_command_print_help(ds->output, debug_commands);
-			break;
-		case 's':
-			return 0;
-		case 'c':
-			ds->step = false;
-			return 0;
-		case 't':
-			ds->trace_on = !ds->trace_on;
-			fprintf(ds->output, "trace %s\n", ds->trace_on ? "on" : "off");
-			break;
-		case 'y':
-			if(symbols)
-				symbol_table_print(symbols, ds->output);
-			else
-				fprintf(ds->output, "symbol table unavailable\n");
-			break;
-		case 'q':
-			fprintf(ds->output, "Quiting simulator\n");
-			return -1;
-		default:
-			fprintf(ds->output, "unknown command '%c'\n", op[0]);
-		}
-		goto again;
-	}
-	return 0;
-}
-
-int h2_run(h2_t *h, h2_io_t *io, FILE *output, unsigned steps, symbol_table_t *symbols, bool run_debugger)
-{
-	bool turn_debug_on = false;
-	assert(h);
-	debug_state_t ds = { .input = stdin, .output = stderr, .step = run_debugger, .trace_on = false /*run_debugger*/ };
-
-	if(run_debugger)
-		fputs("Debugger running, type 'h' for a list of command\n", ds.output);
-
-	for(unsigned i = 0; i < steps || steps == 0 || run_debugger; i++) {
+	for(;;) {
 		word_t instruction,
 			 literal,
 			 address,
 			 pc_plus_one;
 
-		if(run_debugger)
-			if(h2_debugger(&ds, h, io, symbols, h->pc))
-				return 0;
-
-		if(io)
-			io->update(io->soc);
+		io->update(io->soc);
 
 		if(h->pc >= MAX_CORE) {
 			error("invalid program counter: %04x > %04x", (unsigned)h->pc, MAX_CORE);
@@ -1335,17 +769,6 @@ int h2_run(h2_t *h, h2_io_t *io, FILE *output, unsigned steps, symbol_table_t *s
 		address = instruction & 0x1FFF; /* NB. also used for ALU OP */
 
 		pc_plus_one = (h->pc + 1) % MAX_CORE;
-
-		if(log_level >= LOG_DEBUG || ds.trace_on)
-			trace(output, instruction, symbols,
-				"%04u: pc(%04x) inst(%04x) sp(%x) rp(%x) tos(%04x) r(%04x)",
-				i,
-				(unsigned)h->pc,
-				(unsigned)instruction,
-				(unsigned)h->sp,
-				(unsigned)h->rp,
-				(unsigned)h->tos,
-				(unsigned)h->rstk[h->rp % STK_SIZE]);
 
 		/* decode / execute */
 		if(IS_LITERAL(instruction)) {
@@ -1376,18 +799,9 @@ int h2_run(h2_t *h, h2_io_t *io, FILE *output, unsigned steps, symbol_table_t *s
 			case ALU_OP_R:           tos = h->rstk[h->rp % STK_SIZE]; break;
 			case ALU_OP_T_LOAD:
 				if(h->tos & 0x4000) {
-					if(io) {
-						if(h->tos & 0x1)
-							warning("unaligned register read: %04x", (unsigned)h->tos);
-						tos = io->in(io->soc, h->tos & ~0x1, &turn_debug_on);
-						if(turn_debug_on) {
-							ds.step = true;
-							run_debugger = true;
-							turn_debug_on = false;
-						}
-					} else {
-						warning("I/O read attempted on addr: %"PRIx16, h->tos);
-					}
+					if(h->tos & 0x1)
+						warning("unaligned register read: %04x", (unsigned)h->tos);
+					tos = io->in(io->soc, h->tos & ~0x1);
 				} else {
 					tos = h->core[(h->tos >> 1) % MAX_CORE];
 				}
@@ -1419,18 +833,9 @@ int h2_run(h2_t *h, h2_io_t *io, FILE *output, unsigned steps, symbol_table_t *s
 
 			if(instruction & N_TO_ADDR_T) {
 				if((h->tos & 0x4000) && ALU_OP(instruction) != ALU_OP_T_LOAD) {
-					if(io) {
-						if(h->tos & 0x1)
-							warning("unaligned register write: %04x <- %04x", (unsigned)h->tos, (unsigned)nos);
-						io->out(io->soc, h->tos & ~0x1, nos, &turn_debug_on);
-						if(turn_debug_on) {
-							ds.step = true;
-							run_debugger = true;
-							turn_debug_on = false;
-						}
-					} else {
-						warning("I/O write attempted with addr/value: %"PRIx16 "/%"PRIx16, tos, nos);
-					}
+					if(h->tos & 0x1)
+						warning("unaligned register write: %04x <- %04x", (unsigned)h->tos, (unsigned)nos);
+					io->out(io->soc, h->tos & ~0x1, nos);
 				} else {
 					h->core[(h->tos >> 1) % MAX_CORE] = nos;
 				}
@@ -1451,9 +856,6 @@ int h2_run(h2_t *h, h2_io_t *io, FILE *output, unsigned steps, symbol_table_t *s
 		} else {
 			error("invalid instruction: %"PRId16, instruction);
 		}
-
-		h->rpm = MAX(h->rpm, h->rp);
-		h->spm = MAX(h->spm, h->sp);
 	}
 	return 0;
 }
@@ -1502,7 +904,6 @@ typedef enum {
 	LEX_PWD,
 	LEX_SET,
 	LEX_PC,
-	LEX_BREAK,
 	LEX_MODE,
 	LEX_ALLOCATE,
 	LEX_BUILT_IN,
@@ -1524,37 +925,36 @@ static const char *keywords[] =
 	[LEX_IDENTIFIER] = "identifier",
 	[LEX_LABEL]      = "label",
 	[LEX_STRING]     = "string",
-	[LEX_CONSTANT]   =  "constant",
-	[LEX_CALL]       =  "call",
-	[LEX_BRANCH]     =  "branch",
-	[LEX_0BRANCH]    =  "0branch",
-	[LEX_BEGIN]      =  "begin",
-	[LEX_WHILE]      =  "while",
-	[LEX_REPEAT]     =  "repeat",
-	[LEX_AGAIN]      =  "again",
-	[LEX_UNTIL]      =  "until",
-	[LEX_FOR]        =  "for",
-	[LEX_AFT]        =  "aft",
-	[LEX_NEXT]       =  "next",
-	[LEX_IF]         =  "if",
-	[LEX_ELSE]       =  "else",
-	[LEX_THEN]       =  "then",
-	[LEX_DEFINE]     =  ":",
-	[LEX_ENDDEFINE]  =  ";",
-	[LEX_CHAR]       =  "[char]",
-	[LEX_VARIABLE]   =  "variable",
-	[LEX_LOCATION]   =  "location",
-	[LEX_IMMEDIATE]  =  "immediate",
-	[LEX_HIDDEN]     =  "hidden",
-	[LEX_INLINE]     =  "inline",
-	[LEX_QUOTE]      =  "'",
-	[LEX_PWD]        =  ".pwd",
-	[LEX_SET]        =  ".set",
-	[LEX_PC]         =  ".pc",
-	[LEX_BREAK]      =  ".break",
-	[LEX_MODE]       =  ".mode",
-	[LEX_ALLOCATE]   =  ".allocate",
-	[LEX_BUILT_IN]   =  ".built-in",
+	[LEX_CONSTANT]   = "constant",
+	[LEX_CALL]       = "call",
+	[LEX_BRANCH]     = "branch",
+	[LEX_0BRANCH]    = "0branch",
+	[LEX_BEGIN]      = "begin",
+	[LEX_WHILE]      = "while",
+	[LEX_REPEAT]     = "repeat",
+	[LEX_AGAIN]      = "again",
+	[LEX_UNTIL]      = "until",
+	[LEX_FOR]        = "for",
+	[LEX_AFT]        = "aft",
+	[LEX_NEXT]       = "next",
+	[LEX_IF]         = "if",
+	[LEX_ELSE]       = "else",
+	[LEX_THEN]       = "then",
+	[LEX_DEFINE]     = ":",
+	[LEX_ENDDEFINE]  = ";",
+	[LEX_CHAR]       = "[char]",
+	[LEX_VARIABLE]   = "variable",
+	[LEX_LOCATION]   = "location",
+	[LEX_IMMEDIATE]  = "immediate",
+	[LEX_HIDDEN]     = "hidden",
+	[LEX_INLINE]     = "inline",
+	[LEX_QUOTE]      = "'",
+	[LEX_PWD]        = ".pwd",
+	[LEX_SET]        = ".set",
+	[LEX_PC]         = ".pc",
+	[LEX_MODE]       = ".mode",
+	[LEX_ALLOCATE]   = ".allocate",
+	[LEX_BUILT_IN]   = ".built-in",
 
 	/* start of instructions */
 #define X(NAME, STRING, DEFINE, INSTRUCTION) [ LEX_ ## NAME ] = STRING,
@@ -1871,7 +1271,6 @@ again:
 	X(SYM_PWD,                 "pwd")\
 	X(SYM_SET,                 "set")\
 	X(SYM_PC,                  "pc")\
-	X(SYM_BREAK,               "break")\
 	X(SYM_BUILT_IN,            "built-in")\
 	X(SYM_MODE,                "mode")\
 	X(SYM_ALLOCATE,            "allocate")\
@@ -2283,9 +1682,6 @@ again:
 		goto again;
 	} else if(accept(l, LEX_PC)) {
 		r->o[i++] = pc(l);
-		goto again;
-	} else if(accept(l, LEX_BREAK)) {
-		r->o[i++] = defined_by_token(l, SYM_BREAK);
 		goto again;
 	} else if(accept(l, LEX_MODE)) {
 		r->o[i++] = mode(l);
@@ -2812,10 +2208,6 @@ static void assemble(h2_t *h, assembler_t *a, node_t *n, symbol_table_t *t, erro
 		h->pc += literal_or_symbol_lookup(n->token, t, e) >> 1;
 		update_fence(a, h->pc);
 		break;
-	case SYM_BREAK:
-		break_point_add(&h->bp, h->pc);
-		update_fence(a, h->pc);
-		break;
 	case SYM_BUILT_IN:
 		if(!(a->mode & MODE_COMPILE_WORD_HEADER))
 			break;
@@ -2929,7 +2321,6 @@ static h2_t *h2_assemble_core(FILE *input, symbol_table_t *symbols)
 
 typedef enum {
 	DEFAULT_COMMAND,
-	DISASSEMBLE_COMMAND,
 	ASSEMBLE_COMMAND,
 	RUN_COMMAND,
 	ASSEMBLE_RUN_COMMAND
@@ -2945,18 +2336,16 @@ typedef struct {
 } command_args_t;
 
 static const char *help = "\
-usage ./h2 [-hvdDarRT] [-s number] [-L symbol.file] [-S symbol.file] (file.hex|file.fth)\n\n\
+usage ./h2 [-hvarRT] [-s number] [-L symbol.file] [-S symbol.file] (file.hex|file.fth)\n\n\
 Brief:     A H2 CPU Assembler, disassembler and Simulator.\n\
 Author:    Richard James Howe\n\
-Site:      https://github.com/howerj/forth-cpu\n\
+Site:      https://github.com/howerj/embed\n\
 License:   MIT\n\
 Copyright: Richard James Howe (2017)\n\
 Options:\n\n\
 \t-\tstop processing options, following arguments are files\n\
 \t-h\tprint this help message and exit\n\
 \t-v\tincrease logging level\n\
-\t-d\tdisassemble input files (default)\n\
-\t-D\tfull disassembly of input files\n\
 \t-T\tEnter debug mode when running simulation\n\
 \t-a\tassemble file\n\
 \t-H\tenable hacks to make the simulation easier to use\n\
@@ -3006,7 +2395,7 @@ static int assemble_run_command(command_args_t *cmd, FILE *input, FILE *output, 
 	ram_load_and_transfer(io, cmd->nvram);
 	h->pc = START_ADDR;
 	debug_note(cmd);
-	r = h2_run(h, io, output, cmd->steps, symbols, cmd->debug_mode);
+	r = h2_run(h, io);
 	nvram_save(io, cmd->nvram);
 
 	h2_free(h);
@@ -3021,7 +2410,6 @@ int command(command_args_t *cmd, FILE *input, FILE *output, symbol_table_t *symb
 	assert(cmd);
 	switch(cmd->cmd) {
 	case DEFAULT_COMMAND:      /* fall through */
-	case DISASSEMBLE_COMMAND:  return h2_disassemble(input, output, symbols);
 	case ASSEMBLE_COMMAND:     return h2_assemble_file(input, output, symbols);
 	case RUN_COMMAND:          return assemble_run_command(cmd, input, output, symbols, false);
 	case ASSEMBLE_RUN_COMMAND: return assemble_run_command(cmd, input, output, symbols, true);
@@ -3069,14 +2457,6 @@ int main(int argc, char **argv)
 			return -1;
 		case 'v':  /* increase verbosity */
 			log_level += log_level < LOG_ALL_MESSAGES ? 1 : 0;
-			break;
-		case 'D':
-			cmd.full_disassembly = true;
-			/* fall through */
-		case 'd':
-			if(cmd.cmd)
-				goto fail;
-			cmd.cmd = DISASSEMBLE_COMMAND;
 			break;
 		case 'a':
 			if(cmd.cmd)

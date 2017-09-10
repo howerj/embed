@@ -22,7 +22,7 @@ their, become just a small C virtual machine and a block file.
 
 # To Do
 
-* Remove unneeded peripherals that are simulated
+* Remove the SRAM peripheral and make the first 65536 words non-volatile
 * Change size of a CPU word from a 16-bit value to a "uintptr\_t" type
 * Make a cross compiler with the Forth
 

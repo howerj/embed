@@ -34,9 +34,6 @@ typedef struct {
 	word_t rp;  /**< return stack pointer */
 	word_t sp;  /**< variable stack pointer */
 
-	break_point_t bp; /**< list of break points */
-	word_t rpm; /**< maximum value of rp ever encountered */
-	word_t spm; /**< maximum value of sp ever encountered */
 } h2_t; /**< state of the H2 CPU */
 
 typedef enum {
@@ -95,8 +92,8 @@ typedef struct {
 	word_t mem_dout;
 } h2_soc_state_t;
 
-typedef word_t (*h2_io_get)(h2_soc_state_t *soc, word_t addr, bool *debug_on);
-typedef void     (*h2_io_set)(h2_soc_state_t *soc, word_t addr, word_t value, bool *debug_on);
+typedef word_t (*h2_io_get)(h2_soc_state_t *soc, word_t addr);
+typedef void     (*h2_io_set)(h2_soc_state_t *soc, word_t addr, word_t value);
 typedef void     (*h2_io_update)(h2_soc_state_t *soc);
 
 typedef struct {

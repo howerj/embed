@@ -29,13 +29,6 @@ a jump or a call] by setting the label to it with the ".set" directive. Later
 in the program the entry point, the first location in memory, is set to the
 start label )
 entry:             .allocate cell ( Entry point - not an interrupt )
-isrRxFifoNotEmpty: .allocate cell ( UART RX FIFO not empty )
-isrRxFifoFull:     .allocate cell ( UART RX FIFO full )
-isrTxFifoNotEmpty: .allocate cell ( UART TX FIFO not empty )
-isrTxFifoFull:     .allocate cell ( UART TX FIFO full )
-isrKbdNew:         .allocate cell ( New PS/2 Keyboard character )
-isrTimer:          .allocate cell ( Timer interrupt )
-isrDPadButton:     .allocate cell ( Any D-Pad Button Changed state )
 
 .mode 3   ( Turn word header compilation and optimization on )
 .built-in ( Add the built in words to the dictionary )
@@ -59,38 +52,13 @@ constant word-length   31    hidden ( maximum length of a word )
 
 ( Outputs: $6000 - $7FFF )
 constant oUart         $4000 hidden ( UART TX/RX Control register )
-constant oVT100        $4002 hidden ( LEDs )
-constant oTimerCtrl    $4004 hidden ( Timer control register )
-constant oLeds         $4006 hidden ( VGA X/Y Cursor position )
-constant oMemDout      $4008 hidden ( Memory output for writes )
-constant oMemControl   $400A hidden ( Memory control and high address bits )
-constant oMemAddrLow   $400C hidden ( Lower memory address bits )
-constant o7SegLED      $400E hidden ( 4x7 Segment display )
-constant oIrcMask      $4010 hidden ( Interrupt Mask )
+constant oMemDout      $4002 hidden ( Memory output for writes )
+constant oMemControl   $4004 hidden ( Memory control and high address bits )
+constant oMemAddrLow   $4006 hidden ( Lower memory address bits )
 
 ( Inputs: $6000 - $7FFF )
 constant iUart         $4000 hidden ( Matching registers for iUart )
-constant iVT100        $4002 hidden ( Switch control [on/off] )
-constant iTimerDin     $4004 hidden ( Current timer value )
-constant iSwitches     $4006 hidden ( VGA text output, currently broken )
-constant iMemDin       $4008 hidden ( Memory input for reads )
-
-( Initial value of VGA
-
-  BIT     MEANING
-  7   -  Display Next Screen
-  6   -  Enable VGA
-  5   -  Cursor enable
-  4   -  Cursor blinks
-  3   -  Cursor mode
-  2   -  Blue
-  1   -  Green
-  0   -  Red )
-constant vgaInit       $7A   hidden ( VGA On, Cursor On, Cursor Blinks, Green Text )
-
-constant vgaX          80    hidden ( Number of columns in the text mode VGA display )
-constant vgaY          40    hidden ( Number of rows in the text mode VGA display )
-constant vgaTextSize   3200  hidden ( vgaX * vgaY )
+constant iMemDin       $4002 hidden ( Memory input for reads )
 
 ( ======================== System Constants ================= )
 
@@ -211,7 +179,6 @@ location failed           "failed"      ( used in start up routine )
 	then ; hidden
 
 : rx?  oUart iUart uart? ; hidden ( -- c -1 | 0 : read in a character of input from UART )
-: ps2? oVT100 iVT100 uart? ; hidden ( -- c -1 | 0 : PS/2 version of rx? )
 
 : uart! ( c a1 a2 -- : write to a UART, specified with registers a1, a2 )
 	>r >r
@@ -219,7 +186,6 @@ location failed           "failed"      ( used in start up routine )
 	$2000 or r> ! ; hidden
 
 : tx!  oUart iUart uart! ; hidden
-: vga! oVT100 iVT100 uart! ; hidden ( n a -- : output character to VT100 display )
 
 : um+ ( w w -- w carry )
 	over over + >r
@@ -613,7 +579,7 @@ choice words that need depth checking to get quite a large coverage )
 		over c@ r> swap ccitt >r 1 /string
 	repeat 2drop r> ;
 
-: random seed @ dup 15 lshift ccitt dup iTimerDin @ + seed ! ; ( -- u )
+: random seed @ dup 15 lshift ccitt dup 27 + seed ! ; ( -- u )
 
 : 5u.r 5 u.r ; hidden
 : dm+ 2/ for aft dup @ space 5u.r cell+ then next ; ( a u -- a )
@@ -646,24 +612,16 @@ choice words that need depth checking to get quite a large coverage )
 
 ( ==================== Advanced I/O Control ========================== )
 
-: segments! o7SegLED ! ;   ( u -- : display a number on the LED 7 segment display )
-: led!      oLeds ! ;      ( u -- : write to LED lights )
-: switches  iSwitches  @ ; ( -- u : get the state of the switches)
-: timer!    oTimerCtrl ! ; ( u -- )
-: timer     iTimerDin  @ ; ( -- u )
-: input rx? if [-1] else ps2? then ; hidden ( -- c -1 | 0 : UART and PS/2 Input )
-: output dup tx! vga! ; hidden ( c -- : write to UART and VGA display )
 : printable? 32 127 within ; hidden ( c -- f )
 : pace 11 emit ; hidden
 : xio  ' accept _expect ! _tap ! _echo ! _prompt ! ; hidden
 : file ' pace ' "drop" ' ktap xio ;
 : star $2A emit ; hidden
-: [conceal] dup 33 127 within if drop star else output then ; hidden
+: [conceal] dup 33 127 within if drop star else tx! then ; hidden
 : conceal ' .ok ' [conceal] ' ktap xio ;
 : hand ' .ok  '  emit  ' ktap xio ; hidden
 : console ' rx? _key? ! ' tx! _emit ! hand ;
-: interactive ' input _key? ! ' output _emit ! hand ;
-: io! $8FFF oTimerCtrl ! interactive 0 ien oIrcMask ! ; ( -- : initialize I/O )
+: io! console ; ( -- : initialize I/O )
 : ver $666 ;
 : hi io! ( save ) hex cr hi-string print ver <# # # 46 hold # #> type cr here . .free cr [ ;
 
@@ -709,7 +667,7 @@ displaying block files as they are read in )
 : "while" ?compile call "if" ; immediate
 : "repeat" ?compile swap call "again" call "then" ; immediate
 : recurse ?compile last-def @ address cfa compile, ; immediate
-\ : tail ?compile last-def @ address cfa jump, ; immediate
+: tail ?compile last-def @ address cfa jump, ; immediate
 : create call ":" compile doVar context @ ! [ ;
 : doDoes r> 2/ here 2/ last-def @ address cfa dup cell+ doLit ! , ; hidden
 : does> ?compile compile doDoes nop ; immediate
@@ -926,37 +884,6 @@ things, the 'decompiler' word could be called manually on an address if desired 
 .set forth-wordlist $pwd
 ( ==================== See =========================================== )
 
-( ==================== Miscellaneous ================================= )
-
-\ Testing for the interrupt mechanism, interrupts do not
-\ work correctly at the moment
-
-( @bug Interrupts work in simulation but not in hardware )
-( variable icount 0
-
-irq:
-	switches led!
-	icount 1+!
-	exit
-.set 12 irq
-
-: irqTest 
-	$0040 oIrcMask !
-	$ffff oTimerCtrl !
-	1 ien drop ;
-
-
-irq2:
-	switches . cr
-	exit
-.set 14 irq2
-
-: irqTest2
-	$0080 oIrcMask !
-	1 ien drop ; )
-
-( ==================== Miscellaneous ================================= )
-
 ( ==================== Vocabulary Words ============================== )
 
 : find-empty-cell begin dup @ while cell+ repeat ; hidden ( a -- a )
@@ -1050,50 +977,6 @@ location memory-select      0    ( SRAM/Flash select SRAM = 0, Flash = 1 )
 	iMemDin @        ( get input )
 	$0000 mcontrol! ;
 
-\ : memory-dump ( a u -- : dump non-volatile memory )
-\  	cr
-\  	begin
-\  		dup
-\  	while
-\  		over 5u.r 40 emit over m@ 4 u.r 41 emit over 1+ $7 and 0= if cr then
-\  		1 /string
-\  	repeat 2drop cr ;
-
-: sram 0 memory-select ! ;
-: nvram [-1] memory-select ! ; hidden
-: block-mode 0 memory-upper substitute ; hidden ( -- hi )
-: flash-reset ( -- : reset non-volatile memory )
-	$2000 mcontrol!
-	5 40ns
-	$0000 mcontrol! ; hidden
-: flash! dup >r m! r> m! ; hidden ( u u a )
-: flash-status nvram $70 0 m! 0 m@ ( dup $2a and if -34 -throw then ) ; ( -- status )
-: flash-read   $ff 0 m! ;      ( -- )
-: flash-setup  memory-select @ 0= if flush then nvram flash-reset block-mode drop 20 ms ;
-: flash-wait begin flash-status $80 and until ; hidden
-: flash-clear $50 0 m! ; ( -- clear status )
-: flash-write $40 swap flash! flash-wait ; ( u a -- )
-: flash-unlock block-mode >r $d0 swap $60 swap flash! r> memory-upper ! ; ( ba -- )
-\ : flash-lock block-mode >r $01 swap $60 swap flash! r> memory-upper ! ; ( ba -- )
-\ : flash-lock-down block-mode >r $2f swap $60 swap flash! r> memory-upper ! ; ( ba -- )
-: flash-erase block-mode >r flash-clear $d0 swap $20 swap flash! flash-wait r> memory-upper ! ; ( ba -- )
-: flash-query $98 0 m! ; ( -- : query mode )
-\ : flash-read-id   $90 0 m! ; ( -- read id mode : does the same as flash-query on the PC28F128P33BF60 )
-
-: flash->sram ( a a : transfer flash memory cell to SRAM )
-	[-1] memory-select ! flash-clear flash-read
-	m@ 0 memory-select ! swap m! ; hidden
-
-: transfer ( a a u -- : transfer memory block from Flash to SRAM )
-	?dup 0= if 2drop exit then
-	1-
-	for
-		2dup
-		flash->sram
-		cell+ swap cell+ swap
-	next 2drop ;
-.set flash-voc $pwd
-
 : minvalid ( k -- k : is 'k' a valid block number, throw on error )
 	dup block-invalid = if 35 -throw then ; hidden
 
@@ -1120,7 +1003,6 @@ location memory-select      0    ( SRAM/Flash select SRAM = 0, Flash = 1 )
 
 : .failed failed print ; hidden
 : boot ( -- )
-	0 0 $8000 transfer
 	0 block c@ printable? if
 		0 load
 	else
@@ -1131,8 +1013,6 @@ start:
 .set entry start
 	_boot @execute  ( _boot contains zero by default, does nothing )
 	hi
-	cpu-id segments!
-	loading-string print
 	' boot catch if .failed else .ok then
 	\ loaded @ if 1 list then
 	\ login 0 load 1 list
@@ -1142,11 +1022,11 @@ start:
 
 .set cp  $pc
 
-.set _key?     input       ( execution vector of ?key,   default to input. )
-.set _emit     output      ( execution vector of emit,   default to output )
+.set _key?     rx?         ( execution vector of ?key )
+.set _emit     tx!         ( execution vector of emit )
 .set _expect   accept      ( execution vector of expect, default to 'accept'. )
 .set _tap      ktap        ( execution vector of tap,    default the ktap. )
-.set _echo     output      ( execution vector of echo,   default to output. )
+.set _echo     tx!         ( execution vector of echo )
 .set _prompt   .ok         ( execution vector of prompt, default to '.ok'. )
 .set _boot     0           ( @execute does nothing if zero )
 .set _bload    memory-load ( execution vector of _bload, used in block )

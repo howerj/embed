@@ -169,7 +169,7 @@ typedef struct {
 
 /* ========================== Utilities ==================================== */
 
-int logger(log_level_e level, const char *func,
+static int logger(log_level_e level, const char *func,
 		const unsigned line, const char *fmt, ...)
 {
 	int r = 0;
@@ -202,7 +202,7 @@ static const char *reason(void)
 	return r;
 }
 
-void *allocate_or_die(size_t length)
+static void *allocate_or_die(size_t length)
 {
 	void *r;
 	errno = 0;
@@ -213,7 +213,7 @@ void *allocate_or_die(size_t length)
 	return r;
 }
 
-FILE *fopen_or_die(const char *file, const char *mode)
+static FILE *fopen_or_die(const char *file, const char *mode)
 {
 	FILE *f = NULL;
 	assert(file);
@@ -278,7 +278,7 @@ static void ethrow(error_t *e)
 	exit(EXIT_FAILURE);
 }
 
-h2_t *h2_new(uint16_t start_address)
+static h2_t *h2_new(uint16_t start_address)
 {
 	h2_t *h = allocate_or_die(sizeof(h2_t));
 	h->pc = start_address;
@@ -287,7 +287,7 @@ h2_t *h2_new(uint16_t start_address)
 	return h;
 }
 
-void h2_free(h2_t *h)
+static void h2_free(h2_t *h)
 {
 	if(!h)
 		return;
@@ -296,7 +296,7 @@ void h2_free(h2_t *h)
 	free(h);
 }
 
-int binary_memory_load(FILE *input, uint16_t *p, size_t length)
+static int binary_memory_load(FILE *input, uint16_t *p, size_t length)
 {
 	assert(input);
 	assert(p);
@@ -313,7 +313,7 @@ int binary_memory_load(FILE *input, uint16_t *p, size_t length)
 	return 0;
 }
 
-int binary_memory_save(FILE *output, uint16_t *p, size_t length)
+static int binary_memory_save(FILE *output, uint16_t *p, size_t length)
 {
 	assert(output);
 	assert(p);
@@ -329,7 +329,7 @@ int binary_memory_save(FILE *output, uint16_t *p, size_t length)
 	return 0;
 }
 
-int nvram_load_and_transfer(h2_io_t *io, const char *name, bool transfer_to_sram)
+static int ram_load_and_transfer(h2_io_t *io, const char *name)
 {
 	assert(io);
 	assert(name);
@@ -337,9 +337,7 @@ int nvram_load_and_transfer(h2_io_t *io, const char *name, bool transfer_to_sram
 	int r = 0;
 	errno = 0;
 	if((input = fopen(name, "rb"))) {
-		r = binary_memory_load(input, io->soc->flash.nvram, CHIP_MEMORY_SIZE);
-		if(transfer_to_sram)
-			memcpy(io->soc->vram, io->soc->flash.nvram, CHIP_MEMORY_SIZE);
+		r = binary_memory_load(input, io->soc->vram, CHIP_MEMORY_SIZE);
 		fclose(input);
 	} else {
 		error("nvram file read (from %s) failed: %s", name, strerror(errno));
@@ -348,7 +346,7 @@ int nvram_load_and_transfer(h2_io_t *io, const char *name, bool transfer_to_sram
 	return r;
 }
 
-int nvram_save(h2_io_t *io, const char *name)
+static int nvram_save(h2_io_t *io, const char *name)
 {
 	FILE *output = NULL;
 	int r = 0;
@@ -356,7 +354,7 @@ int nvram_save(h2_io_t *io, const char *name)
 	assert(name);
 	errno = 0;
 	if((output = fopen(name, "wb"))) {
-		r = binary_memory_save(output, io->soc->flash.nvram, CHIP_MEMORY_SIZE);
+		r = binary_memory_save(output, io->soc->vram, CHIP_MEMORY_SIZE);
 		fclose(output);
 	} else {
 		error("nvram file write (to %s) failed: %s", name, strerror(errno));
@@ -365,7 +363,7 @@ int nvram_save(h2_io_t *io, const char *name)
 	return r;
 }
 
-int memory_load(FILE *input, uint16_t *p, size_t length)
+static int memory_load(FILE *input, uint16_t *p, size_t length)
 {
 	assert(input);
 	assert(p);
@@ -389,7 +387,7 @@ int memory_load(FILE *input, uint16_t *p, size_t length)
 	return 0;
 }
 
-int memory_save(FILE *output, uint16_t *p, size_t length)
+static int memory_save(FILE *output, uint16_t *p, size_t length)
 {
 	assert(output);
 	assert(p);
@@ -401,101 +399,18 @@ int memory_save(FILE *output, uint16_t *p, size_t length)
 	return 0;
 }
 
-int h2_load(h2_t *h, FILE *hexfile)
+static int h2_load(h2_t *h, FILE *hexfile)
 {
 	assert(h);
 	assert(hexfile);
 	return memory_load(hexfile, h->core, MAX_CORE);
 }
 
-int h2_save(h2_t *h, FILE *output, bool full)
+static int h2_save(h2_t *h, FILE *output, bool full)
 {
 	assert(h);
 	assert(output);
 	return memory_save(output, h->core, full ? MAX_CORE : h->pc);
-}
-
-/* From: https://stackoverflow.com/questions/215557/how-do-i-implement-a-circular-list-ring-buffer-in-c */
-
-fifo_t *fifo_new(size_t size)
-{
-	assert(size >= 2); /* It does not make sense to have a FIFO less than this size */
-	fifo_data_t *buffer = allocate_or_die(size * sizeof(buffer[0]));
-	fifo_t *fifo = allocate_or_die(sizeof(fifo_t));
-
-	fifo->buffer = buffer;
-	fifo->head   = 0;
-	fifo->tail   = 0;
-	fifo->size   = size;
-
-	return fifo;
-}
-
-void fifo_free(fifo_t *fifo)
-{
-	if(!fifo)
-		return;
-	free(fifo->buffer);
-	free(fifo);
-}
-
-bool fifo_is_full(fifo_t * fifo)
-{
-	assert(fifo);
-	return (fifo->head == (fifo->size - 1) && fifo->tail == 0)
-	    || (fifo->head == (fifo->tail - 1));
-}
-
-bool fifo_is_empty(fifo_t * fifo)
-{
-	assert(fifo);
-	return fifo->head == fifo->tail;
-}
-
-size_t fifo_count(fifo_t * fifo)
-{
-	assert(fifo);
-	if (fifo_is_empty(fifo))
-		return 0;
-	else if (fifo_is_full(fifo))
-		return fifo->size;
-	else if (fifo->head < fifo->tail)
-		return fifo->head + (fifo->size - fifo->tail);
-	else
-		return fifo->head - fifo->tail;
-}
-
-size_t fifo_push(fifo_t * fifo, fifo_data_t data)
-{
-	assert(fifo);
-
-	if (fifo_is_full(fifo))
-		return 0;
-
-	fifo->buffer[fifo->head] = data;
-
-	fifo->head++;
-	if (fifo->head == fifo->size)
-		fifo->head = 0;
-
-	return 1;
-}
-
-size_t fifo_pop(fifo_t * fifo, fifo_data_t * data)
-{
-	assert(fifo);
-	assert(data);
-
-	if (fifo_is_empty(fifo))
-		return 0;
-
-	*data = fifo->buffer[fifo->tail];
-
-	fifo->tail++;
-	if (fifo->tail == fifo->size)
-		fifo->tail = 0;
-
-	return 1;
 }
 
 #ifdef __unix__
@@ -661,7 +576,7 @@ static int symbol_table_print(symbol_table_t *t, FILE *output)
 	return 0;
 }
 
-symbol_table_t *symbol_table_load(FILE *input)
+static symbol_table_t *symbol_table_load(FILE *input)
 {
 	symbol_table_t *t = symbol_table_new();
 	assert(input);
@@ -807,7 +722,7 @@ static int disassembler_instruction(uint16_t instruction, FILE *output, symbol_t
 	return r < 0 ? -1 : 0;
 }
 
-int h2_disassemble(FILE *input, FILE *output, symbol_table_t *symbols)
+static int h2_disassemble(FILE *input, FILE *output, symbol_table_t *symbols)
 {
 	assert(input);
 	assert(output);
@@ -903,664 +818,16 @@ static int break_point_print(FILE *out, break_point_t *bp)
 	return 0;
 }
 
-#define LED_7_SEGMENT_DISPLAY_CHARSET_HEX  "0123456789AbCdEF"
-#define LED_7_SEGMENT_DISPLAY_CHARSET_BCD  "0123456789 .-   "
-
-static char l7seg(uint8_t c)
-{
-	static const char *v = LED_7_SEGMENT_DISPLAY_CHARSET_HEX;
-	return v[c & 0xf];
-}
-
-void soc_print(FILE *out, h2_soc_state_t *soc)
-{
-	assert(out);
-	assert(soc);
-	unsigned char led0 = l7seg(soc->led_7_segments >> 12);
-	unsigned char led1 = l7seg(soc->led_7_segments >>  8);
-	unsigned char led2 = l7seg(soc->led_7_segments >>  4);
-	unsigned char led3 = l7seg(soc->led_7_segments);
-
-	fprintf(out, "LEDS:             %02"PRIx8"\n",  soc->leds);
-	/*fprintf(out, "VGA Cursor:       %04"PRIx16"\n", soc->vga_cursor);
-	fprintf(out, "VGA Control:      %04"PRIx16"\n", soc->vga_control);*/
-	fprintf(out, "Timer Control:    %04"PRIx16"\n", soc->timer_control);
-	fprintf(out, "Timer:            %04"PRIx16"\n", soc->timer);
-	fprintf(out, "IRC Mask:         %04"PRIx16"\n", soc->irc_mask);
-	fprintf(out, "UART Input:       %02"PRIx8"\n",  soc->uart_getchar_register);
-	fprintf(out, "LED 7 segment:    %c%c%c%c\n",    led0, led1, led2, led3);
-	fprintf(out, "Switches:         %04"PRIx16"\n", soc->switches);
-	fprintf(out, "Waiting:          %s\n",          soc->wait ? "true" : "false");
-	fprintf(out, "Flash Control:    %04"PRIx16"\n", soc->mem_control);
-	fprintf(out, "Flash Address Lo: %04"PRIx16"\n", soc->mem_addr_low);
-	fprintf(out, "Flash Data Out:   %04"PRIx16"\n", soc->mem_dout);
-}
-
-static void terminal_default_command_sequence(vt100_t *t)
-{
-	assert(t);
-	t->n1 = 1;
-	t->n2 = 1;
-	t->command_index = 0;
-}
-
-static void terminal_at_xy(vt100_t *t, unsigned x, unsigned y, bool limit_not_wrap)
-{
-	assert(t);
-	if(limit_not_wrap) {
-		x = MAX(x, 0);
-		y = MAX(y, 0);
-		x = MIN(x, t->width - 1);
-		y = MIN(y, t->height - 1);
-	} else {
-		x %= t->width;
-		y %= t->height;
-	}
-	t->cursor = (y * t->width) + x;
-}
-
-static int terminal_x_current(vt100_t *t)
-{
-	assert(t);
-	return t->cursor % t->width;
-}
-
-static int terminal_y_current(vt100_t *t)
-{
-	assert(t);
-	return t->cursor / t->width;
-}
-
-static void terminal_at_xy_relative(vt100_t *t, int x, int y, bool limit_not_wrap)
-{
-	assert(t);
-	int x_current = terminal_x_current(t);
-	int y_current = terminal_y_current(t);
-	terminal_at_xy(t, x_current + x, y_current + y, limit_not_wrap);
-}
-
-static void terminal_parse_attribute(vt100_attribute_t *a, unsigned v)
-{
-	switch(v) {
-	case 0:
-		memset(a, 0, sizeof(*a));
-		a->foreground_color = WHITE;
-		a->background_color = BLACK;
-		return;
-	case 1: a->bold          = true; return;
-	case 4: a->under_score   = true; return;
-	case 5: a->blink         = true; return;
-	case 7: a->reverse_video = true; return;
-	case 8: a->conceal       = true; return;
-	default:
-		if(v >= 30 && v <= 37)
-			a->foreground_color = v - 30;
-		if(v >= 40 && v <= 47)
-			a->background_color = v - 40;
-	}
-}
-
-static const vt100_attribute_t vt100_default_attribute = {
-	.foreground_color = WHITE,
-	.background_color = BLACK,
-};
-
-static void terminal_attribute_block_set(vt100_t *t, size_t size, const vt100_attribute_t const *a)
-{
-	assert(t);
-	assert(a);
-	for(size_t i = 0; i < size; i++)
-		memcpy(&t->attributes[i], a, sizeof(*a));
-}
-
-static int terminal_escape_sequences(vt100_t *t, uint8_t c)
-{
-	assert(t);
-	assert(t->state != TERMINAL_NORMAL_MODE);
-	switch(t->state) {
-	case TERMINAL_CSI:
-		if(c == '[')
-			t->state = TERMINAL_COMMAND;
-		else
-			goto fail;
-		break;
-	case TERMINAL_COMMAND:
-		switch(c) {
-		case 's':
-			t->cursor_saved = t->cursor;
-			goto success;
-		case 'n':
-			t->cursor = t->cursor_saved;
-			goto success;
-		case '?':
-			terminal_default_command_sequence(t);
-			t->state = TERMINAL_DECTCEM;
-			break;
-		case ';':
-			terminal_default_command_sequence(t);
-			t->state = TERMINAL_NUMBER_2;
-			break;
-		default:
-			if(isdigit(c)) {
-				terminal_default_command_sequence(t);
-				t->command_index++;
-				t->n1 = c - '0';
-				t->state = TERMINAL_NUMBER_1;
-			} else {
-				goto fail;
-			}
-		}
-		break;
-	case TERMINAL_NUMBER_1:
-		if(isdigit(c)) {
-			if(t->command_index > 3)
-				goto fail;
-			t->n1 = (t->n1 * (t->command_index ? 10 : 0)) + (c - '0');
-			t->command_index++;
-			break;
-		}
-
-		switch(c) {
-		case 'A': terminal_at_xy_relative(t,  0,     -t->n1, true); goto success;/* relative cursor up */
-		case 'B': terminal_at_xy_relative(t,  0,      t->n1, true); goto success;/* relative cursor down */
-		case 'C': terminal_at_xy_relative(t,  t->n1,  0,     true); goto success;/* relative cursor forward */
-		case 'D': terminal_at_xy_relative(t, -t->n1,  0,     true); goto success;/* relative cursor back */
-		case 'E': terminal_at_xy(t, 0,  t->n1, false); goto success; /* relative cursor down, beginning of line */
-		case 'F': terminal_at_xy(t, 0, -t->n1, false); goto success; /* relative cursor up, beginning of line */
-		case 'G': terminal_at_xy(t, t->n1, terminal_y_current(t), true); goto success; /* move the cursor to column n */
-		case 'm': /* set attribute, CSI number m */
-			terminal_parse_attribute(&t->attribute, t->n1);
-			t->attributes[t->cursor] = t->attribute;
-			goto success;
-		case 'i': /* AUX Port On == 5, AUX Port Off == 4 */
-			if(t->n1 == 5 || t->n1 == 4)
-				goto success;
-			goto fail;
-		case 'n': /* Device Status Report */
-			/** @note This should transmit to the H2 system the
-			 * following "ESC[n;mR", where n is the row and m is the column,
-			 * we're not going to do this, although fifo_push() on
-			 * uart_rx_fifo could be called to do this */
-			if(t->n1 == 6)
-				goto success;
-			goto fail;
-		case 'J': /* reset */
-			switch(t->n1) {
-			case 3:
-			case 2: t->cursor = 0; /* with cursor */
-			case 1:
-				if(t->command_index) {
-					memset(t->m, ' ', t->size);
-					terminal_attribute_block_set(t, t->size, &vt100_default_attribute);
-					goto success;
-				} /* fall through if number not supplied */
-			case 0:
-				memset(t->m, ' ', t->cursor);
-				terminal_attribute_block_set(t, t->cursor, &vt100_default_attribute);
-				goto success;
-			}
-			goto fail;
-		case ';':
-			t->command_index = 0;
-			t->state = TERMINAL_NUMBER_2;
-			break;
-		default:
-			goto fail;
-		}
-		break;
-	case TERMINAL_NUMBER_2:
-		if(isdigit(c)) {
-			if(t->command_index > 3)
-				goto fail;
-			t->n2 = (t->n2 * (t->command_index ? 10 : 0)) + (c - '0');
-			t->command_index++;
-		} else {
-			switch(c) {
-			case 'm':
-				terminal_parse_attribute(&t->attribute, t->n1);
-				terminal_parse_attribute(&t->attribute, t->n2);
-				t->attributes[t->cursor] = t->attribute;
-				goto success;
-			case 'H':
-			case 'f':
-				terminal_at_xy(t, t->n2, t->n1, true);
-				goto success;
-			}
-			goto fail;
-		}
-		break;
-	case TERMINAL_DECTCEM:
-		if(isdigit(c)) {
-			if(t->command_index > 1)
-				goto fail;
-			t->n1 = (t->n1 * (t->command_index ? 10 : 0)) + (c - '0');
-			t->command_index++;
-			break;
-		}
-
-		if(t->n1 != 25)
-			goto fail;
-		switch(c) {
-		case 'l': t->cursor_on = false; goto success;
-		case 'h': t->cursor_on = true;  goto success;
-		default:
-			goto fail;
-		}
-	case TERMINAL_STATE_END:
-		t->state = TERMINAL_NORMAL_MODE;
-		break;
-	default:
-		fatal("invalid terminal state: %u", (unsigned)t->state);
-	}
-
-	return 0;
-success:
-	t->state = TERMINAL_NORMAL_MODE;
-	return 0;
-fail:
-	t->state = TERMINAL_NORMAL_MODE;
-	return -1;
-}
-
-void vt100_update(vt100_t *t, uint8_t c)
-{
-	assert(t);
-	assert(t->size <= VT100_MAX_SIZE);
-	assert((t->width * t->height) <= VT100_MAX_SIZE);
-
-	if(t->state != TERMINAL_NORMAL_MODE) {
-		if(terminal_escape_sequences(t, c)) {
-			t->state = TERMINAL_NORMAL_MODE;
-			/*warning("invalid ANSI command sequence");*/
-		}
-	} else {
-		switch(c) {
-		case ESCAPE:
-			t->state = TERMINAL_CSI;
-			break;
-		case '\t':
-			t->cursor += 8;
-			t->cursor &= ~0x7;
-			break;
-		case '\n':
-			t->cursor += t->width;
-			t->cursor = (t->cursor / t->width) * t->width;
-			break;
-		case '\r':
-			break;
-		case BACKSPACE:
-			terminal_at_xy_relative(t, -1, 0, true);
-			break;
-		default:
-			assert(t->cursor < t->size);
-			t->m[t->cursor] = c;
-			memcpy(&t->attributes[t->cursor], &t->attribute, sizeof(t->attribute));
-			t->cursor++;
-		}
-		if(t->cursor >= t->size) {
-			terminal_attribute_block_set(t, t->size, &vt100_default_attribute);
-			memset(t->m, ' ', t->size);
-		}
-		t->cursor %= t->size;
-	}
-}
-
-#define FLASH_WRITE_CYCLES (20)  /* x10ns */
-#define FLASH_ERASE_CYCLES (200) /* x10ns */
-
-typedef enum {
-	FLASH_STATUS_RESERVED         = 1u << 0,
-	FLASH_STATUS_BLOCK_LOCKED     = 1u << 1,
-	FLASH_STATUS_PROGRAM_SUSPEND  = 1u << 2,
-	FLASH_STATUS_VPP              = 1u << 3,
-	FLASH_STATUS_PROGRAM          = 1u << 4,
-	FLASH_STATUS_ERASE_BLANK      = 1u << 5,
-	FLASH_STATUS_ERASE_SUSPEND    = 1u << 6,
-	FLASH_STATUS_DEVICE_READY     = 1u << 7,
-} flash_status_register_t;
-
-typedef enum {
-	FLASH_READ_ARRAY,
-	FLASH_QUERY,
-	FLASH_READ_DEVICE_IDENTIFIER,
-	FLASH_READ_STATUS_REGISTER,
-	FLASH_WORD_PROGRAM,
-	FLASH_WORD_PROGRAMMING,
-	FLASH_LOCK_OPERATION,
-	FLASH_LOCK_OPERATING,
-	FLASH_BLOCK_ERASE,
-	FLASH_BLOCK_ERASING,
-	FLASH_BUFFERED_PROGRAM,
-	FLASH_BUFFERED_PROGRAMMING,
-} flash_state_t;
-
-/** @note read the PC28F128P33BF60 datasheet to decode this
- * information, this table was actually acquired from reading
- * the data from the actual device. */
-static const uint16_t PC28F128P33BF60_CFI_Query_Table[0x200] = {
-0x0089, 0x881E, 0x0000, 0xFFFF, 0x0089, 0xBFCF, 0x0000, 0xFFFF,
-0x0089, 0x881E, 0x0000, 0x0000, 0x0089, 0xBFCF, 0x0000, 0xFFFF,
-0x0051, 0x0052, 0x0059, 0x0001, 0x0000, 0x000A, 0x0001, 0x0000,
-0x0000, 0x0000, 0x0000, 0x0023, 0x0036, 0x0085, 0x0095, 0x0006,
-0x0009, 0x0009, 0x0000, 0x0002, 0x0002, 0x0003, 0x0000, 0x0018,
-0x0001, 0x0000, 0x0009, 0x0000, 0x0002, 0x007E, 0x0000, 0x0000,
-0x0002, 0x0003, 0x0000, 0x0080, 0x0000, 0x0000, 0x0000, 0x0000,
-0x0000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFBE, 0x0396, 0x66A2, 0xA600, 0x395A, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0x0050, 0x0052, 0x0049, 0x0031, 0x0035, 0x00E6,
-0x0001, 0x0000, 0x0000, 0x0001, 0x0003, 0x0000, 0x0030, 0x0090,
-0x0002, 0x0080, 0x0000, 0x0003, 0x0003, 0x0089, 0x0000, 0x0000,
-0x0000, 0x0000, 0x0000, 0x0000, 0x0010, 0x0000, 0x0004, 0x0004,
-0x0004, 0x0001, 0x0002, 0x0003, 0x0007, 0x0001, 0x0024, 0x0000,
-0x0001, 0x0000, 0x0011, 0x0000, 0x0000, 0x0002, 0x007E, 0x0000,
-0x0000, 0x0002, 0x0064, 0x0000, 0x0002, 0x0003, 0x0000, 0x0080,
-0x0000, 0x0000, 0x0000, 0x0080, 0x0003, 0x0000, 0x0080, 0x0000,
-0x0064, 0x0000, 0x0002, 0x0003, 0x0000, 0x0080, 0x0000, 0x0000,
-0x0000, 0x0080, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xF020, 0x4DBF, 0x838C, 0xFC08, 0x638F, 0x20E3, 0xFF03, 0xD8D7,
-0xC838, 0xFFFF, 0xFFFF, 0xAFFF, 0x3352, 0xB333, 0x3004, 0x1353,
-0x0003, 0xA000, 0x80D5, 0x8A03, 0xFF4A, 0xFFFF, 0xFFFF, 0x0FFF,
-0x2000, 0x0000, 0x0004, 0x0080, 0x1000, 0x0000, 0x0002, 0x0040,
-0x0000, 0x0008, 0x0000, 0x0001, 0x2000, 0x0000, 0x0400, 0x0000,
-0x0080, 0x0000, 0x0010, 0x0000, 0x0002, 0x4000, 0x0000, 0x0800,
-0x0000, 0x0100, 0x0000, 0x0020, 0x0000, 0x0004, 0x8000, 0x0000,
-0x1000, 0x0000, 0x0200, 0x0000, 0x0040, 0x0000, 0x0008, 0x0000,
-0x0001, 0x2000, 0x0000, 0x0800, 0x0000, 0x0200, 0x0000, 0x0040,
-0x0000, 0x0008, 0x0000, 0x0001, 0x2000, 0x0000, 0x0400, 0x0000,
-0x0080, 0x0000, 0x0010, 0x0000, 0x0002, 0x4000, 0x0000, 0x0800,
-0x0000, 0x0100, 0x0000, 0x0020, 0x0000, 0x0004, 0x8000, 0x0000,
-0x1000, 0x0000, 0x0200, 0x0000, 0x0040, 0x0000, 0x0008, 0x0000,
-0x0001, 0x4000, 0x0000, 0x1000, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-};
-
-uint16_t PC28F128P33BF60_CFI_Query_Read(uint32_t addr)
-{
-	addr &= 0x3ff;
-	if(addr > 0x1ff) {
-		addr &= 0x7;
-		static const uint16_t r[] = {
-			0x0089, 0x881E, 0x0000, 0x0000,
-			0x0089, 0xBFCF, 0x0000, 0xFFFF
-		};
-		return r[addr];
-	}
-	return PC28F128P33BF60_CFI_Query_Table[addr];
-}
-
-static uint16_t h2_io_flash_read(flash_t *f, uint32_t addr, bool oe, bool we, bool rst)
-{
-	if(rst)
-		return 0;
-
-	if(oe && we) {
-		warning("OE and WE set at the same time");
-		return 0;
-	}
-
-	if(!oe) {
-		warning("flash read with OE not selected");
-		return 0;
-	}
-
-	switch(f->mode) {
-	case FLASH_READ_ARRAY:             return f->nvram[0x7ffffff & addr];
-	case FLASH_READ_DEVICE_IDENTIFIER:
-	case FLASH_QUERY:                  return PC28F128P33BF60_CFI_Query_Read(addr);
-	case FLASH_READ_STATUS_REGISTER:   return f->status;
-	case FLASH_WORD_PROGRAMMING:
-	case FLASH_WORD_PROGRAM:           return f->status;
-	case FLASH_BLOCK_ERASING:
-	case FLASH_BLOCK_ERASE:            return f->status;
-	case FLASH_LOCK_OPERATING:
-	case FLASH_LOCK_OPERATION:         return f->status; /* return what? */
-	default:
-		fatal("invalid flash state: %u", f->mode);
-	}
-
-	return 0;
-}
-
-static unsigned addr_to_block(uint32_t addr)
-{
-	uint32_t lower_64k_blocks_highest_address = 127u * 64u * 1024u; /* 0x7F000 */
-	/*assert(addr < 0x7ffffff);*/
-	if(addr < lower_64k_blocks_highest_address)
-		return addr / (64u * 1024u);
-	addr -= lower_64k_blocks_highest_address;
-	addr /= (16u * 1024u);
-	return addr + 127u;
-}
-
-static unsigned block_size(unsigned block)
-{
-	if(block >= 127u)
-		return 16u * 1024u;
-	return 64u * 1024u;
-}
-
-static bool block_locked(flash_t *f, unsigned block)
-{
-	assert(f);
-	assert(block < FLASH_BLOCK_MAX);
-	return !!(f->locks[block]);
-}
-
-static bool address_protected(flash_t *f, uint32_t addr)
-{
-	assert(f);
-	return block_locked(f, addr_to_block(addr));
-}
-
-/**@todo implement the full standard for the Common Flash Memory Interface, and
- * make the timing based on a simulated calculated time instead multiples of
- * 10us see:
- * <https://en.wikipedia.org/wiki/Common_Flash_Memory_Interface> with the
- * devices PC28F128P33BF60 and NP8P128A13T1760E. The lock status of a register
- * should be read as well as checking f->arg1_address == f->arg2_address for
- * commands which require this.*/
-static void h2_io_flash_update(flash_t *f, uint32_t addr, uint16_t data, bool oe, bool we, bool rst, bool cs)
-{
-	assert(f);
-	if(oe && we)
-		warning("OE and WE set at the same time");
-
-	if(rst) {
-		f->mode = FLASH_READ_ARRAY;
-		return;
-	}
-
-	switch(f->mode) {
-	case FLASH_READ_ARRAY:
-	case FLASH_READ_STATUS_REGISTER:
-	case FLASH_QUERY:
-	case FLASH_READ_DEVICE_IDENTIFIER:
-		f->arg1_address = addr;
-		f->cycle = 0;
-		f->status |= FLASH_STATUS_DEVICE_READY;
-
-		if(!we && f->we && cs) {
-			switch(f->data) {
-			case 0x00: break;
-			case 0xff: f->mode = FLASH_READ_ARRAY;             break;
-			case 0x90: f->mode = FLASH_READ_DEVICE_IDENTIFIER; break;
-			case 0x98: f->mode = FLASH_QUERY;                  break;
-			case 0x70: f->mode = FLASH_READ_STATUS_REGISTER;   break;
-			case 0x50: f->status = FLASH_STATUS_DEVICE_READY;  break; /* changes state? */
-			case 0x10:
-			case 0x40: f->mode = FLASH_WORD_PROGRAM;           break;
-			case 0xE8: f->mode = FLASH_BUFFERED_PROGRAM;       break;
-			case 0x20: f->mode = FLASH_BLOCK_ERASE;            break;
-			/*case 0xB0: SUSPEND NOT IMPLEMENTED;              break; */
-			/*case 0xD0: RESUME NOT IMPLEMENTED;               break; */
-			case 0x60: f->mode = FLASH_LOCK_OPERATION;         break;
-			/*case 0xC0: PROTECTION PROGRAM NOT IMPLEMENTED;     break; */
-			default:
-				warning("Common Flash Interface command not implemented: %x", (unsigned)(f->data));
-				f->mode = FLASH_READ_ARRAY;
-			}
-		}
-		break;
-	case FLASH_WORD_PROGRAM:
-		if(!we && f->we && cs) {
-			f->cycle   = 0;
-			if(address_protected(f, f->arg1_address)) {
-				warning("address locked: %u", (unsigned)f->arg1_address);
-				f->status |= FLASH_STATUS_BLOCK_LOCKED;
-				f->status |= FLASH_STATUS_PROGRAM;
-				f->mode    = FLASH_READ_STATUS_REGISTER;
-			} else {
-				f->status &= ~FLASH_STATUS_DEVICE_READY;
-				f->mode    = FLASH_WORD_PROGRAMMING;
-			}
-		} else if(we && cs) {
-			f->arg2_address = addr;
-		}
-		break;
-	case FLASH_WORD_PROGRAMMING:
-		if(f->cycle++ > FLASH_WRITE_CYCLES) {
-			f->nvram[f->arg1_address] &= f->data;
-			f->mode         = FLASH_READ_STATUS_REGISTER;
-			f->cycle        = 0;
-			f->status |= FLASH_STATUS_DEVICE_READY;
-		}
-		break;
-	case FLASH_LOCK_OPERATION:
-		if(!we && f->we && cs) {
-			f->mode = FLASH_LOCK_OPERATING;
-		} else if(we && cs) {
-			f->arg2_address = addr;
-		}
-		break;
-	case FLASH_LOCK_OPERATING:
-		if(f->arg1_address > FLASH_BLOCK_MAX) {
-			warning("block address invalid: %u", (unsigned)f->arg1_address);
-			f->mode = FLASH_READ_STATUS_REGISTER;
-			break;
-		}
-
-		switch(f->data) {
-		case 0xD0:
-			if(f->locks[f->arg1_address] != FLASH_LOCKED_DOWN)
-				f->locks[f->arg1_address] = FLASH_UNLOCKED;
-			else
-				warning("block locked down: %u", (unsigned)f->arg1_address);
-			break;
-		case 0x01:
-			if(f->locks[f->arg1_address] != FLASH_LOCKED_DOWN)
-				f->locks[f->arg1_address] = FLASH_LOCKED;
-			else
-				warning("block locked down: %u", (unsigned)f->arg1_address);
-			break;
-		case 0x2F:
-			f->locks[f->arg1_address] = FLASH_LOCKED_DOWN;
-			break;
-		default:
-			warning("Unknown/Unimplemented Common Flash Interface Lock Operation: %x", (unsigned)(f->data));
-		}
-		f->mode = FLASH_READ_STATUS_REGISTER;
-		break;
-	case FLASH_BLOCK_ERASE:
-		/*f->status &= ~FLASH_STATUS_DEVICE_READY;*/
-		if(!we && f->we && cs) {
-			if(addr != f->arg1_address)
-				warning("block addresses differ: 1(%u) 2(%u)", f->arg1_address, addr);
-			if(f->data != 0xD0) /* erase confirm */
-				f->mode = FLASH_READ_STATUS_REGISTER;
-			else
-				f->mode = FLASH_BLOCK_ERASING;
-
-			if(f->mode == FLASH_BLOCK_ERASING && address_protected(f, f->arg1_address)) {
-				warning("address locked: %u", (unsigned)f->arg1_address);
-				f->status |= FLASH_STATUS_BLOCK_LOCKED;
-				f->status |= FLASH_STATUS_ERASE_BLANK;
-				f->mode    = FLASH_READ_STATUS_REGISTER;
-			}
-		} else if(we && cs) {
-			f->arg2_address = addr;
-		}
-		f->cycle = 0;
-		break;
-	case FLASH_BLOCK_ERASING:
-		f->status &= ~FLASH_STATUS_DEVICE_READY;
-		if(f->cycle++ > FLASH_ERASE_CYCLES) {
-			unsigned block = f->arg1_address;
-			unsigned size  = block_size(block);
-			if(block >= FLASH_BLOCK_MAX) {
-				warning("block operation out of range: %u", block);
-				f->status |= FLASH_STATUS_ERASE_BLANK;
-			} else {
-				memset(f->nvram+block*size, 0xff, sizeof(f->nvram[0])*size);
-			}
-			f->cycle = 0;
-			f->mode = FLASH_READ_STATUS_REGISTER;
-			f->status |= FLASH_STATUS_DEVICE_READY;
-		}
-		break;
-	case FLASH_BUFFERED_PROGRAM:
-	case FLASH_BUFFERED_PROGRAMMING:
-		warning("block programming not implemented");
-		f->status |= FLASH_STATUS_PROGRAM;
-		f->mode = FLASH_READ_STATUS_REGISTER;
-		break;
-	default:
-		fatal("invalid flash state: %u", f->mode);
-		return;
-	}
-	if(we && !oe)
-		f->data = data;
-	f->we = we;
-	f->cs = cs;
-}
-
 uint16_t h2_io_memory_read_operation(h2_soc_state_t *soc)
 {
 	assert(soc);
 	uint32_t flash_addr = ((uint32_t)(soc->mem_control & FLASH_MASK_ADDR_UPPER_MASK) << 16) | soc->mem_addr_low;
-	bool flash_rst = soc->mem_control & FLASH_MEMORY_RESET;
-	bool flash_cs  = soc->mem_control & FLASH_CHIP_SELECT;
 	bool sram_cs   = soc->mem_control & SRAM_CHIP_SELECT;
 	bool oe        = soc->mem_control & FLASH_MEMORY_OE;
 	bool we        = soc->mem_control & FLASH_MEMORY_WE;
 
 	if(oe && we)
 		return 0;
-
-	if(flash_cs && sram_cs)
-		warning("SRAM and Flash Chip selects both high");
-
-	if(flash_cs)
-		return h2_io_flash_read(&soc->flash, flash_addr >> 1, oe, we, flash_rst);
 
 	if(sram_cs && oe && !we)
 		return soc->vram[flash_addr >> 1];
@@ -1574,9 +841,6 @@ static uint16_t h2_io_get_default(h2_soc_state_t *soc, uint16_t addr, bool *debu
 	(void)debug_on;
 	switch(addr) {
 	case iUart:         return UART_TX_FIFO_EMPTY | soc->uart_getchar_register;
-	case iVT100:        return UART_TX_FIFO_EMPTY | soc->ps2_getchar_register;
-	case iSwitches:     return soc->switches;
-	case iTimerDin:     return soc->timer;
 	case iMemDin:       return h2_io_memory_read_operation(soc);
 	default:
 		warning("invalid read from %04"PRIx16, addr);
@@ -1596,16 +860,6 @@ static void h2_io_set_default(h2_soc_state_t *soc, uint16_t addr, uint16_t value
 			if(value & UART_RX_RE)
 				soc->uart_getchar_register = wrap_getch(debug_on);
 			break;
-	case oLeds:       soc->leds           = value; break;
-	case oTimerCtrl:  soc->timer_control  = value; break;
-	case oVT100:
-		if(value & UART_TX_WE)
-			vt100_update(&soc->vt100, value);
-		if(value & UART_RX_RE)
-			soc->ps2_getchar_register = wrap_getch(debug_on);
-		break;
-	case o7SegLED:    soc->led_7_segments = value; break;
-	case oIrcMask:    soc->irc_mask       = value; break;
 	case oMemControl:
 	{
 		soc->mem_control    = value;
@@ -1628,66 +882,15 @@ static void h2_io_set_default(h2_soc_state_t *soc, uint16_t addr, uint16_t value
 static void h2_io_update_default(h2_soc_state_t *soc)
 {
 	assert(soc);
-
-	if(soc->timer_control & TIMER_ENABLE) {
-		if(soc->timer_control & TIMER_RESET) {
-			soc->timer = 0;
-			soc->timer_control &= ~TIMER_RESET;
-		} else {
-			soc->timer++;
-			if((soc->timer > (soc->timer_control & 0x1FFF))) {
-				if(soc->timer_control & TIMER_INTERRUPT_ENABLE) {
-					soc->interrupt           = soc->irc_mask & (1 << isrTimer);
-					soc->interrupt_selector |= soc->irc_mask & (1 << isrTimer);
-				}
-				soc->timer = 0;
-			}
-		}
-	}
-
-	{ /* DPAD interrupt on change state */
-		uint16_t prev = soc->switches_previous;
-		uint16_t cur  = soc->switches;
-		if((prev & 0xff00) != (cur & 0xff00)) {
-			soc->interrupt           = soc->irc_mask & (1 << isrDPadButton);
-			soc->interrupt_selector |= soc->irc_mask & (1 << isrDPadButton);
-		}
-		soc->switches_previous = soc->switches;
-	}
-
-	{
-		uint32_t flash_addr = ((uint32_t)(soc->mem_control & FLASH_MASK_ADDR_UPPER_MASK) << 16) | soc->mem_addr_low;
-		bool flash_rst = soc->mem_control & FLASH_MEMORY_RESET;
-		bool flash_cs  = soc->mem_control & FLASH_CHIP_SELECT;
-		bool oe        = soc->mem_control & FLASH_MEMORY_OE;
-		bool we        = soc->mem_control & FLASH_MEMORY_WE;
-		h2_io_flash_update(&soc->flash, flash_addr >> 1, soc->mem_dout, oe, we, flash_rst, flash_cs);
-	}
 }
 
-h2_soc_state_t *h2_soc_state_new(void)
+static h2_soc_state_t *h2_soc_state_new(void)
 {
 	h2_soc_state_t *r = allocate_or_die(sizeof(h2_soc_state_t));
-	vt100_t *v = &r->vt100;
-	memset(r->flash.nvram, 0xff, sizeof(r->flash.nvram[0])*FLASH_BLOCK_MAX);
-	memset(r->flash.locks, FLASH_LOCKED, FLASH_BLOCK_MAX);
-
-	v->width        = VGA_WIDTH;
-	v->height       = VGA_HEIGHT;
-	v->size         = VGA_WIDTH * VGA_HEIGHT;
-	v->state        = TERMINAL_NORMAL_MODE;
-	v->cursor_on    = true;
-	v->blinks       = false;
-	v->n1           = 1;
-	v->n2           = 1;
-	v->attribute.foreground_color = WHITE;
-	v->attribute.background_color = BLACK;
-	for(size_t i = 0; i < v->size; i++)
-		v->attributes[i] = v->attribute;
 	return r;
 }
 
-void h2_soc_state_free(h2_soc_state_t *soc)
+static void h2_soc_state_free(h2_soc_state_t *soc)
 {
 	if(!soc)
 		return;
@@ -1695,7 +898,7 @@ void h2_soc_state_free(h2_soc_state_t *soc)
 	free(soc);
 }
 
-h2_io_t *h2_io_new(void)
+static h2_io_t *h2_io_new(void)
 {
 	h2_io_t *io =  allocate_or_die(sizeof(*io));
 	io->in      = h2_io_get_default;
@@ -1705,7 +908,7 @@ h2_io_t *h2_io_new(void)
 	return io;
 }
 
-void h2_io_free(h2_io_t *io)
+static void h2_io_free(h2_io_t *io)
 {
 	if(!io)
 		return;
@@ -1840,12 +1043,10 @@ static const debug_command_t debug_commands[] = {
 	{ .cmd = 't', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "toggle tracing         " },
 	{ .cmd = 'u', .argc = 2, .arg1 = DBG_CMD_NUMBER, .arg2 = DBG_CMD_NUMBER, .description = "unassemble             " },
 	{ .cmd = 'y', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "list symbols           " },
-	{ .cmd = 'v', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "print VGA display      " },
 	{ .cmd = 'P', .argc = 1, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "push value             " },
 	{ .cmd = 'D', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "pop value              " },
 	{ .cmd = 'G', .argc = 1, .arg1 = DBG_CMD_EITHER, .arg2 = DBG_CMD_NO_ARG, .description = "call function/location " },
 	{ .cmd = '!', .argc = 2, .arg1 = DBG_CMD_NUMBER, .arg2 = DBG_CMD_NUMBER, .description = "set value              " },
-	{ .cmd = '.', .argc = 0, .arg1 = DBG_CMD_NO_ARG, .arg2 = DBG_CMD_NO_ARG, .description = "print H2 CPU state     " },
 	{ .cmd = -1,  .argc = 0, .arg1 = DBG_CMD_EITHER, .arg2 = DBG_CMD_NO_ARG, .description = NULL },
 };
 
@@ -2100,26 +1301,6 @@ again:
 			else
 				fprintf(ds->output, "symbol table unavailable\n");
 			break;
-		case 'v':
-			if(!io) {
-				fprintf(ds->output, "I/O unavailable\n");
-				break;
-			}
-			for(size_t i = 0; i < VGA_HEIGHT; i++) {
-				for(size_t j = 0; j < VGA_WIDTH; j++) {
-					unsigned char c = io->soc->vt100.m[i*VGA_WIDTH + j];
-					fputc(c < 32 || c > 127 ? '?' : c, ds->output);
-				}
-				fputc('\n', ds->output);
-			}
-
-			break;
-		case 'p':
-			if(io)
-				soc_print(ds->output, io->soc);
-			else
-				fprintf(ds->output, "I/O unavailable\n");
-			break;
 		case 'q':
 			fprintf(ds->output, "Quiting simulator\n");
 			return -1;
@@ -2128,16 +1309,6 @@ again:
 		}
 		goto again;
 	}
-	return 0;
-}
-
-static uint16_t interrupt_decode(uint8_t *vector)
-{
-	for(unsigned i = 0; i < NUMBER_OF_INTERRUPTS; i++)
-		if(*vector & (1 << i)) {
-			*vector ^= 1 << i;
-			return i;
-		}
 	return 0;
 }
 
@@ -2163,9 +1334,6 @@ int h2_run(h2_t *h, h2_io_t *io, FILE *output, unsigned steps, symbol_table_t *s
 		if(io)
 			io->update(io->soc);
 
-		if(io && io->soc->wait) /* wait only applies to the H2 core not the rest of the SoC */
-			continue;
-
 		if(h->pc >= MAX_CORE) {
 			error("invalid program counter: %04x > %04x", (unsigned)h->pc, MAX_CORE);
 			return -1;
@@ -2174,13 +1342,6 @@ int h2_run(h2_t *h, h2_io_t *io, FILE *output, unsigned steps, symbol_table_t *s
 
 		literal = instruction & 0x7FFF;
 		address = instruction & 0x1FFF; /* NB. also used for ALU OP */
-
-		if(h->ie && io && io->soc->interrupt) {
-			rpush(h, h->pc << 1);
-			io->soc->interrupt = false;
-			h->pc = interrupt_decode(&io->soc->interrupt_selector);
-			continue;
-		}
 
 		pc_plus_one = (h->pc + 1) % MAX_CORE;
 
@@ -3736,7 +2897,7 @@ static h2_t *code(node_t *n, symbol_table_t *symbols)
 	return h;
 }
 
-int h2_assemble_file(FILE *input, FILE *output, symbol_table_t *symbols)
+static int h2_assemble_file(FILE *input, FILE *output, symbol_table_t *symbols)
 {
 	int r = 0;
 	node_t *n;
@@ -3761,7 +2922,7 @@ int h2_assemble_file(FILE *input, FILE *output, symbol_table_t *symbols)
 	return r;
 }
 
-h2_t *h2_assemble_core(FILE *input, symbol_table_t *symbols)
+static h2_t *h2_assemble_core(FILE *input, symbol_table_t *symbols)
 {
 	assert(input);
 	h2_t *h = NULL;
@@ -3778,7 +2939,6 @@ h2_t *h2_assemble_core(FILE *input, symbol_table_t *symbols)
 
 /* ========================== Main ========================================= */
 
-#ifndef NO_MAIN
 typedef enum {
 	DEFAULT_COMMAND,
 	DISASSEMBLE_COMMAND,
@@ -3832,7 +2992,7 @@ static void debug_note(command_args_t *cmd)
 		note("running for %u cycles (0 = forever)", (unsigned)cmd->steps);
 }
 
-static int assemble_run_command(command_args_t *cmd, FILE *input, FILE *output, symbol_table_t *symbols, bool assemble, uint16_t *vga_initial_contents)
+static int assemble_run_command(command_args_t *cmd, FILE *input, FILE *output, symbol_table_t *symbols, bool assemble)
 {
 	assert(input);
 	assert(output);
@@ -3854,17 +3014,8 @@ static int assemble_run_command(command_args_t *cmd, FILE *input, FILE *output, 
 		return -1;
 
 	io = h2_io_new();
-	assert(VGA_BUFFER_LENGTH <= VT100_MAX_SIZE);
-	for(size_t i = 0; i < VGA_BUFFER_LENGTH; i++) {
-		vt100_attribute_t attr;
-		memset(&attr, 0, sizeof(attr));
-		io->soc->vt100.m[i]   =  vga_initial_contents[i] & 0xff;
-		attr.background_color = (vga_initial_contents[i] >> 8)  & 0x7;
-		attr.foreground_color = (vga_initial_contents[i] >> 11) & 0x7;
-		memcpy(&io->soc->vt100.attributes[i], &attr, sizeof(attr));
-	}
 
-	nvram_load_and_transfer(io, cmd->nvram, cmd->hacks);
+	ram_load_and_transfer(io, cmd->nvram);
 	h->pc = START_ADDR;
 	debug_note(cmd);
 	r = h2_run(h, io, output, cmd->steps, symbols, cmd->debug_mode);
@@ -3875,7 +3026,7 @@ static int assemble_run_command(command_args_t *cmd, FILE *input, FILE *output, 
 	return r;
 }
 
-int command(command_args_t *cmd, FILE *input, FILE *output, symbol_table_t *symbols, uint16_t *vga_initial_contents)
+int command(command_args_t *cmd, FILE *input, FILE *output, symbol_table_t *symbols)
 {
 	assert(input);
 	assert(output);
@@ -3884,8 +3035,8 @@ int command(command_args_t *cmd, FILE *input, FILE *output, symbol_table_t *symb
 	case DEFAULT_COMMAND:      /* fall through */
 	case DISASSEMBLE_COMMAND:  return h2_disassemble(input, output, symbols);
 	case ASSEMBLE_COMMAND:     return h2_assemble_file(input, output, symbols);
-	case RUN_COMMAND:          return assemble_run_command(cmd, input, output, symbols, false, vga_initial_contents);
-	case ASSEMBLE_RUN_COMMAND: return assemble_run_command(cmd, input, output, symbols, true,  vga_initial_contents);
+	case RUN_COMMAND:          return assemble_run_command(cmd, input, output, symbols, false);
+	case ASSEMBLE_RUN_COMMAND: return assemble_run_command(cmd, input, output, symbols, true);
 	default:                   fatal("invalid command: %d", cmd->cmd);
 	}
 	return -1;
@@ -3893,7 +3044,7 @@ int command(command_args_t *cmd, FILE *input, FILE *output, symbol_table_t *symb
 
 static const char *nvram_file = FLASH_INIT_FILE;
 
-int h2_main(int argc, char **argv)
+int main(int argc, char **argv)
 {
 	int i;
 	const char *optarg = NULL;
@@ -3905,9 +3056,8 @@ int h2_main(int argc, char **argv)
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.steps = DEFAULT_STEPS;
 	cmd.nvram = nvram_file;
-
-	static uint16_t vga_initial_contents[VGA_BUFFER_LENGTH] = { 0 };
-
+	cmd.hacks = true;
+		
 #ifdef _WIN32
 	/* Windows Only: Put the used standard streams into binary mode.
 	 * Text mode sucks. */
@@ -3915,16 +3065,6 @@ int h2_main(int argc, char **argv)
 	_setmode(_fileno(stdout), _O_BINARY);
 	_setmode(_fileno(stderr), _O_BINARY);
 #endif
-	{ /* attempt to load initial contents of VGA memory */
-		errno = 0;
-		FILE *vga_init = fopen(VGA_INIT_FILE, "rb");
-		if(vga_init) {
-			memory_load(vga_init, vga_initial_contents, VGA_BUFFER_LENGTH);
-			fclose(vga_init);
-		} else {
-			warning("could not load initial VGA memory file %s: %s", VGA_INIT_FILE, strerror(errno));
-		}
-	}
 
 	for(i = 1; i < argc && argv[i][0] == '-'; i++) {
 
@@ -3995,9 +3135,6 @@ int h2_main(int argc, char **argv)
 			cmd.nvram = argv[++i];
 			note("nvram file %s", cmd.nvram);
 			break;
-		case 'H':
-			cmd.hacks = true;
-			break;
 		default:
 		fail:
 			fatal("invalid argument '%s'\n%s\n", argv[i], help);
@@ -4008,7 +3145,7 @@ int h2_main(int argc, char **argv)
 
 done:
 	if(i == argc) {
-		if(command(&cmd, stdin, stdout, symbols, vga_initial_contents) < 0)
+		if(command(&cmd, stdin, stdout, symbols) < 0)
 			fatal("failed to process standard input");
 		return 0;
 	}
@@ -4017,7 +3154,7 @@ done:
 		fatal("more than one file argument given");
 
 	input = fopen_or_die(argv[i], "rb");
-	if(command(&cmd, input, stdout, symbols, vga_initial_contents) < 0)
+	if(command(&cmd, input, stdout, symbols) < 0)
 		fatal("failed to process file: %s", argv[i]);
 	/**@note keeping "input" open until the command exits locks the
 	 * file for longer than is necessary under Windows */
@@ -4032,11 +3169,5 @@ done:
 		fclose(symfile);
 	return 0;
 }
-
-int main(int argc, char **argv)
-{
-	return h2_main(argc, argv);
-}
-#endif
 
 /* ========================== Main ========================================= */

@@ -20,4 +20,10 @@ original project and make itself hosting (apart from the C run time, which
 should be easy to port). The project will start out large and be cut down from
 their, become just a small C virtual machine and a block file.
 
+# To Do
+
+* Remove unneeded peripherals that are simulated
+* Change size of a CPU word from a 16-bit value to a "uintptr\_t" type
+* Make a cross compiler with the Forth
+
 

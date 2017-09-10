@@ -87,10 +87,8 @@ typedef enum {
 	ALU_OP_N_ULESS_T,          /**< Unsigned comparison  */
 	ALU_OP_ENABLE_INTERRUPTS,  /**< Enable interrupts    */
 
-	ALU_OP_INTERRUPTS_ENABLED, /**< Are interrupts on?   */
 	ALU_OP_RDEPTH,             /**< R Stack Depth        */
 	ALU_OP_T_EQUAL_0,          /**< T == 0               */
-	ALU_OP_CPU_ID              /**< CPU Identifier       */
 } alu_code_e;
 
 #define DELTA_0  (0)
@@ -134,12 +132,9 @@ typedef enum {
 	X(OR,     "or",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_OR_N)                 | MK_DSTACK(DELTA_N1)))\
 	X(DEPTH,  "sp@",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_DEPTH)   | T_TO_N       | MK_DSTACK(DELTA_1)))\
 	X(T_N1,   "1-",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_DECREMENT)))\
-	X(IEN,    "ien",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_ENABLE_INTERRUPTS)     /* | MK_DSTACK(DELTA_N1) */))\
-	X(ISIEN,  "ien?",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_INTERRUPTS_ENABLED) | T_TO_N  | MK_DSTACK(DELTA_1)))\
 	X(RDEPTH, "rp@",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_RDEPTH)  | T_TO_N       | MK_DSTACK(DELTA_1)))\
 	X(TE0,    "0=",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_EQUAL_0)))\
 	X(NOP,    "nop",    false, (OP_ALU_OP | MK_CODE(ALU_OP_T)))\
-	X(CPU_ID, "cpu-id", true,  (OP_ALU_OP | MK_CODE(ALU_OP_CPU_ID))                | MK_DSTACK(DELTA_1))\
 	X(RUP,    "rup",    false, (OP_ALU_OP | MK_CODE(ALU_OP_T))                     | MK_RSTACK(DELTA_1))\
 	X(RDROP,  "rdrop",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_T) | MK_RSTACK(DELTA_N1)))
 
@@ -658,11 +653,8 @@ static const char *alu_op_to_string(uint16_t instruction)
 	case ALU_OP_N_LSHIFT_T:         return "N<<T";
 	case ALU_OP_DEPTH:              return "depth";
 	case ALU_OP_N_ULESS_T:          return "Tu>N";
-	case ALU_OP_ENABLE_INTERRUPTS:  return "ien";
-	case ALU_OP_INTERRUPTS_ENABLED: return "ien?";
 	case ALU_OP_RDEPTH:             return "rdepth";
 	case ALU_OP_T_EQUAL_0:          return "0=";
-	case ALU_OP_CPU_ID:             return "cpu-id";
 	default:                        return "unknown";
 	}
 }
@@ -1005,7 +997,6 @@ static void h2_print(FILE *out, h2_t *h)
 	fprintf(out, "pc:   %04"PRIx16"\n", h->pc);
 	fprintf(out, "rp:   %04"PRIx16" (max %04"PRIx16")\n", h->rp, h->rpm);
 	fprintf(out, "dp:   %04"PRIx16" (max %04"PRIx16")\n", h->sp, h->spm);
-	fprintf(out, "ie:   %s\n", h->ie ? "true" : "false");
 }
 
 typedef enum {
@@ -1404,11 +1395,8 @@ int h2_run(h2_t *h, h2_io_t *io, FILE *output, unsigned steps, symbol_table_t *s
 			case ALU_OP_N_LSHIFT_T: tos = nos << tos;           break;
 			case ALU_OP_DEPTH:      tos = h->sp;                break;
 			case ALU_OP_N_ULESS_T:  tos = -(nos < tos);         break;
-			case ALU_OP_ENABLE_INTERRUPTS: h->ie = tos & 1; /*tos = nos;*/ break;
-			case ALU_OP_INTERRUPTS_ENABLED: tos = -h->ie;       break;
 			case ALU_OP_RDEPTH:     tos = h->rp;                break;
 			case ALU_OP_T_EQUAL_0:  tos = -(tos == 0);          break;
-			case ALU_OP_CPU_ID:     tos = H2_CPU_ID_SIMULATION; break;
 			default:
 				warning("unknown ALU operation: %u", (unsigned)ALU_OP(instruction));
 			}

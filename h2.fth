@@ -78,7 +78,6 @@ location _bsave     0  ( a u k -- f : save block )
 location _binvalid  0  ( k -- k : throws error if k invalid )
 location _message   0  ( n -- : display an error message )
 location last-def   0  ( last, possibly unlinked, word definition )
-location flash-voc  0  ( flash and memory word set )
 location cp         0  ( Dictionary Pointer: Set at end of file )
 location csp        0  ( current data stack pointer - for error checking )
 location _id        0  ( used for source id )
@@ -902,7 +901,6 @@ things, the 'decompiler' word could be called manually on an address if desired 
 
 \ : root  -1 set-order ; \ should contain set-order, forth-wordlist, forth, and words
 : forth -1 set-order ;
-: flash get-order flash-voc swap 1+ set-order ;
 
 : .words space begin dup while dup .id space @ address repeat drop cr ; hidden
 : words get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ;
@@ -965,15 +963,12 @@ location memory-select      0    ( SRAM/Flash select SRAM = 0, Flash = 1 )
 : m! ( n a -- : write to non-volatile memory )
 	oMemAddrLow !
 	oMemDout !
-	5 40ns
 	0x8000 mcontrol!
-	5 40ns
 	$0000 mcontrol! ;
 
 : m@ ( a -- n : read from non-volatile memory )
 	oMemAddrLow !
 	$4000 mcontrol! ( read enable mode )
-	5 40ns
 	iMemDin @        ( get input )
 	$0000 mcontrol! ;
 

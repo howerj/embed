@@ -16,7 +16,6 @@
 
 #define H2_CPU_ID_SIMULATION (0xDEADu)
 
-#define VGA_INIT_FILE        ("text.hex")  /**< default name for VGA screen */
 #define FLASH_INIT_FILE      ("nvram.blk") /**< default file for flash initialization */
 
 typedef struct {
@@ -32,7 +31,6 @@ typedef struct {
 	uint16_t tos; /**< top of stack */
 	uint16_t rp;  /**< return stack pointer */
 	uint16_t sp;  /**< variable stack pointer */
-	bool     ie;  /**< interrupt enable */
 
 	break_point_t bp; /**< list of break points */
 	uint16_t rpm; /**< maximum value of rp ever encountered */

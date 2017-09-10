@@ -1,0 +1,8 @@
+*.o
+embed
+block
+*.blk
+*~
+core
+vgcore.*
+*.hex

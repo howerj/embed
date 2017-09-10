@@ -879,7 +879,6 @@ things, the 'decompiler' word could be called manually on an address if desired 
 \ 		= if space .name else . then cell+
 \ 	repeat drop ;
 
-.set forth-wordlist $pwd
 ( ==================== See =========================================== )
 
 ( ==================== Vocabulary Words ============================== )
@@ -910,43 +909,6 @@ things, the 'decompiler' word could be called manually on an address if desired 
 ( ==================== Vocabulary Words ============================== )
 
 ( ==================== Memory Interface ============================== )
-
-( @note The manual for the Nexys 3 board specifies that there is a PCM
-memory device called the NP8P128A13T1760E, this is a device behaves like
-normal flash with the addition that individual cells can be written to
-without first erasing the block, this is accomplished with an extension
-to the Common Flash Interface that most flash devices support. However,
-there are boards the PC28F128P33BF60 on in lieu of this, which is a
-normal flash device without the "bit alterable write" extension. Normal
-flash memory works by erasing a block of data, setting all bits set,
-writing the memory works by masking in a value, bits can be cleared in
-a memory cell but not set, the can only be set by erasing a block.
-
-The Nexys 3 has three memory devices, two of which are accessed over
-a parallel interface. They share the same data and address bus, and
-can be selected with a chip select. The signals to be controlled
-are:
-
-	+-----+-------------------------+
-	| Bit | Description             |
-	|-----|-------------------------|
-	| 0-9 | Upper Memory Bits       |
-	| 10  | Flash chip select       |
-	| 11  | SRAM chip select        |
-	| 12  | Memory Wait [not used]  |
-	| 13  | Flash Reset             |
-	| 14  | Output Enable           |
-	| 15  | Write Enable            |
-	+-----+-------------------------+
-
-The usage of the output enable and write enable are mutually exclusive,
-as are both of the chip selects.
-
-)
-
-.set context forth-wordlist
-.set forth-wordlist $pwd
-.pwd 0
 
 constant memory-upper-mask  $1ff hidden
 variable memory-upper       0    ( upper bits of external memory address )
@@ -1002,6 +964,10 @@ location memory-select      0    ( SRAM/Flash select SRAM = 0, Flash = 1 )
 	else
 		1 -throw
 	then ; hidden
+
+.set context forth-wordlist
+.set forth-wordlist $pwd
+
 
 start:
 .set entry start

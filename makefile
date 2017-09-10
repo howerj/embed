@@ -8,8 +8,12 @@ block: block.c
 %.blk: %.txt block
 	./block < $< > $@
 
+
 embed: h2.c h2.h
 	${CC} ${CFLAGS} $< -o $@
 
-run: nvram.blk embed
-	./embed -R h2.fth
+%.hex: %.fth embed
+	./embed -a $< > $@
+
+run: nvram.blk h2.hex embed
+	./embed -r h2.hex

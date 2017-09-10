@@ -243,7 +243,7 @@ static int string_to_long(int base, long *n, const char *s)
 	return errno || *s == '\0' || *end != '\0';
 }
 
-static int string_to_cell(int base, uint16_t *n, const char *s)
+static int string_to_cell(int base, word_t *n, const char *s)
 {
 	long n1 = 0;
 	int r = string_to_long(base, &n1, s);
@@ -273,11 +273,11 @@ static void ethrow(error_t *e)
 	exit(EXIT_FAILURE);
 }
 
-static h2_t *h2_new(uint16_t start_address)
+static h2_t *h2_new(word_t start_address)
 {
 	h2_t *h = allocate_or_die(sizeof(h2_t));
 	h->pc = start_address;
-	for(uint16_t i = 0; i < start_address; i++)
+	for(word_t i = 0; i < start_address; i++)
 		h->core[i] = OP_BRANCH | start_address;
 	return h;
 }
@@ -291,7 +291,7 @@ static void h2_free(h2_t *h)
 	free(h);
 }
 
-static int binary_memory_load(FILE *input, uint16_t *p, size_t length)
+static int binary_memory_load(FILE *input, word_t *p, size_t length)
 {
 	assert(input);
 	assert(p);
@@ -308,7 +308,7 @@ static int binary_memory_load(FILE *input, uint16_t *p, size_t length)
 	return 0;
 }
 
-static int binary_memory_save(FILE *output, uint16_t *p, size_t length)
+static int binary_memory_save(FILE *output, word_t *p, size_t length)
 {
 	assert(output);
 	assert(p);
@@ -358,7 +358,7 @@ static int nvram_save(h2_io_t *io, const char *name)
 	return r;
 }
 
-static int memory_load(FILE *input, uint16_t *p, size_t length)
+static int memory_load(FILE *input, word_t *p, size_t length)
 {
 	assert(input);
 	assert(p);
@@ -382,7 +382,7 @@ static int memory_load(FILE *input, uint16_t *p, size_t length)
 	return 0;
 }
 
-static int memory_save(FILE *output, uint16_t *p, size_t length)
+static int memory_save(FILE *output, word_t *p, size_t length)
 {
 	assert(output);
 	assert(p);
@@ -480,7 +480,7 @@ static const char *symbol_names[] =
 	NULL
 };
 
-static symbol_t *symbol_new(symbol_type_e type, const char *id, uint16_t value)
+static symbol_t *symbol_new(symbol_type_e type, const char *id, word_t value)
 {
 	symbol_t *s = allocate_or_die(sizeof(*s));
 	assert(id);
@@ -525,7 +525,7 @@ static symbol_t *symbol_table_lookup(symbol_table_t *t, const char *id)
 }
 
 /** @note There can be multiple symbols with the same value of the same type */
-static symbol_t *symbol_table_reverse_lookup(symbol_table_t *t, symbol_type_e type, uint16_t value)
+static symbol_t *symbol_table_reverse_lookup(symbol_table_t *t, symbol_type_e type, word_t value)
 {
 	for(size_t i = 0; i < t->length; i++)
 		if(t->symbols[i]->type == type && t->symbols[i]->value == value)
@@ -533,7 +533,7 @@ static symbol_t *symbol_table_reverse_lookup(symbol_table_t *t, symbol_type_e ty
 	return NULL;
 }
 
-static int symbol_table_add(symbol_table_t *t, symbol_type_e type, const char *id, uint16_t value, error_t *e, bool hidden)
+static int symbol_table_add(symbol_table_t *t, symbol_type_e type, const char *id, word_t value, error_t *e, bool hidden)
 {
 	symbol_t *s = symbol_new(type, id, value);
 	symbol_t **xs = NULL;
@@ -578,7 +578,7 @@ static symbol_table_t *symbol_table_load(FILE *input)
 	char symbol[80];
 	char id[256];
 	char visibility[80];
-	uint16_t value;
+	word_t value;
 
 	while(!feof(input)) {
 		int r = 0;
@@ -623,7 +623,7 @@ fail:
 
 /* ========================== Disassembler ================================= */
 
-static const char *instruction_to_string(uint16_t i)
+static const char *instruction_to_string(word_t i)
 {
 	switch(i) {
 #define X(NAME, STRING, DEFINE, INSTRUCTION) case CODE_ ## NAME : return STRING ;
@@ -634,7 +634,7 @@ static const char *instruction_to_string(uint16_t i)
 	return NULL;
 }
 
-static const char *alu_op_to_string(uint16_t instruction)
+static const char *alu_op_to_string(word_t instruction)
 {
 	switch(ALU_OP(instruction)) {
 	case ALU_OP_T:                  return "T";
@@ -659,7 +659,7 @@ static const char *alu_op_to_string(uint16_t instruction)
 	}
 }
 
-static char *disassembler_alu(uint16_t instruction)
+static char *disassembler_alu(word_t instruction)
 {
 	char buf[256] = {0};
 	const char *r = instruction_to_string(OP_ALU_OP | instruction);
@@ -677,7 +677,7 @@ static char *disassembler_alu(uint16_t instruction)
 	return duplicate(buf);
 }
 
-static const char *disassemble_jump(symbol_table_t *symbols, symbol_type_e type, uint16_t address)
+static const char *disassemble_jump(symbol_table_t *symbols, symbol_type_e type, word_t address)
 {
 	static const char *r = "";
 	symbol_t *found = NULL;
@@ -688,7 +688,7 @@ static const char *disassemble_jump(symbol_table_t *symbols, symbol_type_e type,
 	return r;
 }
 
-static int disassembler_instruction(uint16_t instruction, FILE *output, symbol_table_t *symbols)
+static int disassembler_instruction(word_t instruction, FILE *output, symbol_table_t *symbols)
 {
 	int r = 0;
 	unsigned short literal, address;
@@ -723,7 +723,7 @@ static int h2_disassemble(FILE *input, FILE *output, symbol_table_t *symbols)
 		memset(line, 0, sizeof(line));
 		fscanf(input, "%79s", line);
 		if(line[0]) {
-			uint16_t instruction;
+			word_t instruction;
 			if(string_to_cell(16, &instruction, line)) {
 				error("invalid input to disassembler: %s", line);
 				return -1;
@@ -757,18 +757,18 @@ static char to_char(uint8_t c)
 	return isprint(c) ? c : '.';
 }
 
-static void memory_print(FILE *out, uint16_t start, uint16_t *p, uint16_t length, bool chars)
+static void memory_print(FILE *out, word_t start, word_t *p, word_t length, bool chars)
 {
-	const uint16_t line_length = 16;
+	const word_t line_length = 16;
 	assert(out);
 	assert(p);
-	for(uint16_t i = 0; i < length; i += line_length) {
+	for(word_t i = 0; i < length; i += line_length) {
 		fprintf(out, "%04"PRIx16 ": ", i + start);
-		for(uint16_t j = 0; j < line_length && j + i < length; j++)
+		for(word_t j = 0; j < line_length && j + i < length; j++)
 			fprintf(out, "%04"PRIx16 " ", p[j + i]);
 		fputc('\t', out);
 		if(chars) /* correct endianess? */
-			for(uint16_t j = 0; j < line_length && j + i < length; j++)
+			for(word_t j = 0; j < line_length && j + i < length; j++)
 				fprintf(out, "%c%c", to_char(p[j + i] >> 8), to_char(p[j + i]));
 
 		putc('\n', out);
@@ -776,7 +776,7 @@ static void memory_print(FILE *out, uint16_t start, uint16_t *p, uint16_t length
 	putc('\n', out);
 }
 
-static bool break_point_find(break_point_t *bp, uint16_t find_me)
+static bool break_point_find(break_point_t *bp, word_t find_me)
 {
 	assert(bp);
 	for(size_t i = 0; i < bp->length; i++)
@@ -785,11 +785,11 @@ static bool break_point_find(break_point_t *bp, uint16_t find_me)
 	return false;
 }
 
-static void break_point_add(break_point_t *bp, uint16_t point)
+static void break_point_add(break_point_t *bp, word_t point)
 {
 	assert(bp);
 	size_t a;
-	uint16_t *r;
+	word_t *r;
 	if(break_point_find(bp, point))
 		return;
 
@@ -810,7 +810,7 @@ static int break_point_print(FILE *out, break_point_t *bp)
 	return 0;
 }
 
-uint16_t h2_io_memory_read_operation(h2_soc_state_t *soc)
+word_t h2_io_memory_read_operation(h2_soc_state_t *soc)
 {
 	assert(soc);
 	uint32_t flash_addr = ((uint32_t)(soc->mem_control & FLASH_MASK_ADDR_UPPER_MASK) << 16) | soc->mem_addr_low;
@@ -826,7 +826,7 @@ uint16_t h2_io_memory_read_operation(h2_soc_state_t *soc)
 	return 0;
 }
 
-static uint16_t h2_io_get_default(h2_soc_state_t *soc, uint16_t addr, bool *debug_on)
+static word_t h2_io_get_default(h2_soc_state_t *soc, word_t addr, bool *debug_on)
 {
 	assert(soc);
 	debug("IO read addr: %"PRIx16, addr);
@@ -840,7 +840,7 @@ static uint16_t h2_io_get_default(h2_soc_state_t *soc, uint16_t addr, bool *debu
 	return 0;
 }
 
-static void h2_io_set_default(h2_soc_state_t *soc, uint16_t addr, uint16_t value, bool *debug_on)
+static void h2_io_set_default(h2_soc_state_t *soc, word_t addr, word_t value, bool *debug_on)
 {
 	assert(soc);
 	debug("IO write addr/value: %"PRIx16"/%"PRIx16, addr, value);
@@ -909,7 +909,7 @@ static void h2_io_free(h2_io_t *io)
 	free(io);
 }
 
-static void dpush(h2_t *h, uint16_t v)
+static void dpush(h2_t *h, word_t v)
 {
 	assert(h);
 	h->sp++;
@@ -920,9 +920,9 @@ static void dpush(h2_t *h, uint16_t v)
 	h->sp %= STK_SIZE;
 }
 
-static uint16_t dpop(h2_t *h)
+static word_t dpop(h2_t *h)
 {
-	uint16_t r;
+	word_t r;
 	assert(h);
 	r = h->tos;
 	h->tos = h->dstk[h->sp % STK_SIZE];
@@ -933,7 +933,7 @@ static uint16_t dpop(h2_t *h)
 	return r;
 }
 
-static void rpush(h2_t *h, uint16_t r)
+static void rpush(h2_t *h, word_t r)
 {
 	assert(h);
 	h->rp++;
@@ -943,14 +943,14 @@ static void rpush(h2_t *h, uint16_t r)
 	h->rp %= STK_SIZE;
 }
 
-static uint16_t stack_delta(uint16_t d)
+static word_t stack_delta(word_t d)
 {
-	static const uint16_t i[4] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
+	static const word_t i[4] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
 	assert((d & 0xFFFC) == 0);
 	return i[d];
 }
 
-static int trace(FILE *output, uint16_t instruction, symbol_table_t *symbols, const char *fmt, ...)
+static int trace(FILE *output, word_t instruction, symbol_table_t *symbols, const char *fmt, ...)
 {
 	int r = 0;
 	va_list ap;
@@ -984,7 +984,7 @@ typedef struct {
 
 static const char *debug_prompt = "debug> ";
 
-static int number(char *s, uint16_t *o, size_t length);
+static int number(char *s, word_t *o, size_t length);
 
 static void h2_print(FILE *out, h2_t *h)
 {
@@ -1097,7 +1097,7 @@ static int debug_command_check(FILE *out, const debug_command_t *dc, int cmd, in
 	return -1;
 }
 
-static int debug_resolve_symbol(FILE *out, char *symbol, symbol_table_t *symbols, uint16_t *value)
+static int debug_resolve_symbol(FILE *out, char *symbol, symbol_table_t *symbols, word_t *value)
 {
 	assert(out);
 	assert(symbol);
@@ -1117,7 +1117,7 @@ static int debug_resolve_symbol(FILE *out, char *symbol, symbol_table_t *symbols
 	return 0;
 }
 
-static int h2_debugger(debug_state_t *ds, h2_t *h, h2_io_t *io, symbol_table_t *symbols, uint16_t point)
+static int h2_debugger(debug_state_t *ds, h2_t *h, h2_io_t *io, symbol_table_t *symbols, word_t point)
 {
 	bool breaks = false;
 	assert(h);
@@ -1132,7 +1132,7 @@ static int h2_debugger(debug_state_t *ds, h2_t *h, h2_io_t *io, symbol_table_t *
 		char op[256], arg1[256], arg2[256];
 		int argc;
 		bool is_numeric1, is_numeric2;
-		uint16_t num1, num2;
+		word_t num1, num2;
 
 		ds->step = true;
 
@@ -1247,7 +1247,7 @@ again:
 				fprintf(ds->output, "invalid range\n");
 				break;
 			}
-			for(uint16_t i = num1; i < num2; i++) {
+			for(word_t i = num1; i < num2; i++) {
 				fprintf(ds->output, "%04"PRIx16 ":\t", i);
 				disassembler_instruction(h->core[i], ds->output, symbols);
 				fputc('\n', ds->output);
@@ -1313,7 +1313,7 @@ int h2_run(h2_t *h, h2_io_t *io, FILE *output, unsigned steps, symbol_table_t *s
 		fputs("Debugger running, type 'h' for a list of command\n", ds.output);
 
 	for(unsigned i = 0; i < steps || steps == 0 || run_debugger; i++) {
-		uint16_t instruction,
+		word_t instruction,
 			 literal,
 			 address,
 			 pc_plus_one;
@@ -1352,11 +1352,11 @@ int h2_run(h2_t *h, h2_io_t *io, FILE *output, unsigned steps, symbol_table_t *s
 			dpush(h, literal);
 			h->pc = pc_plus_one;
 		} else if (IS_ALU_OP(instruction)) {
-			uint16_t rd  = stack_delta(RSTACK(instruction));
-			uint16_t dd  = stack_delta(DSTACK(instruction));
-			uint16_t nos = h->dstk[h->sp % STK_SIZE];
-			uint16_t tos = h->tos;
-			uint16_t npc = pc_plus_one;
+			word_t rd  = stack_delta(RSTACK(instruction));
+			word_t dd  = stack_delta(DSTACK(instruction));
+			word_t nos = h->dstk[h->sp % STK_SIZE];
+			word_t tos = h->tos;
+			word_t npc = pc_plus_one;
 
 			if(instruction & R_TO_PC)
 				npc = h->rstk[h->rp % STK_SIZE] >> 1;
@@ -1569,7 +1569,7 @@ static const char *keywords[] =
 typedef struct {
 	union {
 		char *id;
-		uint16_t number;
+		word_t number;
 	} p;
 	unsigned location;
 	unsigned line;
@@ -1683,7 +1683,7 @@ static int _syntax_error(lexer_t *l,
 
 #define syntax_error(LEXER, ...) _syntax_error(LEXER, __func__, __LINE__, ## __VA_ARGS__)
 
-static uint16_t map_char_to_number(int c)
+static word_t map_char_to_number(int c)
 {
 	if(c >= '0' && c <= '9')
 		return c - '0';
@@ -1702,7 +1702,7 @@ static bool numeric(int c, int base)
 	return isxdigit(c);
 }
 
-static int number(char *s, uint16_t *o, size_t length)
+static int number(char *s, word_t *o, size_t length)
 {
 	size_t i = 0, start = 0;
 	uint32_t out = 0;
@@ -1742,7 +1742,7 @@ static void lexer(lexer_t *l)
 	size_t i;
 	int ch;
 	token_e sym;
-	uint16_t lit = 0;
+	word_t lit = 0;
 	assert(l);
 	ch = next_char(l);
 	l->token = token_new(LEX_ERROR, l->line);
@@ -1893,7 +1893,7 @@ static const char *names[] = {
 typedef struct node_t  {
 	parse_e type;
 	size_t length;
-	uint16_t bits; /*general use bits*/
+	word_t bits; /*general use bits*/
 	token_t *token, *value;
 	struct node_t *o[];
 } node_t;
@@ -2343,23 +2343,23 @@ typedef struct {
 	bool in_definition;
 	bool start_defined;
 	bool built_in_words_defined;
-	uint16_t start;
-	uint16_t mode;
-	uint16_t pwd; /* previous word register */
-	uint16_t fence; /* mark a boundary before which optimization cannot take place */
+	word_t start;
+	word_t mode;
+	word_t pwd; /* previous word register */
+	word_t fence; /* mark a boundary before which optimization cannot take place */
 	symbol_t *do_r_minus_one;
 	symbol_t *do_next;
 	symbol_t *do_var;
 	symbol_t *do_const;
 } assembler_t;
 
-static void update_fence(assembler_t *a, uint16_t pc)
+static void update_fence(assembler_t *a, word_t pc)
 {
 	assert(a);
 	a->fence = MAX(a->fence, pc);
 }
 
-static void generate(h2_t *h, assembler_t *a, uint16_t instruction)
+static void generate(h2_t *h, assembler_t *a, word_t instruction)
 {
 	assert(h);
 	assert(a);
@@ -2371,7 +2371,7 @@ static void generate(h2_t *h, assembler_t *a, uint16_t instruction)
 	/** @note This implements two ad-hoc optimizations, both related to
 	 * CODE_EXIT, they should be replaced by a generic peep hole optimizer */
 	if(a->mode & MODE_OPTIMIZATION_ON && h->pc) {
-		uint16_t previous = h->core[h->pc - 1];
+		word_t previous = h->core[h->pc - 1];
 		if(((h->pc - 1) > a->fence) && IS_ALU_OP(previous) && (instruction == CODE_EXIT)) {
 			/* merge the CODE_EXIT instruction with the previous instruction if it is possible to do so */
 			if(!(previous & R_TO_PC) && !(previous & MK_RSTACK(DELTA_N1))) {
@@ -2395,7 +2395,7 @@ static void generate(h2_t *h, assembler_t *a, uint16_t instruction)
 	h->core[h->pc++] = instruction;
 }
 
-static uint16_t here(h2_t *h, assembler_t *a)
+static word_t here(h2_t *h, assembler_t *a)
 {
 	assert(h);
 	assert(h->pc < MAX_CORE);
@@ -2403,7 +2403,7 @@ static uint16_t here(h2_t *h, assembler_t *a)
 	return h->pc;
 }
 
-static uint16_t hole(h2_t *h, assembler_t *a)
+static word_t hole(h2_t *h, assembler_t *a)
 {
 	assert(h);
 	assert(h->pc < MAX_CORE);
@@ -2411,7 +2411,7 @@ static uint16_t hole(h2_t *h, assembler_t *a)
 	return h->pc++;
 }
 
-static void fix(h2_t *h, uint16_t hole, uint16_t patch)
+static void fix(h2_t *h, word_t hole, word_t patch)
 {
 	assert(h);
 	assert(hole < MAX_CORE);
@@ -2422,8 +2422,8 @@ static void fix(h2_t *h, uint16_t hole, uint16_t patch)
 
 static void generate_jump(h2_t *h, assembler_t *a, symbol_table_t *t, token_t *tok, parse_e type, error_t *e)
 {
-	uint16_t or = 0;
-	uint16_t addr = 0;
+	word_t or = 0;
+	word_t addr = 0;
 	symbol_t *s;
 	assert(h);
 	assert(t);
@@ -2457,7 +2457,7 @@ static void generate_jump(h2_t *h, assembler_t *a, symbol_table_t *t, token_t *t
 	generate(h, a, or | addr);
 }
 
-static void generate_literal(h2_t *h, assembler_t *a, uint16_t number)
+static void generate_literal(h2_t *h, assembler_t *a, word_t number)
 {
 	if(number & OP_LITERAL) {
 		number = ~number;
@@ -2468,7 +2468,7 @@ static void generate_literal(h2_t *h, assembler_t *a, uint16_t number)
 	}
 }
 
-static uint16_t lexer_to_alu_op(token_e t)
+static word_t lexer_to_alu_op(token_e t)
 {
 	assert(t >= LEX_DUP && t <= LEX_RDROP);
 	switch(t) {
@@ -2480,7 +2480,7 @@ static uint16_t lexer_to_alu_op(token_e t)
 	return 0;
 }
 
-static uint16_t literal_or_symbol_lookup(token_t *token, symbol_table_t *t, error_t *e)
+static word_t literal_or_symbol_lookup(token_t *token, symbol_table_t *t, error_t *e)
 {
 	symbol_t *s = NULL;
 	assert(token);
@@ -2495,18 +2495,18 @@ static uint16_t literal_or_symbol_lookup(token_t *token, symbol_table_t *t, erro
 	return s->value;
 }
 
-static uint16_t pack_16(const char lb, const char hb)
+static word_t pack_16(const char lb, const char hb)
 {
-	return (((uint16_t)hb) << 8) | (uint16_t)lb;
+	return (((word_t)hb) << 8) | (word_t)lb;
 }
 
-static uint16_t pack_string(h2_t *h, assembler_t *a, const char *s, error_t *e)
+static word_t pack_string(h2_t *h, assembler_t *a, const char *s, error_t *e)
 {
 	assert(h);
 	assert(s);
 	size_t l = strlen(s);
 	size_t i = 0;
-	uint16_t r = h->pc;
+	word_t r = h->pc;
 	if(l > 255)
 		assembly_error(e, "string \"%s\" is too large (%zu > 255)", s, l);
 	h->core[hole(h, a)] = pack_16(l, s[0]);
@@ -2518,7 +2518,7 @@ static uint16_t pack_string(h2_t *h, assembler_t *a, const char *s, error_t *e)
 	return r;
 }
 
-static uint16_t symbol_special(h2_t *h, assembler_t *a, const char *id, error_t *e)
+static word_t symbol_special(h2_t *h, assembler_t *a, const char *id, error_t *e)
 {
 	static const char *special[] = {
 		"$pc",
@@ -2557,7 +2557,7 @@ typedef struct {
 	bool inline_bit;
 	bool hidden;
 	bool compile;
-	uint16_t code[32];
+	word_t code[32];
 } built_in_words_t;
 
 static built_in_words_t built_in_words[] = {
@@ -2595,7 +2595,7 @@ static void generate_loop_decrement(h2_t *h, assembler_t *a, symbol_table_t *t)
 
 static void assemble(h2_t *h, assembler_t *a, node_t *n, symbol_table_t *t, error_t *e)
 {
-	uint16_t hole1, hole2;
+	word_t hole1, hole2;
 	assert(h);
 	assert(t);
 	assert(e);
@@ -2779,7 +2779,7 @@ static void assemble(h2_t *h, assembler_t *a, node_t *n, symbol_table_t *t, erro
 		break;
 	case SYM_SET:
 	{
-		uint16_t location, value;
+		word_t location, value;
 		symbol_t *l = NULL;
 		location = literal_or_symbol_lookup(n->token, t, e);
 
@@ -2829,7 +2829,7 @@ static void assemble(h2_t *h, assembler_t *a, node_t *n, symbol_table_t *t, erro
 				continue;
 
 			if(!built_in_words[i].hidden) {
-				uint16_t pwd = a->pwd;
+				word_t pwd = a->pwd;
 				hole1 = hole(h, a);
 				if(built_in_words[i].inline_bit)
 					pwd |= (DEFINE_INLINE << 13);

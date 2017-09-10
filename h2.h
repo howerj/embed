@@ -18,23 +18,25 @@
 
 #define FLASH_INIT_FILE      ("nvram.blk") /**< default file for flash initialization */
 
+typedef uint16_t word_t;
+
 typedef struct {
 	size_t length;
-	uint16_t *points;
+	word_t *points;
 } break_point_t;
 
 typedef struct {
-	uint16_t core[MAX_CORE]; /**< main memory */
-	uint16_t rstk[STK_SIZE]; /**< return stack */
-	uint16_t dstk[STK_SIZE]; /**< variable stack */
-	uint16_t pc;  /**< program counter */
-	uint16_t tos; /**< top of stack */
-	uint16_t rp;  /**< return stack pointer */
-	uint16_t sp;  /**< variable stack pointer */
+	word_t core[MAX_CORE]; /**< main memory */
+	word_t rstk[STK_SIZE]; /**< return stack */
+	word_t dstk[STK_SIZE]; /**< variable stack */
+	word_t pc;  /**< program counter */
+	word_t tos; /**< top of stack */
+	word_t rp;  /**< return stack pointer */
+	word_t sp;  /**< variable stack pointer */
 
 	break_point_t bp; /**< list of break points */
-	uint16_t rpm; /**< maximum value of rp ever encountered */
-	uint16_t spm; /**< maximum value of sp ever encountered */
+	word_t rpm; /**< maximum value of rp ever encountered */
+	word_t spm; /**< maximum value of sp ever encountered */
 } h2_t; /**< state of the H2 CPU */
 
 typedef enum {
@@ -47,7 +49,7 @@ typedef enum {
 typedef struct {
 	symbol_type_e type;
 	char *id;
-	uint16_t value;
+	word_t value;
 	bool hidden;
 } symbol_t;
 
@@ -55,11 +57,6 @@ typedef struct {
 	size_t length;
 	symbol_t **symbols;
 } symbol_table_t;
-
-#define CLOCK_SPEED_HZ             (100000000ULL)
-
-#define UART_FIFO_DEPTH            (8)
-#define UART_BAUD_RATE             (115200)
 
 #define UART_RX_FIFO_EMPTY_BIT     (8)
 #define UART_RX_FIFO_FULL_BIT      (9)
@@ -75,7 +72,7 @@ typedef struct {
 #define UART_TX_FIFO_FULL          (1 << UART_TX_FIFO_FULL_BIT)
 #define UART_TX_WE                 (1 << UART_TX_WE_BIT)
 
-#define CHIP_MEMORY_SIZE           (8*1024*1024) /*NB. size in WORDs not bytes! */
+#define CHIP_MEMORY_SIZE           (1*1024*1024) /*NB. size in WORDs not bytes! */
 #define FLASH_MASK_ADDR_UPPER_MASK (0x1ff)
 
 #define SRAM_CHIP_SELECT_BIT       (11)
@@ -92,14 +89,14 @@ typedef struct {
 
 typedef struct {
 	uint8_t uart_getchar_register;
-	uint16_t vram[CHIP_MEMORY_SIZE];
-	uint16_t mem_control;
-	uint16_t mem_addr_low;
-	uint16_t mem_dout;
+	word_t vram[CHIP_MEMORY_SIZE];
+	word_t mem_control;
+	word_t mem_addr_low;
+	word_t mem_dout;
 } h2_soc_state_t;
 
-typedef uint16_t (*h2_io_get)(h2_soc_state_t *soc, uint16_t addr, bool *debug_on);
-typedef void     (*h2_io_set)(h2_soc_state_t *soc, uint16_t addr, uint16_t value, bool *debug_on);
+typedef word_t (*h2_io_get)(h2_soc_state_t *soc, word_t addr, bool *debug_on);
+typedef void     (*h2_io_set)(h2_soc_state_t *soc, word_t addr, word_t value, bool *debug_on);
 typedef void     (*h2_io_update)(h2_soc_state_t *soc);
 
 typedef struct {

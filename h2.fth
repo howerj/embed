@@ -142,7 +142,8 @@ location failed           "failed"      ( used in start up routine )
 : 2* 1 lshift ;            ( n -- n : multiply by 2 )
 : cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+ cell + ;           ( a -- a : move address forward to next cell )
-: cells 2* ;               ( n -- n : convert number of cells to number to increment address by )
+: cells 1 lshift ;         ( n -- n : convert number of cells to number to increment address by )
+: chars 1 rshift ;         ( n -- n : convert bytes to number of cells it occupies )
 : ?dup dup if dup then ;   ( n -- 0 | n n : duplicate value if it is not zero )
 : >  swap < ;              ( n1 n2 -- f : signed greater than, n1 > n2 )
 : u> swap u< ;             ( u1 u2 -- f : unsigned greater than, u1 > u2 )
@@ -520,7 +521,7 @@ choice words that need depth checking to get quite a large coverage )
 		doLit ( turn into literal, write into dictionary )
 	then ; immediate
 
-: make-callable 2/ $4000 or ; hidden ( cfa -- instruction )
+: make-callable chars $4000 or ; hidden ( cfa -- instruction )
 : compile, make-callable , ;         ( cfa -- : compile a code field address )
 : $compile dup inline? if cfa @ , else cfa compile, then ; hidden ( pwd -- )
 
@@ -581,7 +582,7 @@ choice words that need depth checking to get quite a large coverage )
 : random seed @ dup 15 lshift ccitt dup 27 + seed ! ; ( -- u )
 
 : 5u.r 5 u.r ; hidden
-: dm+ 2/ for aft dup @ space 5u.r cell+ then next ; ( a u -- a )
+: dm+ chars for aft dup @ space 5u.r cell+ then next ; ( a u -- a )
 : colon 58 emit ; hidden ( -- )
 
 : dump ( a u -- )
@@ -654,13 +655,13 @@ displaying block files as they are read in )
 : ?quit state @ 0= if 56 -throw then ; hidden
 : ";" ?quit ( ?compile ) +csp ?csp context @ ! =exit , ( save )  [ ; immediate
 : ":" align ( save ) !csp here dup last-def ! last address ,  token ?nul ?unique count + aligned cp ! ] ;
-: jumpz, 2/ $2000 or , ; hidden
-: jump, 2/ ( $0000 or ) , ; hidden
+: jumpz, chars $2000 or , ; hidden
+: jump, chars ( $0000 or ) , ; hidden
 : "begin" ?compile here -csp ; immediate
 : "until" ?compile jumpz, +csp ; immediate
 : "again" ?compile jump, +csp ; immediate
 : "if" ?compile here 0 jumpz, -csp ; immediate
-: doThen  here 2/ over @ or swap ! ; hidden
+: doThen  here chars over @ or swap ! ; hidden
 : "then" ?compile doThen +csp ; immediate
 : "else" ?compile here 0 jump, swap doThen ; immediate
 : "while" ?compile call "if" ; immediate
@@ -668,7 +669,7 @@ displaying block files as they are read in )
 : recurse ?compile last-def @ address cfa compile, ; immediate
 : tail ?compile last-def @ address cfa jump, ; immediate
 : create call ":" compile doVar context @ ! [ ;
-: doDoes r> 2/ here 2/ last-def @ address cfa dup cell+ doLit ! , ; hidden
+: doDoes r> chars here chars last-def @ address cfa dup cell+ doLit ! , ; hidden
 : does> ?compile compile doDoes nop ; immediate
 : "variable" create 0 , ;
 : ":noname" here ] !csp ;
@@ -695,7 +696,7 @@ displaying block files as they are read in )
 \     r> r> 1+ r> 2dup <> if >r >r @ >r exit then
 \     >r 1- >r cell+ >r ; hidden
 \ : [unloop] r> rdrop rdrop rdrop >r ; hidden
-\ : loop compile [loop] dup , compile [unloop] cell- here 2/ swap ! ; immediate
+\ : loop compile [loop] dup , compile [unloop] cell- here chars swap ! ; immediate
 \ : [i] r> r> tuck >r >r ; hidden
 \ : i ?compile compile [i] ; immediate
 \ : [?do]
@@ -776,8 +777,6 @@ in which the problem could be solved. )
 : #line border @ if dup 2 u.r then ; hidden ( u -- u : print line number )
 : ?pipe border @ if pipe then ; hidden
 : ?page border @ if page then ; hidden
-( @todo 'thru' should catch -56, or QUIT, and continue with next block )
-\ : ?load ' load catch dup -56 <> if throw then drop ;
 : thru over - for dup load 1+ next drop ; ( k1 k2 -- )
 : blank =bl fill ;
 : message l/b extract .line cr ; ( u -- )
@@ -809,7 +808,7 @@ later on )
 ( @warning This disassembler is experimental, and liable not
 to work / break everything it touches )
 
-: bcounter! bcount @ 0= if 2/ over swap -  bcount ! else drop then ; hidden ( u a -- u )
+: bcounter! bcount @ 0= if chars over swap -  bcount ! else drop then ; hidden ( u a -- u )
 : -bcount   bcount @ if bcount 1-! then ; hidden ( -- )
 : abits $1fff and ; hidden
 
@@ -818,7 +817,7 @@ to work / break everything it touches )
 
 ( @todo Do this for every vocabulary loaded )
 : name ( cfa -- nfa )
-	abits 2*
+	abits cells
 	>r
 	last address
 	begin
@@ -832,7 +831,7 @@ to work / break everything it touches )
 : .name name ?dup 0= if see.unknown then print ; hidden
 : mask-off 2dup and = ; hidden ( u u -- u f )
 
-i.end2t: 2*
+i.end2t: cells
 i.end:   5u.r rdrop exit
 : i.print print abits ; hidden
 
@@ -842,7 +841,7 @@ things, the 'decompiler' word could be called manually on an address if desired 
 	over >r
 	0x8000 mask-off if see.lit     print $7fff and      branch i.end then
 	$6000  mask-off if see.alu     i.print              branch i.end then
-	$4000  mask-off if see.call    i.print dup 2*       5u.r rdrop space .name exit then
+	$4000  mask-off if see.call    i.print dup cells    5u.r rdrop space .name exit then
 	$2000  mask-off if see.0branch i.print r@ bcounter! branch i.end2t then
 	                   see.branch  i.print r@ bcounter! branch i.end2t ; hidden
 
@@ -861,7 +860,7 @@ things, the 'decompiler' word could be called manually on an address if desired 
 
 : decompiler ( a -- : decompile starting at address )
 	0 bcount !
-	dup 2/ >r
+	dup chars >r
 	begin dup @ r@ continue? while decompile -bcount ( nuf? ) repeat decompile rdrop
 	drop ; hidden
 
@@ -891,7 +890,7 @@ things, the 'decompiler' word could be called manually on an address if desired 
 	context
 	find-empty-cell
 	dup cell- swap
-	context - 2/ dup >r 1- dup 0< if 50 -throw then
+	context - chars dup >r 1- dup 0< if 50 -throw then
 	for aft dup @ swap cell- then next @ r> ;
 
 : set-order ( widn ... wid1 n -- : set the current search order )
@@ -904,7 +903,7 @@ things, the 'decompiler' word could be called manually on an address if desired 
 
 : .words space begin dup while dup .id space @ address repeat drop cr ; hidden
 : words get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ;
-\ : vocs get-order begin ?dup while swap dup . space cell- 2/ .name 1- repeat cr ;
+\ : vocs get-order begin ?dup while swap dup . space cell- chars .name 1- repeat cr ;
 
 .set forth-wordlist $pwd
 

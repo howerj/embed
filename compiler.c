@@ -331,23 +331,6 @@ static void h2_free(h2_t *h)
 	free(h);
 }
 
-static int binary_memory_load(FILE *input, uint16_t *p, size_t length)
-{
-	assert(input);
-	assert(p);
-	for(size_t i = 0; i < length; i++) {
-		errno = 0;
-		int r1 = fgetc(input);
-		int r2 = fgetc(input);
-		if(r1 < 0 || r2 < 0) {
-			debug("memory read failed: %s", strerror(errno));
-			return -1;
-		}
-		p[i] = (((unsigned)r1 & 0xffu)) | (((unsigned)r2 & 0xffu) << 8u);
-	}
-	return 0;
-}
-
 static int binary_memory_save(FILE *output, uint16_t *p, size_t length)
 {
 	assert(output);
@@ -362,23 +345,6 @@ static int binary_memory_save(FILE *output, uint16_t *p, size_t length)
 		}
 	}
 	return 0;
-}
-
-static int load(h2_t *h, const char *name)
-{
-	assert(h);
-	assert(name);
-	FILE *input = NULL;
-	int r = 0;
-	errno = 0;
-	if((input = fopen(name, "rb"))) {
-		r = binary_memory_load(input, h->core, MAX_MEMORY/2);
-		fclose(input);
-	} else {
-		error("nvram file read (from %s) failed: %s", name, strerror(errno));
-		r = -1;
-	}
-	return r;
 }
 
 static int save(h2_t *h, const char *name, size_t length)
@@ -396,59 +362,6 @@ static int save(h2_t *h, const char *name, size_t length)
 		r = -1;
 	}
 	return r;
-}
-
-#ifdef __unix__
-#include <unistd.h>
-#include <termios.h>
-static int getch(void)
-{
-	struct termios oldattr, newattr;
-	int ch;
-	tcgetattr(STDIN_FILENO, &oldattr);
-	newattr = oldattr;
-	newattr.c_iflag &= ~(ICRNL);
-	newattr.c_lflag &= ~(ICANON | ECHO);
-
-	tcsetattr(STDIN_FILENO, TCSANOW, &newattr);
-	ch = getchar();
-
-	tcsetattr(STDIN_FILENO, TCSANOW, &oldattr);
-
-	return ch;
-}
-
-static int putch(int c)
-{
-	int res = putchar(c);
-	fflush(stdout);
-	return res;
-}
-#else
-#ifdef _WIN32
-
-extern int getch(void);
-extern int putch(int c);
-
-#else
-static int getch(void)
-{
-	return getchar();
-}
-
-static int putch(int c)
-{
-	return putchar(c);
-}
-#endif
-#endif /** __unix__ **/
-
-static int wrap_getch()
-{
-	int ch = getch();
-	if(ch == EOF || ch == ESCAPE)
-		exit(EXIT_SUCCESS);
-	return ch;
 }
 
 /* ========================== Utilities ==================================== */
@@ -547,121 +460,6 @@ static int symbol_table_print(symbol_table_t *t, FILE *output)
 }
 
 /* ========================== Symbol Table ================================= */
-
-/* ========================== Simulation And Debugger ====================== */
-
-static inline void dpush(h2_t *h, const uint16_t v)
-{
-	h->sp++;
-	h->core[h->sp] = h->tos;
-	h->tos = v;
-}
-
-static inline uint16_t dpop(h2_t *h)
-{
-	uint16_t r = h->tos;
-	h->tos = h->core[h->sp--];
-	return r;
-}
-
-static inline void rpush(h2_t *h, const uint16_t r)
-{
-	h->rp++;
-	h->core[h->rp] = r;
-}
-
-static inline uint16_t stack_delta(uint16_t d)
-{
-	static const uint16_t i[4] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
-	return i[d];
-}
-
-int h2_run(h2_t *h)
-{
-	assert(h);
-
-	for(;;) {
-		uint16_t instruction,
-			 literal,
-			 address,
-			 pc_plus_one;
-
-		instruction = h->core[h->pc];
-
-		literal = instruction & 0x7FFF;
-		address = instruction & 0x1FFF; /* NB. also used for ALU OP */
-
-		pc_plus_one = (h->pc + 1) % MAX_PROGRAM;
-
-		/* decode / execute */
-		if(IS_LITERAL(instruction)) {
-			dpush(h, literal);
-			h->pc = pc_plus_one;
-		} else if (IS_ALU_OP(instruction)) {
-			uint16_t rd  = stack_delta(RSTACK(instruction));
-			uint16_t dd  = stack_delta(DSTACK(instruction));
-			uint16_t nos = h->core[h->sp];
-			uint16_t tos = h->tos;
-			uint16_t npc = pc_plus_one;
-
-			if(instruction & R_TO_PC)
-				npc = h->core[h->rp] >> 1;
-
-			switch(ALU_OP(instruction)) {
-			case ALU_OP_T:        /* tos = tos; */                         break;
-			case ALU_OP_N:           tos = nos;                            break;
-			case ALU_OP_T_PLUS_N:    tos += nos;                           break;
-			case ALU_OP_T_AND_N:     tos &= nos;                           break;
-			case ALU_OP_T_OR_N:      tos |= nos;                           break;
-			case ALU_OP_T_XOR_N:     tos ^= nos;                           break;
-			case ALU_OP_T_INVERT:    tos = ~tos;                           break;
-			case ALU_OP_T_EQUAL_N:   tos = -(tos == nos);                  break;
-			case ALU_OP_N_LESS_T:    tos = -((int16_t)nos < (int16_t)tos); break;
-			case ALU_OP_N_RSHIFT_T:  tos = nos >> tos;                     break;
-			case ALU_OP_T_DECREMENT: tos--;                                break;
-			case ALU_OP_R:           tos = h->core[h->rp];                 break;
-			case ALU_OP_T_LOAD:      tos = h->core[(h->tos >> 1)];         break;
-			case ALU_OP_N_LSHIFT_T:  tos = nos << tos;                     break;
-			case ALU_OP_DEPTH:       tos = h->sp - VARIABLE_STACK_START;   break;
-			case ALU_OP_N_ULESS_T:   tos = -(nos < tos);                   break;
-			case ALU_OP_RDEPTH:      tos = h->rp - RETURN_STACK_START;     break;
-			case ALU_OP_T_EQUAL_0:   tos = -(tos == 0);                    break;
-			case ALU_OP_TX:          putch(tos); tos = nos;                break;
-			case ALU_OP_RX:          tos = wrap_getch();                   break;
-			case ALU_OP_SAVE:        save(h, FORTH_BLOCK, MAX_MEMORY/2);   break;
-			case ALU_OP_BYE:         return tos;
-			}
-
-			h->sp += dd;
-			h->rp += rd;
-
-			if(instruction & T_TO_R)
-				h->core[h->rp] = h->tos;
-
-			if(instruction & T_TO_N)
-				h->core[h->sp] = h->tos;
-
-			if(instruction & N_TO_ADDR_T)
-				h->core[(h->tos >> 1)] = nos;
-
-			h->tos = tos;
-			h->pc  = npc;
-		} else if (IS_CALL(instruction)) {
-			rpush(h, pc_plus_one << 1);
-			h->pc = address;
-		} else if (IS_0BRANCH(instruction)) {
-			if(!dpop(h))
-				h->pc = address % MAX_PROGRAM;
-			else
-				h->pc = pc_plus_one;
-		} else /* if (IS_BRANCH(instruction)) */ {
-			h->pc = address;
-		}
-	}
-	return 0;
-}
-
-/* ========================== Simulation And Debugger ====================== */
 
 /* ========================== Assembler ==================================== */
 /* This section is the most complex, it implements a lexer, parser and code
@@ -2108,11 +1906,8 @@ int main(int argc, char **argv)
 		fclose(input);
 		save(h, FORTH_BLOCK, h->pc);
 	} else {
-		h = h2_new(START_ADDR);
-		load(h, FORTH_BLOCK);
-		r = h2_run(h);
-		/*if(!r)
-			save(h, FORTH_BLOCK);*/
+		fprintf(stderr, "usage: %s file.fth\n", argv[0]);
+		return -1;
 	}
 	h2_free(h);
 	return r;

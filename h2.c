@@ -368,7 +368,7 @@ static int symbol_table_print(symbol_table_t *t, FILE *output)
 
 /* ========================== Simulation And Debugger ====================== */
 
-static inline void dpush(h2_t *h, uint16_t v)
+static inline void dpush(h2_t *h, const uint16_t v)
 {
 	h->sp++;
 	h->core[h->sp] = h->tos;
@@ -382,7 +382,7 @@ static inline uint16_t dpop(h2_t *h)
 	return r;
 }
 
-static void rpush(h2_t *h, uint16_t r)
+static inline void rpush(h2_t *h, const uint16_t r)
 {
 	h->rp++;
 	h->core[h->rp] = r;
@@ -1211,7 +1211,7 @@ static node_t *set(lexer_t *l)
 	if(!accept(l, LEX_IDENTIFIER))
 		expect(l, LEX_LITERAL);
 	use(l, r);
-	if(!accept(l, LEX_IDENTIFIER))
+	if(!accept(l, LEX_IDENTIFIER) && !accept(l, LEX_STRING))
 		expect(l, LEX_LITERAL);
 	use(l, r);
 	return r;

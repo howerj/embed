@@ -27,24 +27,27 @@ location _forth-wordlist  0 ( set at the end near the end of the file )
 location _words           0 ( words execution vector )
 location _forth           0 ( forth execution vector )
 location _set-order       0 ( set-order execution vector )
+location _do_colon        0
+location _do_semi_colon   0
 
 .mode 3   ( Turn word header compilation and optimization on )
+: execute-location @ >r ; hidden
 
 : forth-wordlist _forth-wordlist ;
-: words _words @ >r ;
-: set-order _set-order @ >r ;
-: forth _forth @ >r ;
+: words _words execute-location ;
+: set-order _set-order execute-location ;
+: forth _forth execute-location ;
 .set root-voc $pwd
 .pwd 0
 
 .built-in ( Add the built in words to the dictionary )
 
-: end-code forth ; immediate
+: end-code forth _do_semi_colon execute-location ; immediate
 .set assembler-voc $pwd
 
 : assembler root-voc assembler-voc 2 set-order ;
 : ;code assembler ; immediate 
-: code ;
+: code _do_colon execute-location assembler ;
 
 ( ======================== System Constants ================= )
 
@@ -424,7 +427,7 @@ choice words that need depth checking to get quite a large coverage )
 		aft =bl over r@ + c@ <
 			if r> 1+ exit then
 		then
-	next 0 ; hidden
+	next 0 ;
 
 : lookfor ( b u c -- b u : skip until _test succeeds )
 	>r
@@ -556,7 +559,7 @@ choice words that need depth checking to get quite a large coverage )
 : colon 58 emit ; hidden ( -- )
 
 : dump ( a u -- )
-	dump-width /
+	4 rshift ( <-- equivalent to "dump-width /" )
 	for
 		aft
 			cr dump-width 2dup
@@ -844,7 +847,6 @@ things, the 'decompiler' word could be called manually on an address if desired 
 \ : also get-order over swap 1+ [set-order] ;
 : only -1 [set-order] ;
 
-\ : root  -1 [set-order] ; \ should contain [set-order], forth-wordlist, forth, and words
 : [forth] root-voc forth-wordlist 2 set-order ; hidden
 
 : .words space begin dup while dup .id space @ address repeat drop cr ; hidden
@@ -863,9 +865,9 @@ things, the 'decompiler' word could be called manually on an address if desired 
 
 ( ==================== Block Editor ================================== )
 
-: [block] blk @ block ;
-: [check] dup b/buf c/l / u>= if -24 throw then ;
-: [line] [check] c/l * [block] + ;
+: [block] blk @ block ; hidden
+: [check] dup b/buf c/l / u>= if -24 throw then ; hidden
+: [line] [check] c/l * [block] + ; hidden
 : b block drop ;
 : l blk @ list ;
 : n  1 +block b l ;
@@ -904,6 +906,8 @@ start:
 
 .set cp  $pc
 
+.set _do_colon  ":"
+.set _do_semi_colon ";"
 .set _forth     [forth]
 .set _set-order [set-order]
 .set _words    [words]

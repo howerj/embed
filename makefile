@@ -1,4 +1,4 @@
-CFLAGS=-std=c99 -Wall -Wextra
+CFLAGS=-O3 -std=c99 -Wall -Wextra
 CC=gcc
 
 all: embed

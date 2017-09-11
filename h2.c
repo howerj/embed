@@ -1,13 +1,8 @@
 /** @file      h2.c
- *  @brief     Simulate the H2 CPU and surrounding system
+ *  @brief     Compile for a small Forth
  *  @copyright Richard James Howe (2017)
  *  @license   MIT
  *
- * This file contains the toolchain for the H2, it is an assembler/compiler,
- * a simulator, a disassembler and a debugger. The H2 is written in VHDL and
- * is based on the J1 processor (see http://excamera.com/sphinx/fpga-j1.html).
- *
- * The processor has been tested on an FPGA and is working.
  * The project can be found at: https://github.com/howerj/forth-cpu */
 
 /* ========================== Preamble: Types, Macros, Globals ============= */
@@ -27,122 +22,6 @@
 #include <fcntl.h>
 extern int _fileno(FILE *stream);
 #endif
-
-#define DEFAULT_STEPS (0) /*default is to run forever*/
-#define MAX(X, Y)     ((X) > (Y) ? (X) : (Y))
-#define MIN(X, Y)     ((X) > (Y) ? (Y) : (X))
-
-#define NUMBER_OF_INTERRUPTS (8u)
-
-#define OP_BRANCH        (0x0000)
-#define OP_0BRANCH       (0x2000)
-#define OP_CALL          (0x4000)
-#define OP_ALU_OP        (0x6000)
-#define OP_LITERAL       (0x8000)
-
-#define IS_LITERAL(INST) (((INST) & 0x8000) == 0x8000)
-#define IS_BRANCH(INST)  (((INST) & 0xE000) == 0x0000)
-#define IS_0BRANCH(INST) (((INST) & 0xE000) == 0x2000)
-#define IS_CALL(INST)    (((INST) & 0xE000) == 0x4000)
-#define IS_ALU_OP(INST)  (((INST) & 0xE000) == 0x6000)
-
-#define ALU_OP_LENGTH   (5u)
-#define ALU_OP_START    (8u)
-#define ALU_OP(INST)    (((INST) >> ALU_OP_START) & ((1 << ALU_OP_LENGTH) - 1))
-
-#define DSTACK_LENGTH   (2u)
-#define DSTACK_START    (0u)
-#define DSTACK(INST)    (((INST) >> DSTACK_START) & ((1 << DSTACK_LENGTH) - 1))
-
-#define RSTACK_LENGTH   (2u)
-#define RSTACK_START    (2u)
-#define RSTACK(INST)    (((INST) >> RSTACK_START) & ((1 << RSTACK_LENGTH) - 1))
-
-#define R_TO_PC_BIT_INDEX     (4u)
-#define N_TO_ADDR_T_BIT_INDEX (5u)
-#define T_TO_R_BIT_INDEX      (6u)
-#define T_TO_N_BIT_INDEX      (7u)
-
-#define R_TO_PC         (1u << R_TO_PC_BIT_INDEX)
-#define N_TO_ADDR_T     (1u << N_TO_ADDR_T_BIT_INDEX)
-#define T_TO_R          (1u << T_TO_R_BIT_INDEX)
-#define T_TO_N          (1u << T_TO_N_BIT_INDEX)
-
-typedef enum {
-	ALU_OP_T,                  /**< Top of Stack         */
-	ALU_OP_N,                  /**< Copy T to N          */
-	ALU_OP_T_PLUS_N,           /**< Addition             */
-	ALU_OP_T_AND_N,            /**< Bitwise AND          */
-	ALU_OP_T_OR_N,             /**< Bitwise OR           */
-	ALU_OP_T_XOR_N,            /**< Bitwise XOR          */
-	ALU_OP_T_INVERT,           /**< Bitwise Inversion    */
-	ALU_OP_T_EQUAL_N,          /**< Equality test        */
-	ALU_OP_N_LESS_T,           /**< Signed comparison    */
-	ALU_OP_N_RSHIFT_T,         /**< Logical Right Shift  */
-	ALU_OP_T_DECREMENT,        /**< Decrement            */
-	ALU_OP_R,                  /**< Top of return stack  */
-	ALU_OP_T_LOAD,             /**< Load from address    */
-	ALU_OP_N_LSHIFT_T,         /**< Logical Left Shift   */
-	ALU_OP_DEPTH,              /**< Depth of stack       */
-	ALU_OP_N_ULESS_T,          /**< Unsigned comparison  */
-
-	ALU_OP_RX,                 /**< Send byte            */
-	ALU_OP_TX,                 /**< Get byte             */
-	ALU_OP_SAVE,               /**< Save Image           */
-	ALU_OP_BYE,                /**< Return               */
-	ALU_OP_RDEPTH,             /**< R Stack Depth        */
-	ALU_OP_T_EQUAL_0,          /**< T == 0               */
-} alu_code_e;
-
-#define DELTA_0  (0)
-#define DELTA_1  (1)
-#define DELTA_N2 (2)
-#define DELTA_N1 (3)
-
-#define MK_DSTACK(DELTA) ((DELTA) << DSTACK_START)
-#define MK_RSTACK(DELTA) ((DELTA) << RSTACK_START)
-#define MK_CODE(CODE)    ((CODE)  << ALU_OP_START)
-
-#define X_MACRO_INSTRUCTIONS \
-	X(DUP,    "dup",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_T)        | T_TO_N  | MK_DSTACK(DELTA_1)))\
-	X(OVER,   "over",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_N)        | T_TO_N  | MK_DSTACK(DELTA_1)))\
-	X(INVERT, "invert", true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_INVERT)))\
-	X(ADD,    "+",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_PLUS_N)               | MK_DSTACK(DELTA_N1)))\
-	X(SWAP,   "swap",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_N)        | T_TO_N))\
-	X(NIP,    "nip",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_T)                      | MK_DSTACK(DELTA_N1)))\
-	X(DROP,   "drop",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_N)                      | MK_DSTACK(DELTA_N1)))\
-	X(EXIT,   "exit",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_T)        | R_TO_PC | MK_RSTACK(DELTA_N1)))\
-	X(TOR,    ">r",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_N)        | T_TO_R  | MK_DSTACK(DELTA_N1) | MK_RSTACK(DELTA_1)))\
-	X(FROMR,  "r>",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_R)        | T_TO_N  | MK_DSTACK(DELTA_1)  | MK_RSTACK(DELTA_N1)))\
-	X(RAT,    "r@",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_R)        | T_TO_N  | MK_DSTACK(DELTA_1)))\
-	X(LOAD,   "@",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_LOAD)))\
-	X(STORE,  "store",  false, (OP_ALU_OP | MK_CODE(ALU_OP_N)        | N_TO_ADDR_T | MK_DSTACK(DELTA_N1)))\
-	X(RSHIFT, "rshift", true,  (OP_ALU_OP | MK_CODE(ALU_OP_N_RSHIFT_T)             | MK_DSTACK(DELTA_N1)))\
-	X(LSHIFT, "lshift", true,  (OP_ALU_OP | MK_CODE(ALU_OP_N_LSHIFT_T)             | MK_DSTACK(DELTA_N1)))\
-	X(EQUAL,  "=",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_EQUAL_N)              | MK_DSTACK(DELTA_N1)))\
-	X(ULESS,  "u<",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_N_ULESS_T)              | MK_DSTACK(DELTA_N1)))\
-	X(LESS,   "<",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_N_LESS_T)               | MK_DSTACK(DELTA_N1)))\
-	X(AND,    "and",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_AND_N)                | MK_DSTACK(DELTA_N1)))\
-	X(XOR,    "xor",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_XOR_N)                | MK_DSTACK(DELTA_N1)))\
-	X(OR,     "or",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_OR_N)                 | MK_DSTACK(DELTA_N1)))\
-	X(DEPTH,  "sp@",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_DEPTH)   | T_TO_N       | MK_DSTACK(DELTA_1)))\
-	X(T_N1,   "1-",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_DECREMENT)))\
-	X(RDEPTH, "rp@",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_RDEPTH)  | T_TO_N       | MK_DSTACK(DELTA_1)))\
-	X(TE0,    "0=",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_EQUAL_0)))\
-	X(NOP,    "nop",    false, (OP_ALU_OP | MK_CODE(ALU_OP_T)))\
-	X(BYE,    "(bye)",  false, (OP_ALU_OP | MK_CODE(ALU_OP_BYE)                    | MK_DSTACK(DELTA_N1)))\
-	X(RX,     "_rx?",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_RX)      | T_TO_N       | MK_DSTACK(DELTA_1)))\
-	X(TX,     "_tx!",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_TX)                     | MK_DSTACK(DELTA_N1)))\
-	X(SAVE,   "save",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_SAVE)))\
-	X(RUP,    "rup",    false, (OP_ALU_OP | MK_CODE(ALU_OP_T))                     | MK_RSTACK(DELTA_1))\
-	X(RDROP,  "rdrop",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_T) | MK_RSTACK(DELTA_N1)))
-
-
-typedef enum {
-#define X(NAME, STRING, DEFINE, INSTRUCTION) CODE_ ## NAME = INSTRUCTION,
-	X_MACRO_INSTRUCTIONS
-#undef X
-} forth_word_codes_e;
 
 static const char *log_levels[] =
 {
@@ -320,7 +199,7 @@ static int load(h2_t *h, const char *name)
 	return r;
 }
 
-static int save(h2_t *h, const char *name)
+static int save(h2_t *h, const char *name, size_t length)
 {
 	FILE *output = NULL;
 	int r = 0;
@@ -328,7 +207,7 @@ static int save(h2_t *h, const char *name)
 	assert(name);
 	errno = 0;
 	if((output = fopen(name, "wb"))) {
-		r = binary_memory_save(output, h->core, MAX_MEMORY/2);
+		r = binary_memory_save(output, h->core, length);
 		fclose(output);
 	} else {
 		error("nvram file write (to %s) failed: %s", name, strerror(errno));
@@ -525,10 +404,6 @@ int h2_run(h2_t *h)
 			 address,
 			 pc_plus_one;
 
-		if(h->pc >= MAX_PROGRAM) {
-			error("invalid program counter: %04x > %04x", (unsigned)h->pc, MAX_PROGRAM);
-			return -1;
-		}
 		instruction = h->core[h->pc];
 
 		literal = instruction & 0x7FFF;
@@ -571,10 +446,8 @@ int h2_run(h2_t *h)
 			case ALU_OP_T_EQUAL_0:   tos = -(tos == 0);                    break;
 			case ALU_OP_TX:          putch(tos); tos = nos;                break;
 			case ALU_OP_RX:          tos = wrap_getch();                   break;
-			case ALU_OP_SAVE:        save(h, FORTH_BLOCK);                 break;
+			case ALU_OP_SAVE:        save(h, FORTH_BLOCK, MAX_MEMORY/2);   break;
 			case ALU_OP_BYE:         return tos;
-			default:
-				warning("unknown ALU operation: %u", (unsigned)ALU_OP(instruction));
 			}
 
 			h->sp += dd;
@@ -599,10 +472,8 @@ int h2_run(h2_t *h)
 				h->pc = address % MAX_PROGRAM;
 			else
 				h->pc = pc_plus_one;
-		} else if (IS_BRANCH(instruction)) {
+		} else /* if (IS_BRANCH(instruction)) */ {
 			h->pc = address;
-		} else {
-			error("invalid instruction: %"PRId16, instruction);
 		}
 	}
 	return 0;
@@ -2053,7 +1924,7 @@ int main(int argc, char **argv)
 		if(!h)
 			return -1;
 		fclose(input);
-		save(h, FORTH_BLOCK);
+		save(h, FORTH_BLOCK, h->pc);
 	} else {
 		h = h2_new(START_ADDR);
 		load(h, FORTH_BLOCK);

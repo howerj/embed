@@ -1,17 +1,4 @@
 ( ======================== System Constants ================= )
-
-constant cell 2 hidden
-
-( The first 8 cells [16 bytes] of memory contain the entry point and interrupt
-service routine call locations, we can set the instruction to be run [such as
-a jump or a call] by setting the label to it with the ".set" directive. Later
-in the program the entry point, the first location in memory, is set to the
-start label )
-entry:             .allocate cell ( Entry point - not an interrupt )
-
-.mode 3   ( Turn word header compilation and optimization on )
-.built-in ( Add the built in words to the dictionary )
-
 constant =exit         $601c hidden ( op code for exit )
 constant =invert       $6600 hidden ( op code for invert )
 constant =>r           $6147 hidden ( op code for >r )
@@ -21,28 +8,47 @@ constant =lf           10    hidden ( line feed )
 constant =bs           8     hidden ( back space )
 constant =escape       27    hidden ( escape character )
 
-constant c/l           64    hidden ( characters per line in a block )
-constant l/b           16    hidden ( lines in a block )
-
 constant dump-width    16    hidden ( number of columns for 'dump' )
 constant tib-length    80    hidden ( size of terminal input buffer )
 constant pad-length    80    hidden ( pad area begins HERE + pad-length )
 constant word-length   31    hidden ( maximum length of a word )
 
-( Outputs: $6000 - $7FFF )
-constant oUart         $4000 hidden ( UART TX/RX Control register )
-constant oMemDout      $4002 hidden ( Memory output for writes )
-constant oMemControl   $4004 hidden ( Memory control and high address bits )
-constant oMemAddrLow   $4006 hidden ( Lower memory address bits )
+( The first 8 cells [16 bytes] of memory contain the entry point and interrupt
+service routine call locations, we can set the instruction to be run [such as
+a jump or a call] by setting the label to it with the ".set" directive. Later
+in the program the entry point, the first location in memory, is set to the
+start label )
+entry:             .allocate 2 ( Entry point - not an interrupt )
 
-( Inputs: $6000 - $7FFF )
-constant iUart         $4000 hidden ( Matching registers for iUart )
-constant iMemDin       $4002 hidden ( Memory input for reads )
+location root-voc         0 ( root vocabulary )
+location editor-voc       0 ( editor vocabulary )
+location assembler-voc    0 ( assembler vocabulary )
+location _forth-wordlist  0 ( set at the end near the end of the file )
+location _words           0 ( words execution vector )
+location _forth           0 ( forth execution vector )
+location _set-order       0 ( set-order execution vector )
+
+.mode 3   ( Turn word header compilation and optimization on )
+
+: forth-wordlist _forth-wordlist ;
+: words _words @ >r ;
+: set-order _set-order @ >r ;
+: forth _forth @ >r ;
+.set root-voc $pwd
+.pwd 0
+
+.built-in ( Add the built in words to the dictionary )
+
+: end-code forth ; immediate
+.set assembler-voc $pwd
+
+: assembler root-voc assembler-voc 2 set-order ;
+: ;code assembler ; immediate 
+: code ;
 
 ( ======================== System Constants ================= )
 
 ( ======================== System Variables ================= )
-
 location _key?      0  ( -- c -1 | 0 : new character available? )
 location _emit      0  ( c -- : emit character )
 location _expect    0  ( "accept" vector )
@@ -63,10 +69,11 @@ variable hld        0  ( Pointer into hold area for numeric output )
 variable base       10 ( Current output radix )
 variable span       0  ( Hold character count received by expect   )
 variable loaded     0  ( Used by boot block to indicate it has been loaded  )
+constant cell       2  ( size of a cell in bytes )
 variable border    -1  ( Put border around block begin displayed with 'list' )
-constant #vocs            8 hidden ( number of vocabularies in allowed )
-variable forth-wordlist   0 ( set at the end near the end of the file )
+constant #vocs            8 ( number of vocabularies in allowed )
 location context          0 ( holds current context for vocabulary search order )
+location context0         0 ( holds space for root wordset in vocabulary search order )
 .allocate 14                ( ... space for context )
 location #tib             0 ( Current count of terminal input buffer    )
 location tib-buf          0 ( ... and address )
@@ -74,7 +81,7 @@ location tib-buf          0 ( ... and address )
 .allocate tib-length        ( allocate enough for the terminal input buffer )
 .allocate cell              ( plus one extra cell for safety )
 constant b/buf 1024 ( size of a block )
-variable blk             -1 ( current blk loaded )
+variable blk              17 ( current blk loaded )
 location block-dirty      0 ( -1 if loaded block buffer is modified )
 location bcount           0             ( instruction counter used in 'see' )
 location _test            0             ( used in skip/test )
@@ -90,6 +97,9 @@ location see.inline       " inline "    ( used by "see", for inline words )
 location OK               "ok"          ( used by "prompt" )
 location redefined        " redefined"  ( used by ":" when a word has been redefined )
 location hi-string        "eFORTH V"    ( used by "hi" )
+constant ver $666
+constant c/l           64    hidden ( characters per line in a block )
+constant l/b           16    hidden ( lines in a block )
 
 ( ======================== System Variables ================= )
 
@@ -271,6 +281,11 @@ choice words that need depth checking to get quite a large coverage )
 : mod  /mod drop ;           ( n n -- r )
 : /    /mod nip ;            ( n n -- q )
 : *    um* drop ;            ( n n -- n )
+: m* 2dup xor 0< >r abs swap abs um* r> if dnegate then ;
+: */mod  >r m* r> m/mod ;  ( n n n -- r q )
+: */  */mod nip ;          ( n n n -- q )
+: s>d dup 0< ;             ( n -- d : single to double )
+
 : decimal 10 base ! ;                       ( -- )
 : hex     16 base ! ;                       ( -- )
 : radix base @ dup 2 - 34 u> if hex 40 -throw then ; hidden
@@ -278,17 +293,23 @@ choice words that need depth checking to get quite a large coverage )
 : extract  0 swap um/mod swap ; hidden       ( n base -- n c )
 : ?hold hld @ cp @ u< if 17 -throw then ; hidden ( -- )
 : hold  hld @ 1- dup hld ! ?hold c! ;        ( c -- )
+: holds begin dup while 1- 2dup + c@ hold repeat 2drop ;
 : sign  0< if [char] - hold then ;           ( n -- )
 : #>  drop hld @ pad over - ;                ( w -- b u )
 : #  1depth radix extract digit hold ;       ( u -- u )
 : #s begin # dup while repeat ;              ( u -- 0 )
 : <#  pad hld ! ;                            ( -- )
-: str dup >r abs <# #s r> sign #> ; hidden   ( n -- b u : convert a signed integer to a numeric string )
-\ :  .r >r str r> over - spaces type ;       ( n n : print n, right justified by +n )
+: str dup >r abs <# #s r> sign #> ;          ( n -- b u : convert a signed integer to a numeric string )
+:  .r >r str r> over - spaces type ;       ( n n : print n, right justified by +n )
 : u.r >r <# #s #> r> over - spaces type ;    ( u +n -- : print u right justified by +n)
 : u.  <# #s #> space type ;                  ( u -- : print unsigned number )
 :  .  radix 10 xor if u. exit then str space type ; ( n -- print space, signed number )
 : ? @ . ;                                    ( a -- : display the contents in a memory cell )
+
+: binary  2 base ! ;                       ( -- )
+: octal  8 base ! ;                        ( -- )
+: .base base @ dup decimal base ! ; ( -- )
+
 
 : pack$ ( b u a -- a ) \ null fill
 	aligned dup >r over
@@ -568,13 +589,13 @@ choice words that need depth checking to get quite a large coverage )
 : star $2A emit ; hidden
 : rx? _rx? [-1] ; ( @todo remove the need for this )
 : tx! _tx! ; ( @todo remove the need for this )
-: [conceal] dup 33 127 within if drop star else tx! then ; hidden
-: conceal ' .ok ' [conceal] ' ktap xio ;
+\ : [conceal] dup 33 127 within if drop star else tx! then ; hidden
+\ : conceal ' .ok ' [conceal] ' ktap xio ;
 : hand ' .ok  '  emit  ' ktap xio ; hidden
 : console ' rx? _key? ! ' tx! _emit ! hand ;
 : io! console ; ( -- : initialize I/O )
-: ver $666 ;
-: hi io! ( save ) hex cr hi-string print ver <# # # 46 hold # #> type cr here . .free cr [ ;
+
+: hi io! hex cr hi-string print ver <# # # 46 hold # #> type cr here . .free cr [ ;
 
 ( ==================== Advanced I/O Control ========================== )
 
@@ -666,21 +687,6 @@ displaying block files as they are read in )
 \ : "exit" compile-exit ; immediate
 \ : "exit" =exit , ; immediate
 
-( Error recovery can be quite difficult when sending Forth large programs
-over a serial port. One of the problems is if an error occurs in between a
-colon definition the Forth interpreter would signal an error and go back into
-command mode, subsequently words which are meant to be compiled are instead
-executed which can cause the system to become unstable. There are potential
-ways of getting around this:
-
-1. The sender stops upon encountering an error
-2. The receiver discards all input until the end of the file [if it can work
-out when that is].
-3. A third interpreter state in which words are discarded until a closing
-';' is encountered.
-
-To keep things simple non of these methods are used, but they highlight ways
-in which the problem could be solved. )
 
 ( ==================== Control Structures ============================ )
 
@@ -706,6 +712,7 @@ in which the problem could be solved. )
 : block ( k -- a )
 	1depth 
 	dup 63 u> if 35 -throw then
+	dup blk !
 	10 lshift ( b/buf * ) ;
 
 : line swap block swap c/l * + c/l ; hidden ( k u -- a u )
@@ -736,11 +743,6 @@ in which the problem could be solved. )
 	for
 		dup 5u.r space pipe space dup  0 .line cr 1+
 	next drop ;
-
-
-( all words before this are now in the forth vocabulary, it is also set
-later on )
-.set forth-wordlist $pwd
 
 ( ==================== Block Word Set ================================ )
 
@@ -833,25 +835,61 @@ things, the 'decompiler' word could be called manually on an address if desired 
 	context - chars dup >r 1- dup 0< if 50 -throw then
 	for aft dup @ swap cell- then next @ r> ;
 
-: set-order ( widn ... wid1 n -- : set the current search order )
-	dup [-1]  = if drop forth-wordlist 1 set-order exit then
+: [set-order] ( widn ... wid1 n -- : set the current search order )
+	dup [-1]  = if drop root-voc 1 [set-order] exit then
 	dup #vocs > if 49 -throw then
-	context swap for aft tuck ! cell+ then next 0 swap ! ;
+	context swap for aft tuck ! cell+ then next 0 swap ! ; hidden
 
-\ : root  -1 set-order ; \ should contain set-order, forth-wordlist, forth, and words
-: forth -1 set-order ;
+: previous get-order swap drop 1- [set-order] ;
+\ : also get-order over swap 1+ [set-order] ;
+: only -1 [set-order] ;
+
+\ : root  -1 [set-order] ; \ should contain [set-order], forth-wordlist, forth, and words
+: [forth] root-voc forth-wordlist 2 set-order ; hidden
 
 : .words space begin dup while dup .id space @ address repeat drop cr ; hidden
-: words get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ;
-\ : vocs get-order begin ?dup while swap dup . space cell- chars .name 1- repeat cr ;
+: [words] get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ; hidden
 
-.set forth-wordlist $pwd
+: editor decimal editor-voc 1 [set-order] ;
+
+.set _forth-wordlist $pwd
+.set context _forth-wordlist
+.set context0 root-voc
+.set _forth-wordlist $pwd
+.pwd 0
 
 ( ==================== Vocabulary Words ============================== )
 
-.set context forth-wordlist
-.set forth-wordlist $pwd
 
+( ==================== Block Editor ================================== )
+
+: [block] blk @ block ;
+: [check] dup b/buf c/l / u>= if -24 throw then ;
+: [line] [check] c/l * [block] + ;
+: b block drop ;
+: l blk @ list ;
+: n  1 +block b l ;
+: p -1 +block b l ;
+: d [line] c/l blank ;
+: x [block] b/buf blank ;
+: s update flush ;
+: q forth flush ;
+: e forth blk @ load editor ;
+: ia c/l * + [block] + source drop >in @ +
+  swap source nip >in @ - cmove call "\" ;
+: i 0 swap ia ;
+: u update ;
+: w words ;
+: yank pad c/l ;
+: c [line] yank >r swap r> cmove ;
+: y [line] yank cmove ;
+: ct swap y c ;
+: ea [line] c/l evaluate ;
+: sw 2dup y [line] swap [line] swap c/l cmove c ;
+
+.set editor-voc $pwd
+
+( ==================== Block Editor ================================== )
 
 start:
 .set entry start
@@ -866,6 +904,9 @@ start:
 
 .set cp  $pc
 
+.set _forth     [forth]
+.set _set-order [set-order]
+.set _words    [words]
 .set _key?     rx?         ( execution vector of ?key )
 .set _emit     tx!         ( execution vector of emit )
 .set _expect   accept      ( execution vector of expect, default to 'accept'. )

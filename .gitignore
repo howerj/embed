@@ -6,3 +6,4 @@ block
 core
 vgcore.*
 *.hex
+forth

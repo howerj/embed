@@ -1,24 +1,3 @@
-( This program is written in a pseudo Forth like language, it is not
-Forth and does not behave like it, it just looks like it. This should
-be thought of as assembly code and not Forth.
-
-A lot of the code has been taken verbatim from "The Zen of eForth by
-C. H. Ting". Some routines have been adapted from the j1eforth implementation
-available at https://github.com/samawati/j1eforth.
-
-For a grammar of the language look into the file "h2.c", or "readme.md".
-
-Execution begins at a label called "start".
-
-A problem with this Forth is that is uses a singe block buffer, which can cause
-problems when using the block word set from within blocks. The main reason for
-this is due to the limited space on the device.
-
-Forth To Do:
-* Add do...loop, case statements
-* Implement some words from the C library, like all of "ctype.h" and
-put them in block storage. )
-
 ( ======================== System Constants ================= )
 
 constant cell 2 hidden
@@ -64,8 +43,7 @@ constant iMemDin       $4002 hidden ( Memory input for reads )
 
 ( ======================== System Variables ================= )
 
-( Execution vectors for changing the behaviour of the program,
-they are set at the end of this file )
+( @todo Place these locations at memory location 8192 + the stacks size )
 location _key?      0  ( -- c -1 | 0 : new character available? )
 location _emit      0  ( c -- : emit character )
 location _expect    0  ( "accept" vector )
@@ -78,8 +56,6 @@ location last-def   0  ( last, possibly unlinked, word definition )
 location cp         0  ( Dictionary Pointer: Set at end of file )
 location csp        0  ( current data stack pointer - for error checking )
 location _id        0  ( used for source id )
-location rendezvous 0  ( saved cp and pwd )
-.allocate cell
 location seed       1  ( seed used for the PRNG )
 location handler    0  ( current handler for throw/catch )
 variable >in        0  ( Hold character pointer when parsing input )
@@ -98,7 +74,6 @@ location tib-buf          0 ( ... and address )
 .set tib-buf $pc            ( set tib-buf to current dictionary location )
 .allocate tib-length        ( allocate enough for the terminal input buffer )
 .allocate cell              ( plus one extra cell for safety )
-constant block-invalid   -1 hidden ( block invalid number )
 constant b/buf 1024 ( size of a block )
 variable blk             -1 ( current blk loaded )
 location block-dirty      0 ( -1 if loaded block buffer is modified )

@@ -10,25 +10,17 @@
 #define MAX_MEMORY           (65536u)
 #define STK_SIZE             (64u)
 #define START_ADDR           (0u)
+#define VARIABLE_STACK_START (MAX_PROGRAM)
+#define RETURN_STACK_START   (MAX_PROGRAM+STK_SIZE)
 
 #define FORTH_BLOCK          ("forth.blk") /**< default file for flash initialization */
 
-
-typedef struct {
-	size_t length;
-	uint16_t *points;
-} break_point_t;
-
-/**@todo place variable and return stack within main memory */
 typedef struct {
 	uint16_t core[MAX_MEMORY/2]; /**< main memory */
-	uint16_t rstk[STK_SIZE]; /**< return stack */
-	uint16_t dstk[STK_SIZE]; /**< variable stack */
 	uint16_t pc;  /**< program counter */
 	uint16_t tos; /**< top of stack */
 	uint16_t rp;  /**< return stack pointer */
 	uint16_t sp;  /**< variable stack pointer */
-
 } h2_t; /**< state of the H2 CPU */
 
 typedef enum {

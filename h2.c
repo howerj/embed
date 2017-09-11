@@ -278,6 +278,8 @@ static h2_t *h2_new(uint16_t start_address)
 	h->pc = start_address;
 	for(uint16_t i = 0; i < start_address; i++)
 		h->core[i] = OP_BRANCH | start_address;
+	h->sp = VARIABLE_STACK_START;
+	h->rp = RETURN_STACK_START;
 	return h;
 }
 
@@ -456,7 +458,7 @@ static int wrap_getch()
 	int ch = getch();
 	if(ch == EOF || ch == ESCAPE)
 		exit(EXIT_SUCCESS);
-	return ch == DELETE ? BACKSPACE : ch;
+	return ch;
 }
 
 /* ========================== Utilities ==================================== */
@@ -554,96 +556,34 @@ static int symbol_table_print(symbol_table_t *t, FILE *output)
 	return 0;
 }
 
-static symbol_table_t *symbol_table_load(FILE *input)
-{
-	symbol_table_t *t = symbol_table_new();
-	assert(input);
-	char symbol[80];
-	char id[256];
-	char visibility[80];
-	uint16_t value;
-
-	while(!feof(input)) {
-		int r = 0;
-		memset(symbol,     0, sizeof(symbol));
-		memset(id,         0, sizeof(id));
-		memset(visibility, 0, sizeof(visibility));
-		value = 0;
-		r = fscanf(input, "%79s%255s%"SCNd16"%79s", symbol, id, &value, visibility);
-		if(r != 4 && r > 0) {
-			error("invalid symbol table: %d", r);
-			goto fail;
-		}
-		if(r == 4) {
-			size_t i = 0;
-			bool hidden = false;
-			if(!strcmp(visibility, "hidden")) {
-				hidden = true;
-			}else if(!strcmp(visibility, "visible")) {
-				error("invalid visibility value: %s", visibility);
-				goto fail;
-			}
-
-			for(i = 0; symbol_names[i] && strcmp(symbol_names[i], symbol); i++)
-				/*do nothing*/;
-			if(symbol_names[i]) {
-				if(symbol_table_add(t, i, id, value, NULL, hidden) < 0)
-					goto fail;
-			} else {
-				error("invalid symbol: %s", symbol);
-				goto fail;
-			}
-		}
-	}
-	if(log_level >= LOG_DEBUG)
-		symbol_table_print(t, stderr);
-	return t;
-fail:
-	symbol_table_free(t);
-	return NULL;
-}
 /* ========================== Symbol Table ================================= */
 
 /* ========================== Simulation And Debugger ====================== */
 
-static void dpush(h2_t *h, uint16_t v)
+static inline void dpush(h2_t *h, uint16_t v)
 {
-	assert(h);
 	h->sp++;
-	h->dstk[h->sp % STK_SIZE] = h->tos;
+	h->core[h->sp] = h->tos;
 	h->tos = v;
-	if(h->sp >= STK_SIZE)
-		warning("data stack overflow");
-	h->sp %= STK_SIZE;
 }
 
-static uint16_t dpop(h2_t *h)
+static inline uint16_t dpop(h2_t *h)
 {
-	uint16_t r;
-	assert(h);
-	r = h->tos;
-	h->tos = h->dstk[h->sp % STK_SIZE];
+	uint16_t r = h->tos;
+	h->tos = h->core[h->sp];
 	h->sp--;
-	if(h->sp >= STK_SIZE)
-		warning("data stack underflow");
-	h->sp %= STK_SIZE;
 	return r;
 }
 
 static void rpush(h2_t *h, uint16_t r)
 {
-	assert(h);
 	h->rp++;
-	h->rstk[(h->rp) % STK_SIZE] = r;
-	if(h->rp >= STK_SIZE)
-		warning("return stack overflow");
-	h->rp %= STK_SIZE;
+	h->core[h->rp] = r;
 }
 
-static uint16_t stack_delta(uint16_t d)
+static inline uint16_t stack_delta(uint16_t d)
 {
 	static const uint16_t i[4] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
-	assert((d & 0xFFFC) == 0);
 	return i[d];
 }
 
@@ -675,12 +615,12 @@ int h2_run(h2_t *h)
 		} else if (IS_ALU_OP(instruction)) {
 			uint16_t rd  = stack_delta(RSTACK(instruction));
 			uint16_t dd  = stack_delta(DSTACK(instruction));
-			uint16_t nos = h->dstk[h->sp % STK_SIZE];
+			uint16_t nos = h->core[h->sp];
 			uint16_t tos = h->tos;
 			uint16_t npc = pc_plus_one;
 
 			if(instruction & R_TO_PC)
-				npc = h->rstk[h->rp % STK_SIZE] >> 1;
+				npc = h->core[h->rp] >> 1;
 
 			switch(ALU_OP(instruction)) {
 			case ALU_OP_T:        /* tos = tos; */                         break;
@@ -694,12 +634,12 @@ int h2_run(h2_t *h)
 			case ALU_OP_N_LESS_T:    tos = -((int16_t)nos < (int16_t)tos); break;
 			case ALU_OP_N_RSHIFT_T:  tos = nos >> tos;                     break;
 			case ALU_OP_T_DECREMENT: tos--;                                break;
-			case ALU_OP_R:           tos = h->rstk[h->rp % STK_SIZE];      break;
+			case ALU_OP_R:           tos = h->core[h->rp];                 break;
 			case ALU_OP_T_LOAD:      tos = h->core[(h->tos >> 1)];         break;
 			case ALU_OP_N_LSHIFT_T:  tos = nos << tos;                     break;
-			case ALU_OP_DEPTH:       tos = h->sp;                          break;
+			case ALU_OP_DEPTH:       tos = h->sp - VARIABLE_STACK_START;   break;
 			case ALU_OP_N_ULESS_T:   tos = -(nos < tos);                   break;
-			case ALU_OP_RDEPTH:      tos = h->rp;                          break;
+			case ALU_OP_RDEPTH:      tos = h->rp - RETURN_STACK_START;     break;
 			case ALU_OP_T_EQUAL_0:   tos = -(tos == 0);                    break;
 			case ALU_OP_TX:          putch(tos); tos = nos;                break;
 			case ALU_OP_RX:          tos = wrap_getch();                   break;
@@ -710,26 +650,19 @@ int h2_run(h2_t *h)
 			}
 
 			h->sp += dd;
-			if(h->sp >= STK_SIZE)
-				warning("data stack overflow");
-			h->sp %= STK_SIZE;
-
 			h->rp += rd;
-			if(h->rp >= STK_SIZE)
-				warning("return stack overflow");
-			h->rp %= STK_SIZE;
 
 			if(instruction & T_TO_R)
-				h->rstk[h->rp % STK_SIZE] = h->tos;
+				h->core[h->rp] = h->tos;
 
 			if(instruction & T_TO_N)
-				h->dstk[h->sp % STK_SIZE] = h->tos;
+				h->core[h->sp] = h->tos;
 
 			if(instruction & N_TO_ADDR_T)
 				h->core[(h->tos >> 1)] = nos;
 
 			h->tos = tos;
-			h->pc = npc;
+			h->pc  = npc;
 		} else if (IS_CALL(instruction)) {
 			rpush(h, pc_plus_one << 1);
 			h->pc = address;
@@ -1991,6 +1924,7 @@ static void assemble(h2_t *h, assembler_t *a, node_t *n, symbol_table_t *t, erro
 		break;
 	}
 	case SYM_FOR_AFT_THEN_NEXT:
+	/**@todo sort this out */
 		generate(h, a, CODE_TOR);
 		assemble(h, a, n->o[0], t, e);
 		hole1 = hole(h, a);
@@ -2359,20 +2293,6 @@ int main(int argc, char **argv)
 			if(cmd.cmd)
 				goto fail;
 			cmd.cmd = ASSEMBLE_RUN_COMMAND;
-			break;
-		case 'L':
-			if(i >= (argc - 1) || symfile)
-				goto fail;
-			optarg = argv[++i];
-			/* NB. Cannot merge symbol tables */
-			symfile = fopen_or_die(optarg, "rb");
-			symbols = symbol_table_load(symfile);
-			break;
-		case 'S':
-			if(i >= (argc - 1) || newsymfile)
-				goto fail;
-			optarg = argv[++i];
-			newsymfile = fopen_or_die(optarg, "wb");
 			break;
 		case 's':
 			if(i >= (argc - 1))

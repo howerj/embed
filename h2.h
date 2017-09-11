@@ -6,33 +6,28 @@
 #include <stdint.h>
 #include <stdio.h>
 
-/**@note STK_SIZE is fixed to 64, but h2.vhd allows for the instantiation of
- * CPUs with different stack sizes, within reasonable limits, so long as they
- * are a power of 2. */
-
-#define MAX_CORE             (8192u)
+#define MAX_PROGRAM          (8192u)
+#define MAX_MEMORY           (65536u)
 #define STK_SIZE             (64u)
 #define START_ADDR           (0u)
 
-#define H2_CPU_ID_SIMULATION (0xDEADu)
+#define FORTH_BLOCK          ("forth.blk") /**< default file for flash initialization */
 
-#define FLASH_INIT_FILE      ("nvram.blk") /**< default file for flash initialization */
-
-typedef uint16_t word_t;
 
 typedef struct {
 	size_t length;
-	word_t *points;
+	uint16_t *points;
 } break_point_t;
 
+/**@todo place variable and return stack within main memory */
 typedef struct {
-	word_t core[MAX_CORE]; /**< main memory */
-	word_t rstk[STK_SIZE]; /**< return stack */
-	word_t dstk[STK_SIZE]; /**< variable stack */
-	word_t pc;  /**< program counter */
-	word_t tos; /**< top of stack */
-	word_t rp;  /**< return stack pointer */
-	word_t sp;  /**< variable stack pointer */
+	uint16_t core[MAX_MEMORY/2]; /**< main memory */
+	uint16_t rstk[STK_SIZE]; /**< return stack */
+	uint16_t dstk[STK_SIZE]; /**< variable stack */
+	uint16_t pc;  /**< program counter */
+	uint16_t tos; /**< top of stack */
+	uint16_t rp;  /**< return stack pointer */
+	uint16_t sp;  /**< variable stack pointer */
 
 } h2_t; /**< state of the H2 CPU */
 
@@ -46,7 +41,7 @@ typedef enum {
 typedef struct {
 	symbol_type_e type;
 	char *id;
-	word_t value;
+	uint16_t value;
 	bool hidden;
 } symbol_t;
 
@@ -54,66 +49,6 @@ typedef struct {
 	size_t length;
 	symbol_t **symbols;
 } symbol_table_t;
-
-#define UART_RX_FIFO_EMPTY_BIT     (8)
-#define UART_RX_FIFO_FULL_BIT      (9)
-#define UART_RX_RE_BIT             (10)
-#define UART_TX_FIFO_EMPTY_BIT     (11)
-#define UART_TX_FIFO_FULL_BIT      (12)
-#define UART_TX_WE_BIT             (13)
-
-#define UART_RX_FIFO_EMPTY         (1 << UART_RX_FIFO_EMPTY_BIT)
-#define UART_RX_FIFO_FULL          (1 << UART_RX_FIFO_FULL_BIT)
-#define UART_RX_RE                 (1 << UART_RX_RE_BIT)
-#define UART_TX_FIFO_EMPTY         (1 << UART_TX_FIFO_EMPTY_BIT)
-#define UART_TX_FIFO_FULL          (1 << UART_TX_FIFO_FULL_BIT)
-#define UART_TX_WE                 (1 << UART_TX_WE_BIT)
-
-#define CHIP_MEMORY_SIZE           (1*1024*1024) /*NB. size in WORDs not bytes! */
-#define FLASH_MASK_ADDR_UPPER_MASK (0x1ff)
-
-#define SRAM_CHIP_SELECT_BIT       (11)
-#define FLASH_MEMORY_WAIT_BIT      (12)
-#define FLASH_MEMORY_OE_BIT        (14)
-#define FLASH_MEMORY_WE_BIT        (15)
-
-#define FLASH_CHIP_SELECT          (1 << FLASH_CHIP_SELECT_BIT)
-#define SRAM_CHIP_SELECT           (1 << SRAM_CHIP_SELECT_BIT)
-#define FLASH_MEMORY_OE            (1 << FLASH_MEMORY_OE_BIT)
-#define FLASH_MEMORY_WE            (1 << FLASH_MEMORY_WE_BIT)
-
-#define FLASH_BLOCK_MAX            (130)
-
-typedef struct {
-	uint8_t uart_getchar_register;
-	word_t vram[CHIP_MEMORY_SIZE];
-	word_t mem_control;
-	word_t mem_addr_low;
-	word_t mem_dout;
-} h2_soc_state_t;
-
-typedef word_t (*h2_io_get)(h2_soc_state_t *soc, word_t addr);
-typedef void     (*h2_io_set)(h2_soc_state_t *soc, word_t addr, word_t value);
-typedef void     (*h2_io_update)(h2_soc_state_t *soc);
-
-typedef struct {
-	h2_io_get in;
-	h2_io_set out;
-	h2_io_update update;
-	h2_soc_state_t *soc;
-} h2_io_t;
-
-typedef enum {
-	iUart         = 0x4000,
-	iMemDin       = 0x4002,
-} h2_input_addr_t;
-
-typedef enum {
-	oUart         = 0x4000,
-	oMemDout      = 0x4002,
-	oMemControl   = 0x4004,
-	oMemAddrLow   = 0x4006,
-} h2_output_addr_t;
 
 /** @warning LOG_FATAL level kills the program */
 #define X_MACRO_LOGGING\

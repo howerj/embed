@@ -73,9 +73,6 @@ location _tap       0  ( "tap" vector, for terminal handling )
 location _echo      0  ( c -- : emit character )
 location _prompt    0  ( -- : display prompt )
 location _boot      0  ( -- : execute program at startup )
-location _bload     0  ( a u k -- f : load block )
-location _bsave     0  ( a u k -- f : save block )
-location _binvalid  0  ( k -- k : throws error if k invalid )
 location _message   0  ( n -- : display an error message )
 location last-def   0  ( last, possibly unlinked, word definition )
 location cp         0  ( Dictionary Pointer: Set at end of file )
@@ -105,10 +102,6 @@ constant block-invalid   -1 hidden ( block invalid number )
 constant b/buf 1024 ( size of a block )
 variable blk             -1 ( current blk loaded )
 location block-dirty      0 ( -1 if loaded block buffer is modified )
-location block-buffer     0 ( block buffer starts here )
-.allocate b/buf
-
-location _blockop         0             ( used in 'mblock' )
 location bcount           0             ( instruction counter used in 'see' )
 location _test            0             ( used in skip/test )
 location .s-string        " <sp"        ( used by .s )
@@ -123,8 +116,6 @@ location see.inline       " inline "    ( used by "see", for inline words )
 location OK               "ok"          ( used by "prompt" )
 location redefined        " redefined"  ( used by ":" when a word has been redefined )
 location hi-string        "eFORTH V"    ( used by "hi" )
-location loading-string   "loading..."  ( used in start up routine )
-location failed           "failed"      ( used in start up routine )
 
 ( ======================== System Variables ================= )
 
@@ -169,24 +160,6 @@ location failed           "failed"      ( used in start up routine )
 : ms for 25000 40ns next ; ( n -- : wait for 'n' milliseconds )
 : doNext r> r> ?dup if 1- >r @ >r exit then cell+ >r ; hidden
 
-: uart? ( a1 a2 -- c -1 | 0 : generic uart input using registers 'a1' and 'a2'  )
-	swap >r dup >r
-	@ $0100 and 0=
-	if
-		$0400 r> ! r> @ $ff and [-1]
-	else
-		rdrop rdrop 0
-	then ; hidden
-
-: rx?  oUart iUart uart? ; hidden ( -- c -1 | 0 : read in a character of input from UART )
-
-: uart! ( c a1 a2 -- : write to a UART, specified with registers a1, a2 )
-	>r >r
-	begin r@ @ $1000 and 0= until rdrop ( Wait until TX FIFO is not full )
-	$2000 or r> ! ; hidden
-
-: tx!  oUart iUart uart! ; hidden
-
 : um+ ( w w -- w carry )
 	over over + >r
 	r@ 0 < invert >r
@@ -204,6 +177,8 @@ location failed           "failed"      ( used in start up routine )
 	begin dup while rdrop 1- repeat drop r@ swap
 	begin dup while rup   1- repeat drop
 	rup ;
+
+: bye 0 (bye) ;
 
 ( With the built in words defined in the assembler, and the words
 defined so far, all of the primitive words needed by eForth should
@@ -617,6 +592,8 @@ choice words that need depth checking to get quite a large coverage )
 : xio  ' accept _expect ! _tap ! _echo ! _prompt ! ; hidden
 : file ' pace ' "drop" ' ktap xio ;
 : star $2A emit ; hidden
+: rx? _rx? [-1] ; ( @todo remove the need for this )
+: tx! _tx! ; ( @todo remove the need for this )
 : [conceal] dup 33 127 within if drop star else tx! then ; hidden
 : conceal ' .ok ' [conceal] ' ktap xio ;
 : hand ' .ok  '  emit  ' ktap xio ; hidden
@@ -748,25 +725,14 @@ in which the problem could be solved. )
 
 ( ==================== Block Word Set ================================ )
 
-: updated? block-dirty @ ; hidden      ( -- f )
 : update [-1] block-dirty ! ;          ( -- )
 : +block blk @ + ;                     ( -- )
-: clean-buffers 0 block-dirty ! ; hidden
-: empty-buffers clean-buffers block-invalid blk ! ;  ( -- )
-: save-buffers                         ( -- )
-	blk @ block-invalid = updated? 0= or if exit then
-	block-buffer b/buf blk @ _bsave @execute throw
-	clean-buffers ;
-: flush save-buffers empty-buffers ;
+: flush block-dirty @ if save then ;
 
 : block ( k -- a )
-	1depth
-	_binvalid @execute                         ( check validity of block number )
-	dup blk @ = if drop block-buffer exit then ( block already loaded )
-	flush
-	dup >r block-buffer b/buf r> _bload @execute throw
-	blk !
-	block-buffer ;
+	1depth 
+	dup 63 u> if 35 -throw then
+	10 lshift ( b/buf * ) ;
 
 : line swap block swap c/l * + c/l ; hidden ( k u -- a u )
 : loadline line evaluate ; hidden ( k u -- )
@@ -781,6 +747,7 @@ in which the problem could be solved. )
 : blank =bl fill ;
 : message l/b extract .line cr ; ( u -- )
 : list
+	dup block drop
 	?page
 	cr
 	.border
@@ -908,63 +875,6 @@ things, the 'decompiler' word could be called manually on an address if desired 
 
 ( ==================== Vocabulary Words ============================== )
 
-( ==================== Memory Interface ============================== )
-
-constant memory-upper-mask  $1ff hidden
-variable memory-upper       0    ( upper bits of external memory address )
-location memory-select      0    ( SRAM/Flash select SRAM = 0, Flash = 1 )
-
-: mcontrol! ( u -- : write to memory control register )
-	$f3ff and
-	memory-select @ if $400 else $800 then or  ( select correct memory device )
-	memory-upper-mask invert    and            ( mask off control bits )
-	memory-upper @ memory-upper-mask and or         ( or in higher address bits )
-	oMemControl ! ; hidden            ( and finally write in control )
-
-: m! ( n a -- : write to non-volatile memory )
-	oMemAddrLow !
-	oMemDout !
-	0x8000 mcontrol!
-	$0000 mcontrol! ;
-
-: m@ ( a -- n : read from non-volatile memory )
-	oMemAddrLow !
-	$4000 mcontrol! ( read enable mode )
-	iMemDin @        ( get input )
-	$0000 mcontrol! ;
-
-: minvalid ( k -- k : is 'k' a valid block number, throw on error )
-	dup block-invalid = if 35 -throw then ; hidden
-
-: c>m swap @ swap m! ; hidden      ( a a --  )
-: m>c m@ swap ! ; hidden ( a a -- )
-
-: mblock ( a u k -- f )
-	minvalid
-	b/buf um* memory-upper ! >r
-	begin
-		dup
-	while
-		over r@ _blockop @execute r> cell+ >r
-		cell /string
-	repeat
-	rdrop 2drop 0 ; hidden
-
-: memory-save ' c>m _blockop ! mblock ; hidden
-: memory-load ' m>c _blockop ! mblock ; hidden
-
-( ==================== Memory Interface ============================== )
-
-( ==================== Startup Code ================================== )
-
-: .failed failed print ; hidden
-: boot ( -- )
-	0 block c@ printable? if
-		0 load
-	else
-		1 -throw
-	then ; hidden
-
 .set context forth-wordlist
 .set forth-wordlist $pwd
 
@@ -973,7 +883,7 @@ start:
 .set entry start
 	_boot @execute  ( _boot contains zero by default, does nothing )
 	hi
-	' boot catch if .failed else .ok then
+	\ ' boot catch if .failed else .ok then
 	\ loaded @ if 1 list then
 	\ login 0 load 1 list
 	branch quitLoop ( jump to main interpreter loop if _boot returned )
@@ -989,7 +899,4 @@ start:
 .set _echo     tx!         ( execution vector of echo )
 .set _prompt   .ok         ( execution vector of prompt, default to '.ok'. )
 .set _boot     0           ( @execute does nothing if zero )
-.set _bload    memory-load ( execution vector of _bload, used in block )
-.set _bsave    memory-save ( execution vector of _bsave, used in block )
-.set _binvalid minvalid    ( execution vector of _invalid, used in block )
 .set _message  message     ( execution vector of _message, used in ?error )

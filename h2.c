@@ -85,8 +85,11 @@ typedef enum {
 	ALU_OP_N_LSHIFT_T,         /**< Logical Left Shift   */
 	ALU_OP_DEPTH,              /**< Depth of stack       */
 	ALU_OP_N_ULESS_T,          /**< Unsigned comparison  */
-	ALU_OP_ENABLE_INTERRUPTS,  /**< Enable interrupts    */
 
+	ALU_OP_RX,                 /**< Send byte            */
+	ALU_OP_TX,                 /**< Get byte             */
+	ALU_OP_SAVE,               /**< Save Image           */
+	ALU_OP_BYE,                /**< Return               */
 	ALU_OP_RDEPTH,             /**< R Stack Depth        */
 	ALU_OP_T_EQUAL_0,          /**< T == 0               */
 } alu_code_e;
@@ -100,14 +103,6 @@ typedef enum {
 #define MK_RSTACK(DELTA) ((DELTA) << RSTACK_START)
 #define MK_CODE(CODE)    ((CODE)  << ALU_OP_START)
 
-/**
- * @warning This table keeps most things synchronized when it comes
- * to instructions, the exception is in the lexer, which accepts
- * a range of tokens in one clause of the grammar from the first
- * instruction to the last. This must be manually updated
- * @note In the original J1 specification both r@ and r> both have
- * their T_TO_R bit set in their instruction description tables, this
- * appears to be incorrect */
 #define X_MACRO_INSTRUCTIONS \
 	X(DUP,    "dup",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_T)        | T_TO_N  | MK_DSTACK(DELTA_1)))\
 	X(OVER,   "over",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_N)        | T_TO_N  | MK_DSTACK(DELTA_1)))\
@@ -135,6 +130,10 @@ typedef enum {
 	X(RDEPTH, "rp@",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_RDEPTH)  | T_TO_N       | MK_DSTACK(DELTA_1)))\
 	X(TE0,    "0=",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_EQUAL_0)))\
 	X(NOP,    "nop",    false, (OP_ALU_OP | MK_CODE(ALU_OP_T)))\
+	X(BYE,    "(bye)",  false, (OP_ALU_OP | MK_CODE(ALU_OP_BYE)                    | MK_DSTACK(DELTA_N1)))\
+	X(RX,     "_rx?",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_RX)      | T_TO_N       | MK_DSTACK(DELTA_1)))\
+	X(TX,     "_tx!",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_TX)                     | MK_DSTACK(DELTA_N1)))\
+	X(SAVE,   "save",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_SAVE)))\
 	X(RUP,    "rup",    false, (OP_ALU_OP | MK_CODE(ALU_OP_T))                     | MK_RSTACK(DELTA_1))\
 	X(RDROP,  "rdrop",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_T) | MK_RSTACK(DELTA_N1)))
 
@@ -243,7 +242,7 @@ static int string_to_long(int base, long *n, const char *s)
 	return errno || *s == '\0' || *end != '\0';
 }
 
-static int string_to_cell(int base, word_t *n, const char *s)
+static int string_to_cell(int base, uint16_t *n, const char *s)
 {
 	long n1 = 0;
 	int r = string_to_long(base, &n1, s);
@@ -273,11 +272,11 @@ static void ethrow(error_t *e)
 	exit(EXIT_FAILURE);
 }
 
-static h2_t *h2_new(word_t start_address)
+static h2_t *h2_new(uint16_t start_address)
 {
 	h2_t *h = allocate_or_die(sizeof(h2_t));
 	h->pc = start_address;
-	for(word_t i = 0; i < start_address; i++)
+	for(uint16_t i = 0; i < start_address; i++)
 		h->core[i] = OP_BRANCH | start_address;
 	return h;
 }
@@ -290,7 +289,7 @@ static void h2_free(h2_t *h)
 	free(h);
 }
 
-static int binary_memory_load(FILE *input, word_t *p, size_t length)
+static int binary_memory_load(FILE *input, uint16_t *p, size_t length)
 {
 	assert(input);
 	assert(p);
@@ -307,7 +306,7 @@ static int binary_memory_load(FILE *input, word_t *p, size_t length)
 	return 0;
 }
 
-static int binary_memory_save(FILE *output, word_t *p, size_t length)
+static int binary_memory_save(FILE *output, uint16_t *p, size_t length)
 {
 	assert(output);
 	assert(p);
@@ -323,15 +322,15 @@ static int binary_memory_save(FILE *output, word_t *p, size_t length)
 	return 0;
 }
 
-static int ram_load_and_transfer(h2_io_t *io, const char *name)
+static int load(h2_t *h, const char *name)
 {
-	assert(io);
+	assert(h);
 	assert(name);
 	FILE *input = NULL;
 	int r = 0;
 	errno = 0;
 	if((input = fopen(name, "rb"))) {
-		r = binary_memory_load(input, io->soc->vram, CHIP_MEMORY_SIZE);
+		r = binary_memory_load(input, h->core, MAX_MEMORY/2);
 		fclose(input);
 	} else {
 		error("nvram file read (from %s) failed: %s", name, strerror(errno));
@@ -340,15 +339,15 @@ static int ram_load_and_transfer(h2_io_t *io, const char *name)
 	return r;
 }
 
-static int nvram_save(h2_io_t *io, const char *name)
+static int save(h2_t *h, const char *name)
 {
 	FILE *output = NULL;
 	int r = 0;
-	assert(io);
+	assert(h);
 	assert(name);
 	errno = 0;
 	if((output = fopen(name, "wb"))) {
-		r = binary_memory_save(output, io->soc->vram, CHIP_MEMORY_SIZE);
+		r = binary_memory_save(output, h->core, MAX_MEMORY/2);
 		fclose(output);
 	} else {
 		error("nvram file write (to %s) failed: %s", name, strerror(errno));
@@ -357,7 +356,7 @@ static int nvram_save(h2_io_t *io, const char *name)
 	return r;
 }
 
-static int memory_load(FILE *input, word_t *p, size_t length)
+static int memory_load(FILE *input, uint16_t *p, size_t length)
 {
 	assert(input);
 	assert(p);
@@ -381,7 +380,7 @@ static int memory_load(FILE *input, word_t *p, size_t length)
 	return 0;
 }
 
-static int memory_save(FILE *output, word_t *p, size_t length)
+static int memory_save(FILE *output, uint16_t *p, size_t length)
 {
 	assert(output);
 	assert(p);
@@ -397,14 +396,14 @@ static int h2_load(h2_t *h, FILE *hexfile)
 {
 	assert(h);
 	assert(hexfile);
-	return memory_load(hexfile, h->core, MAX_CORE);
+	return memory_load(hexfile, h->core, MAX_PROGRAM);
 }
 
 static int h2_save(h2_t *h, FILE *output, bool full)
 {
 	assert(h);
 	assert(output);
-	return memory_save(output, h->core, full ? MAX_CORE : h->pc);
+	return memory_save(output, h->core, full ? MAX_PROGRAM : h->pc);
 }
 
 #ifdef __unix__
@@ -473,7 +472,7 @@ static const char *symbol_names[] =
 	NULL
 };
 
-static symbol_t *symbol_new(symbol_type_e type, const char *id, word_t value)
+static symbol_t *symbol_new(symbol_type_e type, const char *id, uint16_t value)
 {
 	symbol_t *s = allocate_or_die(sizeof(*s));
 	assert(id);
@@ -517,7 +516,7 @@ static symbol_t *symbol_table_lookup(symbol_table_t *t, const char *id)
 	return NULL;
 }
 
-static int symbol_table_add(symbol_table_t *t, symbol_type_e type, const char *id, word_t value, error_t *e, bool hidden)
+static int symbol_table_add(symbol_table_t *t, symbol_type_e type, const char *id, uint16_t value, error_t *e, bool hidden)
 {
 	symbol_t *s = symbol_new(type, id, value);
 	symbol_t **xs = NULL;
@@ -562,7 +561,7 @@ static symbol_table_t *symbol_table_load(FILE *input)
 	char symbol[80];
 	char id[256];
 	char visibility[80];
-	word_t value;
+	uint16_t value;
 
 	while(!feof(input)) {
 		int r = 0;
@@ -607,105 +606,7 @@ fail:
 
 /* ========================== Simulation And Debugger ====================== */
 
-word_t h2_io_memory_read_operation(h2_soc_state_t *soc)
-{
-	assert(soc);
-	uint32_t flash_addr = ((uint32_t)(soc->mem_control & FLASH_MASK_ADDR_UPPER_MASK) << 16) | soc->mem_addr_low;
-	bool sram_cs   = soc->mem_control & SRAM_CHIP_SELECT;
-	bool oe        = soc->mem_control & FLASH_MEMORY_OE;
-	bool we        = soc->mem_control & FLASH_MEMORY_WE;
-
-	if(oe && we)
-		return 0;
-
-	if(sram_cs && oe && !we)
-		return soc->vram[flash_addr >> 1];
-	return 0;
-}
-
-static word_t h2_io_get_default(h2_soc_state_t *soc, word_t addr)
-{
-	assert(soc);
-	debug("IO read addr: %"PRIx16, addr);
-	switch(addr) {
-	case iUart:         return UART_TX_FIFO_EMPTY | soc->uart_getchar_register;
-	case iMemDin:       return h2_io_memory_read_operation(soc);
-	default:
-		warning("invalid read from %04"PRIx16, addr);
-	}
-	return 0;
-}
-
-static void h2_io_set_default(h2_soc_state_t *soc, word_t addr, word_t value)
-{
-	assert(soc);
-	debug("IO write addr/value: %"PRIx16"/%"PRIx16, addr, value);
-
-	switch(addr) {
-	case oUart:
-			if(value & UART_TX_WE)
-				putch(0xFF & value);
-			if(value & UART_RX_RE)
-				soc->uart_getchar_register = wrap_getch();
-			break;
-	case oMemControl:
-	{
-		soc->mem_control    = value;
-
-		bool sram_cs   = soc->mem_control & SRAM_CHIP_SELECT;
-		bool oe        = soc->mem_control & FLASH_MEMORY_OE;
-		bool we        = soc->mem_control & FLASH_MEMORY_WE;
-
-		if(sram_cs && !oe && we)
-			soc->vram[(((uint32_t)(soc->mem_control & FLASH_MASK_ADDR_UPPER_MASK) << 16) | soc->mem_addr_low) >> 1] = soc->mem_dout;
-		break;
-	}
-	case oMemAddrLow: soc->mem_addr_low   = value; break;
-	case oMemDout:    soc->mem_dout       = value; break;
-	default:
-		warning("invalid write to %04"PRIx16 ":%04"PRIx16, addr, value);
-	}
-}
-
-static void h2_io_update_default(h2_soc_state_t *soc)
-{
-	assert(soc);
-}
-
-static h2_soc_state_t *h2_soc_state_new(void)
-{
-	h2_soc_state_t *r = allocate_or_die(sizeof(h2_soc_state_t));
-	return r;
-}
-
-static void h2_soc_state_free(h2_soc_state_t *soc)
-{
-	if(!soc)
-		return;
-	memset(soc, 0, sizeof(*soc));
-	free(soc);
-}
-
-static h2_io_t *h2_io_new(void)
-{
-	h2_io_t *io =  allocate_or_die(sizeof(*io));
-	io->in      = h2_io_get_default;
-	io->out     = h2_io_set_default;
-	io->update  = h2_io_update_default;
-	io->soc     = h2_soc_state_new();
-	return io;
-}
-
-static void h2_io_free(h2_io_t *io)
-{
-	if(!io)
-		return;
-	h2_soc_state_free(io->soc);
-	memset(io, 0, sizeof(*io));
-	free(io);
-}
-
-static void dpush(h2_t *h, word_t v)
+static void dpush(h2_t *h, uint16_t v)
 {
 	assert(h);
 	h->sp++;
@@ -716,9 +617,9 @@ static void dpush(h2_t *h, word_t v)
 	h->sp %= STK_SIZE;
 }
 
-static word_t dpop(h2_t *h)
+static uint16_t dpop(h2_t *h)
 {
-	word_t r;
+	uint16_t r;
 	assert(h);
 	r = h->tos;
 	h->tos = h->dstk[h->sp % STK_SIZE];
@@ -729,7 +630,7 @@ static word_t dpop(h2_t *h)
 	return r;
 }
 
-static void rpush(h2_t *h, word_t r)
+static void rpush(h2_t *h, uint16_t r)
 {
 	assert(h);
 	h->rp++;
@@ -739,28 +640,25 @@ static void rpush(h2_t *h, word_t r)
 	h->rp %= STK_SIZE;
 }
 
-static word_t stack_delta(word_t d)
+static uint16_t stack_delta(uint16_t d)
 {
-	static const word_t i[4] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
+	static const uint16_t i[4] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
 	assert((d & 0xFFFC) == 0);
 	return i[d];
 }
 
-int h2_run(h2_t *h, h2_io_t *io)
+int h2_run(h2_t *h)
 {
 	assert(h);
-	assert(io);
 
 	for(;;) {
-		word_t instruction,
+		uint16_t instruction,
 			 literal,
 			 address,
 			 pc_plus_one;
 
-		io->update(io->soc);
-
-		if(h->pc >= MAX_CORE) {
-			error("invalid program counter: %04x > %04x", (unsigned)h->pc, MAX_CORE);
+		if(h->pc >= MAX_PROGRAM) {
+			error("invalid program counter: %04x > %04x", (unsigned)h->pc, MAX_PROGRAM);
 			return -1;
 		}
 		instruction = h->core[h->pc];
@@ -768,49 +666,45 @@ int h2_run(h2_t *h, h2_io_t *io)
 		literal = instruction & 0x7FFF;
 		address = instruction & 0x1FFF; /* NB. also used for ALU OP */
 
-		pc_plus_one = (h->pc + 1) % MAX_CORE;
+		pc_plus_one = (h->pc + 1) % MAX_PROGRAM;
 
 		/* decode / execute */
 		if(IS_LITERAL(instruction)) {
 			dpush(h, literal);
 			h->pc = pc_plus_one;
 		} else if (IS_ALU_OP(instruction)) {
-			word_t rd  = stack_delta(RSTACK(instruction));
-			word_t dd  = stack_delta(DSTACK(instruction));
-			word_t nos = h->dstk[h->sp % STK_SIZE];
-			word_t tos = h->tos;
-			word_t npc = pc_plus_one;
+			uint16_t rd  = stack_delta(RSTACK(instruction));
+			uint16_t dd  = stack_delta(DSTACK(instruction));
+			uint16_t nos = h->dstk[h->sp % STK_SIZE];
+			uint16_t tos = h->tos;
+			uint16_t npc = pc_plus_one;
 
 			if(instruction & R_TO_PC)
 				npc = h->rstk[h->rp % STK_SIZE] >> 1;
 
 			switch(ALU_OP(instruction)) {
-			case ALU_OP_T:        /* tos = tos; */ break;
-			case ALU_OP_N:           tos = nos;    break;
-			case ALU_OP_T_PLUS_N:    tos += nos;   break;
-			case ALU_OP_T_AND_N:     tos &= nos;   break;
-			case ALU_OP_T_OR_N:      tos |= nos;   break;
-			case ALU_OP_T_XOR_N:     tos ^= nos;   break;
-			case ALU_OP_T_INVERT:    tos = ~tos;   break;
-			case ALU_OP_T_EQUAL_N:   tos = -(tos == nos); break;
+			case ALU_OP_T:        /* tos = tos; */                         break;
+			case ALU_OP_N:           tos = nos;                            break;
+			case ALU_OP_T_PLUS_N:    tos += nos;                           break;
+			case ALU_OP_T_AND_N:     tos &= nos;                           break;
+			case ALU_OP_T_OR_N:      tos |= nos;                           break;
+			case ALU_OP_T_XOR_N:     tos ^= nos;                           break;
+			case ALU_OP_T_INVERT:    tos = ~tos;                           break;
+			case ALU_OP_T_EQUAL_N:   tos = -(tos == nos);                  break;
 			case ALU_OP_N_LESS_T:    tos = -((int16_t)nos < (int16_t)tos); break;
-			case ALU_OP_N_RSHIFT_T:  tos = nos >> tos; break;
-			case ALU_OP_T_DECREMENT: tos--; break;
-			case ALU_OP_R:           tos = h->rstk[h->rp % STK_SIZE]; break;
-			case ALU_OP_T_LOAD:
-				if(h->tos & 0x4000) {
-					if(h->tos & 0x1)
-						warning("unaligned register read: %04x", (unsigned)h->tos);
-					tos = io->in(io->soc, h->tos & ~0x1);
-				} else {
-					tos = h->core[(h->tos >> 1) % MAX_CORE];
-				}
-				break;
-			case ALU_OP_N_LSHIFT_T: tos = nos << tos;           break;
-			case ALU_OP_DEPTH:      tos = h->sp;                break;
-			case ALU_OP_N_ULESS_T:  tos = -(nos < tos);         break;
-			case ALU_OP_RDEPTH:     tos = h->rp;                break;
-			case ALU_OP_T_EQUAL_0:  tos = -(tos == 0);          break;
+			case ALU_OP_N_RSHIFT_T:  tos = nos >> tos;                     break;
+			case ALU_OP_T_DECREMENT: tos--;                                break;
+			case ALU_OP_R:           tos = h->rstk[h->rp % STK_SIZE];      break;
+			case ALU_OP_T_LOAD:      tos = h->core[(h->tos >> 1)];         break;
+			case ALU_OP_N_LSHIFT_T:  tos = nos << tos;                     break;
+			case ALU_OP_DEPTH:       tos = h->sp;                          break;
+			case ALU_OP_N_ULESS_T:   tos = -(nos < tos);                   break;
+			case ALU_OP_RDEPTH:      tos = h->rp;                          break;
+			case ALU_OP_T_EQUAL_0:   tos = -(tos == 0);                    break;
+			case ALU_OP_TX:          putch(tos); tos = nos;                break;
+			case ALU_OP_RX:          tos = wrap_getch();                   break;
+			case ALU_OP_SAVE:        save(h, FORTH_BLOCK);                 break;
+			case ALU_OP_BYE:         return tos;
 			default:
 				warning("unknown ALU operation: %u", (unsigned)ALU_OP(instruction));
 			}
@@ -831,15 +725,8 @@ int h2_run(h2_t *h, h2_io_t *io)
 			if(instruction & T_TO_N)
 				h->dstk[h->sp % STK_SIZE] = h->tos;
 
-			if(instruction & N_TO_ADDR_T) {
-				if((h->tos & 0x4000) && ALU_OP(instruction) != ALU_OP_T_LOAD) {
-					if(h->tos & 0x1)
-						warning("unaligned register write: %04x <- %04x", (unsigned)h->tos, (unsigned)nos);
-					io->out(io->soc, h->tos & ~0x1, nos);
-				} else {
-					h->core[(h->tos >> 1) % MAX_CORE] = nos;
-				}
-			}
+			if(instruction & N_TO_ADDR_T)
+				h->core[(h->tos >> 1)] = nos;
 
 			h->tos = tos;
 			h->pc = npc;
@@ -848,7 +735,7 @@ int h2_run(h2_t *h, h2_io_t *io)
 			h->pc = address;
 		} else if (IS_0BRANCH(instruction)) {
 			if(!dpop(h))
-				h->pc = address % MAX_CORE;
+				h->pc = address % MAX_PROGRAM;
 			else
 				h->pc = pc_plus_one;
 		} else if (IS_BRANCH(instruction)) {
@@ -969,7 +856,7 @@ static const char *keywords[] =
 typedef struct {
 	union {
 		char *id;
-		word_t number;
+		uint16_t number;
 	} p;
 	unsigned location;
 	unsigned line;
@@ -1083,7 +970,7 @@ static int _syntax_error(lexer_t *l,
 
 #define syntax_error(LEXER, ...) _syntax_error(LEXER, __func__, __LINE__, ## __VA_ARGS__)
 
-static word_t map_char_to_number(int c)
+static uint16_t map_char_to_number(int c)
 {
 	if(c >= '0' && c <= '9')
 		return c - '0';
@@ -1102,7 +989,7 @@ static bool numeric(int c, int base)
 	return isxdigit(c);
 }
 
-static int number(char *s, word_t *o, size_t length)
+static int number(char *s, uint16_t *o, size_t length)
 {
 	size_t i = 0, start = 0;
 	uint32_t out = 0;
@@ -1142,7 +1029,7 @@ static void lexer(lexer_t *l)
 	size_t i;
 	int ch;
 	token_e sym;
-	word_t lit = 0;
+	uint16_t lit = 0;
 	assert(l);
 	ch = next_char(l);
 	l->token = token_new(LEX_ERROR, l->line);
@@ -1292,7 +1179,7 @@ static const char *names[] = {
 typedef struct node_t  {
 	parse_e type;
 	size_t length;
-	word_t bits; /*general use bits*/
+	uint16_t bits; /*general use bits*/
 	token_t *token, *value;
 	struct node_t *o[];
 } node_t;
@@ -1739,23 +1626,23 @@ typedef struct {
 	bool in_definition;
 	bool start_defined;
 	bool built_in_words_defined;
-	word_t start;
-	word_t mode;
-	word_t pwd; /* previous word register */
-	word_t fence; /* mark a boundary before which optimization cannot take place */
+	uint16_t start;
+	uint16_t mode;
+	uint16_t pwd; /* previous word register */
+	uint16_t fence; /* mark a boundary before which optimization cannot take place */
 	symbol_t *do_r_minus_one;
 	symbol_t *do_next;
 	symbol_t *do_var;
 	symbol_t *do_const;
 } assembler_t;
 
-static void update_fence(assembler_t *a, word_t pc)
+static void update_fence(assembler_t *a, uint16_t pc)
 {
 	assert(a);
 	a->fence = MAX(a->fence, pc);
 }
 
-static void generate(h2_t *h, assembler_t *a, word_t instruction)
+static void generate(h2_t *h, assembler_t *a, uint16_t instruction)
 {
 	assert(h);
 	assert(a);
@@ -1767,7 +1654,7 @@ static void generate(h2_t *h, assembler_t *a, word_t instruction)
 	/** @note This implements two ad-hoc optimizations, both related to
 	 * CODE_EXIT, they should be replaced by a generic peep hole optimizer */
 	if(a->mode & MODE_OPTIMIZATION_ON && h->pc) {
-		word_t previous = h->core[h->pc - 1];
+		uint16_t previous = h->core[h->pc - 1];
 		if(((h->pc - 1) > a->fence) && IS_ALU_OP(previous) && (instruction == CODE_EXIT)) {
 			/* merge the CODE_EXIT instruction with the previous instruction if it is possible to do so */
 			if(!(previous & R_TO_PC) && !(previous & MK_RSTACK(DELTA_N1))) {
@@ -1791,26 +1678,26 @@ static void generate(h2_t *h, assembler_t *a, word_t instruction)
 	h->core[h->pc++] = instruction;
 }
 
-static word_t here(h2_t *h, assembler_t *a)
+static uint16_t here(h2_t *h, assembler_t *a)
 {
 	assert(h);
-	assert(h->pc < MAX_CORE);
+	assert(h->pc < MAX_PROGRAM);
 	update_fence(a, h->pc);
 	return h->pc;
 }
 
-static word_t hole(h2_t *h, assembler_t *a)
+static uint16_t hole(h2_t *h, assembler_t *a)
 {
 	assert(h);
-	assert(h->pc < MAX_CORE);
+	assert(h->pc < MAX_PROGRAM);
 	here(h, a);
 	return h->pc++;
 }
 
-static void fix(h2_t *h, word_t hole, word_t patch)
+static void fix(h2_t *h, uint16_t hole, uint16_t patch)
 {
 	assert(h);
-	assert(hole < MAX_CORE);
+	assert(hole < MAX_PROGRAM);
 	h->core[hole] = patch;
 }
 
@@ -1818,8 +1705,8 @@ static void fix(h2_t *h, word_t hole, word_t patch)
 
 static void generate_jump(h2_t *h, assembler_t *a, symbol_table_t *t, token_t *tok, parse_e type, error_t *e)
 {
-	word_t or = 0;
-	word_t addr = 0;
+	uint16_t or = 0;
+	uint16_t addr = 0;
 	symbol_t *s;
 	assert(h);
 	assert(t);
@@ -1840,7 +1727,7 @@ static void generate_jump(h2_t *h, assembler_t *a, symbol_table_t *t, token_t *t
 		fatal("invalid jump target token type");
 	}
 
-	if(addr > MAX_CORE)
+	if(addr > MAX_PROGRAM)
 		assembly_error(e, "invalid jump address: %"PRId16, addr);
 
 	switch(type) {
@@ -1853,7 +1740,7 @@ static void generate_jump(h2_t *h, assembler_t *a, symbol_table_t *t, token_t *t
 	generate(h, a, or | addr);
 }
 
-static void generate_literal(h2_t *h, assembler_t *a, word_t number)
+static void generate_literal(h2_t *h, assembler_t *a, uint16_t number)
 {
 	if(number & OP_LITERAL) {
 		number = ~number;
@@ -1864,7 +1751,7 @@ static void generate_literal(h2_t *h, assembler_t *a, word_t number)
 	}
 }
 
-static word_t lexer_to_alu_op(token_e t)
+static uint16_t lexer_to_alu_op(token_e t)
 {
 	assert(t >= LEX_DUP && t <= LEX_RDROP);
 	switch(t) {
@@ -1876,7 +1763,7 @@ static word_t lexer_to_alu_op(token_e t)
 	return 0;
 }
 
-static word_t literal_or_symbol_lookup(token_t *token, symbol_table_t *t, error_t *e)
+static uint16_t literal_or_symbol_lookup(token_t *token, symbol_table_t *t, error_t *e)
 {
 	symbol_t *s = NULL;
 	assert(token);
@@ -1891,18 +1778,18 @@ static word_t literal_or_symbol_lookup(token_t *token, symbol_table_t *t, error_
 	return s->value;
 }
 
-static word_t pack_16(const char lb, const char hb)
+static uint16_t pack_16(const char lb, const char hb)
 {
-	return (((word_t)hb) << 8) | (word_t)lb;
+	return (((uint16_t)hb) << 8) | (uint16_t)lb;
 }
 
-static word_t pack_string(h2_t *h, assembler_t *a, const char *s, error_t *e)
+static uint16_t pack_string(h2_t *h, assembler_t *a, const char *s, error_t *e)
 {
 	assert(h);
 	assert(s);
 	size_t l = strlen(s);
 	size_t i = 0;
-	word_t r = h->pc;
+	uint16_t r = h->pc;
 	if(l > 255)
 		assembly_error(e, "string \"%s\" is too large (%zu > 255)", s, l);
 	h->core[hole(h, a)] = pack_16(l, s[0]);
@@ -1914,7 +1801,7 @@ static word_t pack_string(h2_t *h, assembler_t *a, const char *s, error_t *e)
 	return r;
 }
 
-static word_t symbol_special(h2_t *h, assembler_t *a, const char *id, error_t *e)
+static uint16_t symbol_special(h2_t *h, assembler_t *a, const char *id, error_t *e)
 {
 	static const char *special[] = {
 		"$pc",
@@ -1953,7 +1840,7 @@ typedef struct {
 	bool inline_bit;
 	bool hidden;
 	bool compile;
-	word_t code[32];
+	uint16_t code[32];
 } built_in_words_t;
 
 static built_in_words_t built_in_words[] = {
@@ -1991,7 +1878,7 @@ static void generate_loop_decrement(h2_t *h, assembler_t *a, symbol_table_t *t)
 
 static void assemble(h2_t *h, assembler_t *a, node_t *n, symbol_table_t *t, error_t *e)
 {
-	word_t hole1, hole2;
+	uint16_t hole1, hole2;
 	assert(h);
 	assert(t);
 	assert(e);
@@ -1999,7 +1886,7 @@ static void assemble(h2_t *h, assembler_t *a, node_t *n, symbol_table_t *t, erro
 	if(!n)
 		return;
 
-	if(h->pc > MAX_CORE)
+	if(h->pc > MAX_PROGRAM)
 		assembly_error(e, "PC/Dictionary overflow: %"PRId16, h->pc);
 
 	switch(n->type) {
@@ -2175,7 +2062,7 @@ static void assemble(h2_t *h, assembler_t *a, node_t *n, symbol_table_t *t, erro
 		break;
 	case SYM_SET:
 	{
-		word_t location, value;
+		uint16_t location, value;
 		symbol_t *l = NULL;
 		location = literal_or_symbol_lookup(n->token, t, e);
 
@@ -2221,7 +2108,7 @@ static void assemble(h2_t *h, assembler_t *a, node_t *n, symbol_table_t *t, erro
 				continue;
 
 			if(!built_in_words[i].hidden) {
-				word_t pwd = a->pwd;
+				uint16_t pwd = a->pwd;
 				hole1 = hole(h, a);
 				if(built_in_words[i].inline_bit)
 					pwd |= (DEFINE_INLINE << 13);
@@ -2376,7 +2263,6 @@ static int assemble_run_command(command_args_t *cmd, FILE *input, FILE *output, 
 	assert(cmd);
 	assert(cmd->nvram);
 	h2_t *h = NULL;
-	h2_io_t *io = NULL;
 	int r = 0;
 
 	if(assemble) {
@@ -2390,16 +2276,14 @@ static int assemble_run_command(command_args_t *cmd, FILE *input, FILE *output, 
 	if(!h)
 		return -1;
 
-	io = h2_io_new();
-
-	ram_load_and_transfer(io, cmd->nvram);
+	/*ram_load_and_transfer(io, cmd->nvram);*/
 	h->pc = START_ADDR;
 	debug_note(cmd);
-	r = h2_run(h, io);
-	nvram_save(io, cmd->nvram);
+	r = h2_run(h);
+	/*@todo save atexit*/
+	/*nvram_save(io, cmd->nvram);*/
 
 	h2_free(h);
-	h2_io_free(io);
 	return r;
 }
 
@@ -2418,7 +2302,7 @@ int command(command_args_t *cmd, FILE *input, FILE *output, symbol_table_t *symb
 	return -1;
 }
 
-static const char *nvram_file = FLASH_INIT_FILE;
+static const char *nvram_file = FORTH_BLOCK;
 
 int main(int argc, char **argv)
 {

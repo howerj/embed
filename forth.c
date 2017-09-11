@@ -1,6 +1,5 @@
 #include <assert.h>
 #include <errno.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -13,35 +12,13 @@
 #define SP0   (8192u)
 #define RP0   (8256u)
 
-#define ALU_OP_LENGTH   (5u)
-#define ALU_OP_START    (8u)
-#define ALU_OP(INST)    (((INST) >> ALU_OP_START) & ((1 << ALU_OP_LENGTH) - 1))
-
-#define DSTACK_LENGTH   (2u)
-#define DSTACK_START    (0u)
-#define DSTACK(INST)    (((INST) >> DSTACK_START) & ((1 << DSTACK_LENGTH) - 1))
-
-#define RSTACK_LENGTH   (2u)
-#define RSTACK_START    (2u)
-#define RSTACK(INST)    (((INST) >> RSTACK_START) & ((1 << RSTACK_LENGTH) - 1))
-
-#define R_TO_PC_BIT_INDEX     (4u)
-#define N_TO_ADDR_T_BIT_INDEX (5u)
-#define T_TO_R_BIT_INDEX      (6u)
-#define T_TO_N_BIT_INDEX      (7u)
-
-#define R_TO_PC         (1u << R_TO_PC_BIT_INDEX)
-#define N_TO_ADDR_T     (1u << N_TO_ADDR_T_BIT_INDEX)
-#define T_TO_R          (1u << T_TO_R_BIT_INDEX)
-#define T_TO_N          (1u << T_TO_N_BIT_INDEX)
-
 typedef struct {
-	uint16_t core[CORE/2]; /**< main memory */
-	uint16_t pc;  /**< program counter */
-	uint16_t tos; /**< top of stack */
-	uint16_t rp;  /**< return stack pointer */
-	uint16_t sp;  /**< variable stack pointer */
-} h2_t; /**< state of the H2 CPU */
+	uint16_t core[CORE/2];
+	uint16_t pc;
+	uint16_t tos;
+	uint16_t rp;
+	uint16_t sp;
+} forth_t;
 
 #ifdef __unix__
 #include <unistd.h>
@@ -141,7 +118,7 @@ static int binary_memory_save(FILE *output, uint16_t *p, size_t length)
 	return 0;
 }
 
-static int load(h2_t *h, const char *name)
+static int load(forth_t *h, const char *name)
 {
 	assert(h);
 	assert(name);
@@ -153,7 +130,7 @@ static int load(h2_t *h, const char *name)
 	return r;
 }
 
-static int save(h2_t *h, const char *name, size_t length)
+static int save(forth_t *h, const char *name, size_t length)
 {
 	FILE *output = NULL;
 	int r = 0;
@@ -170,34 +147,30 @@ static int save(h2_t *h, const char *name, size_t length)
 	return r;
 }
 
-static inline void dpush(h2_t *h, const uint16_t v)
+static inline void dpush(forth_t *h, const uint16_t v)
 {
 	h->sp++;
 	h->core[h->sp] = h->tos;
 	h->tos = v;
 }
 
-static inline uint16_t dpop(h2_t *h)
+static inline uint16_t dpop(forth_t *h)
 {
 	uint16_t r = h->tos;
 	h->tos = h->core[h->sp--];
 	return r;
 }
 
-static inline void rpush(h2_t *h, const uint16_t r)
+static inline void rpush(forth_t *h, const uint16_t r)
 {
 	h->rp++;
 	h->core[h->rp] = r;
 }
 
-static inline uint16_t stack_delta(uint16_t d)
+int forth(forth_t *h)
 {
-	static const uint16_t i[4] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
-	return i[d];
-}
+	static const uint16_t delta[4] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
 
-int h2_run(h2_t *h)
-{
 	for(;;) {
 		uint16_t instruction = h->core[h->pc];
 		uint16_t literal     = instruction & 0x7FFF;
@@ -208,16 +181,16 @@ int h2_run(h2_t *h)
 			dpush(h, literal);
 			h->pc = pc_plus_one;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
-			uint16_t rd  = stack_delta(RSTACK(instruction));
-			uint16_t dd  = stack_delta(DSTACK(instruction));
+			uint16_t rd  = delta[(instruction >> 2) & 0x3];
+			uint16_t dd  = delta[ instruction       & 0x3];
 			uint16_t nos = h->core[h->sp];
 			uint16_t tos = h->tos;
 			uint16_t npc = pc_plus_one;
 
-			if(instruction & R_TO_PC)
+			if(instruction & 0x10)
 				npc = h->core[h->rp] >> 1;
 
-			switch(ALU_OP(instruction)) {
+			switch((instruction >> 8u) & 0x1f) {
 			case  0: /* tos = tos; */                      break;
 			case  1: tos = nos;                            break;
 			case  2: tos += nos;                           break;
@@ -245,13 +218,13 @@ int h2_run(h2_t *h)
 			h->sp += dd;
 			h->rp += rd;
 
-			if(instruction & T_TO_R)
+			if(instruction & 0x40)
 				h->core[h->rp] = h->tos;
 
-			if(instruction & T_TO_N)
+			if(instruction & 0x80)
 				h->core[h->sp] = h->tos;
 
-			if(instruction & N_TO_ADDR_T)
+			if(instruction & 0x20)
 				h->core[(h->tos >> 1)] = nos;
 
 			h->tos = tos;
@@ -270,12 +243,12 @@ int h2_run(h2_t *h)
 
 int main(void)
 {
-	static h2_t h;
+	static forth_t h;
 	h.pc = 0;
 	h.rp = RP0;
 	h.sp = SP0;
 	memset(h.core, 0, CORE);
 	load(&h, FORTH_BLOCK);
-	return h2_run(&h);
+	return forth(&h);
 }
 

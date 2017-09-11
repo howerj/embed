@@ -591,11 +591,10 @@ choice words that need depth checking to get quite a large coverage )
 : file ' pace ' "drop" ' ktap xio ;
 : star $2A emit ; hidden
 : rx? _rx? [-1] ; ( @todo remove the need for this )
-: tx! _tx! ; ( @todo remove the need for this )
 \ : [conceal] dup 33 127 within if drop star else tx! then ; hidden
 \ : conceal ' .ok ' [conceal] ' ktap xio ;
 : hand ' .ok  '  emit  ' ktap xio ; hidden
-: console ' rx? _key? ! ' tx! _emit ! hand ;
+: console ' rx? _key? ! ' "tx!" _emit ! hand ;
 : io! console ; ( -- : initialize I/O )
 
 : hi io! hex cr hi-string print ver <# # # 46 hold # #> type cr here . .free cr [ ;
@@ -912,10 +911,10 @@ start:
 .set _set-order [set-order]
 .set _words    [words]
 .set _key?     rx?         ( execution vector of ?key )
-.set _emit     tx!         ( execution vector of emit )
+.set _emit     "tx!"       ( execution vector of emit )
 .set _expect   accept      ( execution vector of expect, default to 'accept'. )
 .set _tap      ktap        ( execution vector of tap,    default the ktap. )
-.set _echo     tx!         ( execution vector of echo )
+.set _echo     "tx!"       ( execution vector of echo )
 .set _prompt   .ok         ( execution vector of prompt, default to '.ok'. )
 .set _boot     0           ( @execute does nothing if zero )
 .set _message  message     ( execution vector of _message, used in ?error )

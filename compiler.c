@@ -1,9 +1,7 @@
 /** @file      h2.c
  *  @brief     Compile for a small Forth
  *  @copyright Richard James Howe (2017)
- *  @license   MIT
- *
- * The project can be found at: https://github.com/howerj/forth-cpu */
+ *  @license   MIT */
 
 /* ========================== Preamble: Types, Macros, Globals ============= */
 
@@ -191,9 +189,9 @@ typedef enum {
 	X(RDEPTH, "rp@",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_RDEPTH)  | T_TO_N       | MK_DSTACK(DELTA_1)))\
 	X(TE0,    "0=",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_EQUAL_0)))\
 	X(NOP,    "nop",    false, (OP_ALU_OP | MK_CODE(ALU_OP_T)))\
-	X(BYE,    "(bye)",  false, (OP_ALU_OP | MK_CODE(ALU_OP_BYE)                    | MK_DSTACK(DELTA_N1)))\
-	X(RX,     "_rx?",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_RX)      | T_TO_N       | MK_DSTACK(DELTA_1)))\
-	X(TX,     "_tx!",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_TX)                     | MK_DSTACK(DELTA_N1)))\
+	X(BYE,    "(bye)",  false, (OP_ALU_OP | MK_CODE(ALU_OP_BYE)))\
+	X(RX,     "_rx?",   false, (OP_ALU_OP | MK_CODE(ALU_OP_RX)      | T_TO_N       | MK_DSTACK(DELTA_1)))\
+	X(TX,     "tx!",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_TX)                     | MK_DSTACK(DELTA_N1)))\
 	X(SAVE,   "save",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_SAVE)))\
 	X(RUP,    "rup",    false, (OP_ALU_OP | MK_CODE(ALU_OP_T))                     | MK_RSTACK(DELTA_1))\
 	X(RDROP,  "rdrop",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_T) | MK_RSTACK(DELTA_N1)))

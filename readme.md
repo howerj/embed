@@ -7,23 +7,34 @@
 | License   | MIT                       |
 | Email     | howe.r.j.89@gmail.com     |
 
+Available at <https://github.com/howerj/embed>
 
-This is a placeholder project for the moment, the idea is to take the H2
-emulator available as part of a hardware Forth CPU project (written in VHDL,
-targeting an FPGA, available at <https://github.com/howerj/forth-cpu>) and 
-make a C Forth from it. The Forth Virtual machine can be
-made to be very small, so it should be easy to embed and hide in other
-programs.
+This project was derived from a simulator for a Forth CPU available from here: 
+<https://github.com/howerj/forth-cpu>. The simulator and compiler have been
+modified so they can be used as a C like Forth for the PC.
 
-The idea would be to start with the Forth, and the Pseudo Forth compiler, from the
-original project and make itself hosting (apart from the C run time, which
-should be easy to port). The project will start out large and be cut down from
-their, become just a small C virtual machine and a block file.
+The project is a word in progress, but most of the system is in place.
 
-# To Do
+## To Do / Wish List
 
-* Remove the SRAM peripheral and make the first 65536 words non-volatile
-* Change size of a CPU word from a 16-bit value to a "uintptr\_t" type
-* Make a cross compiler with the Forth
-
-
+* Add error messages to generated block, as well as a simple help file
+* Make short example programs
+* Documentation of the project, some words, and the instruction set, as well as
+the memory layout
+* Make prepared images, as C code and as binary files
+* Test on Windows, the project has only been tested under Linux
+* Remove the compiler after a cross compiler has been made within the Forth
+interpreter
+* Make the interpreter I/O more portable (remove 'getch' and terminal
+manipulations)
+* Improve the compilation of "for...aft...then...next" constructs
+* Move headerless variables to after the stack area.
+* Add a way of directing the compiler to add blocks to the memory
+image it generates
+* A simple run length compressor would reduce the size of the blocks, as well
+as other simple memory compression techniques
+* Find a way to make simple command line utilities with this Forth, and
+possibly run blocks directly with a 'shebang' line and some hacks
+* The Format of Forth block file could be improved upon, instead of it just
+being a binary file, there is no way of identify the file at the moment, and
+there should be

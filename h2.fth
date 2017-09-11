@@ -43,7 +43,6 @@ constant iMemDin       $4002 hidden ( Memory input for reads )
 
 ( ======================== System Variables ================= )
 
-( @todo Place these locations at memory location 8192 + the stacks size )
 location _key?      0  ( -- c -1 | 0 : new character available? )
 location _emit      0  ( c -- : emit character )
 location _expect    0  ( "accept" vector )

@@ -229,27 +229,6 @@ static int indent(FILE *output, char c, unsigned i)
 	return 0;
 }
 
-static int string_to_long(int base, long *n, const char *s)
-{
-	char *end = NULL;
-	assert(base >= 0);
-	assert(base != 1);
-	assert(base <= 36);
-	assert(n);
-	assert(s);
-	errno = 0;
-	*n = strtol(s, &end, base);
-	return errno || *s == '\0' || *end != '\0';
-}
-
-static int string_to_cell(int base, uint16_t *n, const char *s)
-{
-	long n1 = 0;
-	int r = string_to_long(base, &n1, s);
-	*n = n1;
-	return r;
-}
-
 static char *duplicate(const char *str)
 {
 	char *r;
@@ -356,56 +335,6 @@ static int save(h2_t *h, const char *name)
 		r = -1;
 	}
 	return r;
-}
-
-static int memory_load(FILE *input, uint16_t *p, size_t length)
-{
-	assert(input);
-	assert(p);
-	char line[80] = {0}; /*more than enough!*/
-	size_t i = 0;
-
-	for(;fgets(line, sizeof(line), input); i++) {
-		int r;
-		if(i >= length) {
-			error("file contains too many lines: %zu", i);
-			return -1;
-		}
-		r = string_to_cell(16, &p[i], line);
-		if(!r) {
-			error("invalid line - expected hex string: %s", line);
-			return -1;
-		}
-		debug("%zu %u", i, (unsigned)p[i]);
-	}
-
-	return 0;
-}
-
-static int memory_save(FILE *output, uint16_t *p, size_t length)
-{
-	assert(output);
-	assert(p);
-	for(size_t i = 0; i < length; i++)
-		if(fprintf(output, "%04"PRIx16"\n", p[i]) < 0) {
-			error("failed to write line: %"PRId16, i);
-			return -1;
-		}
-	return 0;
-}
-
-static int h2_load(h2_t *h, FILE *hexfile)
-{
-	assert(h);
-	assert(hexfile);
-	return memory_load(hexfile, h->core, MAX_PROGRAM);
-}
-
-static int h2_save(h2_t *h, FILE *output, bool full)
-{
-	assert(h);
-	assert(output);
-	return memory_save(output, h->core, full ? MAX_PROGRAM : h->pc);
 }
 
 #ifdef __unix__
@@ -570,8 +499,7 @@ static inline void dpush(h2_t *h, uint16_t v)
 static inline uint16_t dpop(h2_t *h)
 {
 	uint16_t r = h->tos;
-	h->tos = h->core[h->sp];
-	h->sp--;
+	h->tos = h->core[h->sp--];
 	return r;
 }
 
@@ -2098,31 +2026,6 @@ static h2_t *code(node_t *n, symbol_table_t *symbols)
 	return h;
 }
 
-static int h2_assemble_file(FILE *input, FILE *output, symbol_table_t *symbols)
-{
-	int r = 0;
-	node_t *n;
-	assert(input);
-	assert(output);
-
-	n = parse(input);
-
-	if(log_level >= LOG_DEBUG)
-		node_print(stderr, n, false, 0);
-	if(n) {
-		h2_t *h = code(n, symbols);
-		if(h)
-			r = h2_save(h, output, false);
-		else
-			r = -1;
-		h2_free(h);
-	} else {
-		r = -1;
-	}
-	node_free(n);
-	return r;
-}
-
 static h2_t *h2_assemble_core(FILE *input, symbol_table_t *symbols)
 {
 	assert(input);
@@ -2140,206 +2043,26 @@ static h2_t *h2_assemble_core(FILE *input, symbol_table_t *symbols)
 
 /* ========================== Main ========================================= */
 
-typedef enum {
-	DEFAULT_COMMAND,
-	ASSEMBLE_COMMAND,
-	RUN_COMMAND,
-	ASSEMBLE_RUN_COMMAND
-} command_e;
-
-typedef struct {
-	command_e cmd;
-	long steps;
-	bool full_disassembly;
-	bool debug_mode;
-	bool hacks;
-	const char *nvram;
-} command_args_t;
-
-static const char *help = "\
-usage ./h2 [-hvarRT] [-s number] [-L symbol.file] [-S symbol.file] (file.hex|file.fth)\n\n\
-Brief:     A H2 CPU Assembler, disassembler and Simulator.\n\
-Author:    Richard James Howe\n\
-Site:      https://github.com/howerj/embed\n\
-License:   MIT\n\
-Copyright: Richard James Howe (2017)\n\
-Options:\n\n\
-\t-\tstop processing options, following arguments are files\n\
-\t-h\tprint this help message and exit\n\
-\t-v\tincrease logging level\n\
-\t-T\tEnter debug mode when running simulation\n\
-\t-a\tassemble file\n\
-\t-H\tenable hacks to make the simulation easier to use\n\
-\t-r\trun hex file\n\
-\t-R\tassemble file then run it\n\
-\t-L #\tload symbol file\n\
-\t-S #\tsave symbols to file\n\
-\t-s #\tnumber of steps to run simulation (0 = forever)\n\
-\t-n #\tspecify nvram file\n\
-\tfile\thex or forth file to process\n\n\
-Options must precede any files given, if a file has not been\n\
-given as arguments input is taken from stdin. Output is to\n\
-stdout. Program returns zero on success, non zero on failure.\n\n\
-";
-
-static void debug_note(command_args_t *cmd)
-{
-	if(cmd->debug_mode)
-		note("entering debug mode");
-	else
-		note("running for %u cycles (0 = forever)", (unsigned)cmd->steps);
-}
-
-static int assemble_run_command(command_args_t *cmd, FILE *input, FILE *output, symbol_table_t *symbols, bool assemble)
-{
-	assert(input);
-	assert(output);
-	assert(cmd);
-	assert(cmd->nvram);
-	h2_t *h = NULL;
-	int r = 0;
-
-	if(assemble) {
-		h = h2_assemble_core(input, symbols);
-	} else {
-		h = h2_new(START_ADDR);
-		if(h2_load(h, input) < 0)
-			return -1;
-	}
-
-	if(!h)
-		return -1;
-
-	/*ram_load_and_transfer(io, cmd->nvram);*/
-	h->pc = START_ADDR;
-	debug_note(cmd);
-	r = h2_run(h);
-	/*@todo save atexit*/
-	/*nvram_save(io, cmd->nvram);*/
-
-	h2_free(h);
-	return r;
-}
-
-int command(command_args_t *cmd, FILE *input, FILE *output, symbol_table_t *symbols)
-{
-	assert(input);
-	assert(output);
-	assert(cmd);
-	switch(cmd->cmd) {
-	case DEFAULT_COMMAND:      /* fall through */
-	case ASSEMBLE_COMMAND:     return h2_assemble_file(input, output, symbols);
-	case RUN_COMMAND:          return assemble_run_command(cmd, input, output, symbols, false);
-	case ASSEMBLE_RUN_COMMAND: return assemble_run_command(cmd, input, output, symbols, true);
-	default:                   fatal("invalid command: %d", cmd->cmd);
-	}
-	return -1;
-}
-
-static const char *nvram_file = FORTH_BLOCK;
-
 int main(int argc, char **argv)
 {
-	int i;
-	const char *optarg = NULL;
-	command_args_t cmd;
-	symbol_table_t *symbols = NULL;
-	FILE *symfile = NULL;
-	FILE *newsymfile = NULL;
-	FILE *input = NULL;
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.steps = DEFAULT_STEPS;
-	cmd.nvram = nvram_file;
-	cmd.hacks = true;
-		
-#ifdef _WIN32
-	/* Windows Only: Put the used standard streams into binary mode.
-	 * Text mode sucks. */
-	_setmode(_fileno(stdin),  _O_BINARY);
-	_setmode(_fileno(stdout), _O_BINARY);
-	_setmode(_fileno(stderr), _O_BINARY);
-#endif
-
-	for(i = 1; i < argc && argv[i][0] == '-'; i++) {
-
-		if(strlen(argv[i]) > 2) {
-			error("Only one option allowed at a time (got %s)", argv[i]);
-			goto fail;
-		}
-
-		switch(argv[i][1]) {
-		case '\0':
-			goto done; /* stop processing options */
-		case 'h':
-			fprintf(stderr, "%s\n", help);
+	int r = 0;
+	h2_t *h = NULL;
+	if(argc == 2) {
+		FILE *input = fopen_or_die(argv[1], "rb");
+		h = h2_assemble_core(input, NULL);
+		if(!h)
 			return -1;
-		case 'v':  /* increase verbosity */
-			log_level += log_level < LOG_ALL_MESSAGES ? 1 : 0;
-			break;
-		case 'a':
-			if(cmd.cmd)
-				goto fail;
-			cmd.cmd = ASSEMBLE_COMMAND;
-			break;
-		case 'r':
-			if(cmd.cmd)
-				goto fail;
-			cmd.cmd = RUN_COMMAND;
-			break;
-		case 'T':
-			cmd.debug_mode = true;
-			break;
-		case 'R':
-			if(cmd.cmd)
-				goto fail;
-			cmd.cmd = ASSEMBLE_RUN_COMMAND;
-			break;
-		case 's':
-			if(i >= (argc - 1))
-				goto fail;
-			optarg = argv[++i];
-			if(string_to_long(0, &cmd.steps, optarg))
-				goto fail;
-			break;
-		case 'n':
-			if(i >= (argc - 1))
-				goto fail;
-			cmd.nvram = argv[++i];
-			note("nvram file %s", cmd.nvram);
-			break;
-		default:
-		fail:
-			fatal("invalid argument '%s'\n%s\n", argv[i], help);
-		}
+		fclose(input);
+		save(h, FORTH_BLOCK);
+	} else {
+		h = h2_new(START_ADDR);
+		load(h, FORTH_BLOCK);
+		r = h2_run(h);
+		/*if(!r)
+			save(h, FORTH_BLOCK);*/
 	}
-	if(!symbols)
-		symbols = symbol_table_new();
-
-done:
-	if(i == argc) {
-		if(command(&cmd, stdin, stdout, symbols) < 0)
-			fatal("failed to process standard input");
-		return 0;
-	}
-
-	if(i < (argc - 1))
-		fatal("more than one file argument given");
-
-	input = fopen_or_die(argv[i], "rb");
-	if(command(&cmd, input, stdout, symbols) < 0)
-		fatal("failed to process file: %s", argv[i]);
-	/**@note keeping "input" open until the command exits locks the
-	 * file for longer than is necessary under Windows */
-	fclose(input);
-
-	if(newsymfile) {
-		symbol_table_print(symbols, newsymfile);
-		fclose(newsymfile);
-	}
-	symbol_table_free(symbols);
-	if(symfile)
-		fclose(symfile);
-	return 0;
+	h2_free(h);
+	return r;
 }
 
 /* ========================== Main ========================================= */

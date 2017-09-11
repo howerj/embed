@@ -6,8 +6,8 @@ all: embed
 embed: h2.c h2.h
 	${CC} ${CFLAGS} $< -o $@
 
-%.hex: %.fth embed
-	./embed -a $< > $@
+forth.blk: embed h2.fth
+	./$^
 
-run: h2.hex embed
-	./embed -r h2.hex
+run: forth.blk
+	./embed

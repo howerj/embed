@@ -1,13 +1,19 @@
 CFLAGS=-O3 -std=c99 -Wall -Wextra
 CC=gcc
 
-all: embed
+all: forth forth.blk
 
-embed: h2.c h2.h
+compiler: compiler.c
 	${CC} ${CFLAGS} $< -o $@
 
-forth.blk: embed h2.fth
+forth: forth.c
+	${CC} ${CFLAGS} $< -o $@
+
+forth.blk: compiler eforth.fth
 	./$^
 
-run: forth.blk
-	./embed
+run: forth forth.blk
+	./forth
+
+clean:
+	rm -fv compiler forth

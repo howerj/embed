@@ -13,11 +13,7 @@
 #define RP0   (8256u)
 
 typedef struct {
-	uint16_t core[CORE/2];
-	uint16_t pc;
-	uint16_t tos;
-	uint16_t rp;
-	uint16_t sp;
+	uint16_t core[CORE/sizeof(uint16_t)];
 } forth_t;
 
 #ifdef __unix__
@@ -147,95 +143,79 @@ static int save(forth_t *h, const char *name, size_t length)
 	return r;
 }
 
-static inline void dpush(forth_t *h, const uint16_t v)
-{
-	h->sp++;
-	h->core[h->sp] = h->tos;
-	h->tos = v;
-}
-
-static inline uint16_t dpop(forth_t *h)
-{
-	uint16_t r = h->tos;
-	h->tos = h->core[h->sp--];
-	return r;
-}
-
-static inline void rpush(forth_t *h, const uint16_t r)
-{
-	h->rp++;
-	h->core[h->rp] = r;
-}
-
 int forth(forth_t *h)
 {
 	static const uint16_t delta[4] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
-
+	register uint16_t pc = 0, tos = 0, rp = RP0, sp = SP0;
+	uint16_t *core = h->core;
 	for(;;) {
-		uint16_t instruction = h->core[h->pc];
+		uint16_t instruction = core[pc];
 		uint16_t literal     = instruction & 0x7FFF;
 		uint16_t address     = instruction & 0x1FFF;
-		uint16_t pc_plus_one = h->pc + 1;
+		uint16_t pc_plus_one = pc + 1;
 
+		//fprintf(stderr, "%04x\n", (unsigned)pc);
 		if(0x8000 & instruction) { /* literal */
-			dpush(h, literal);
-			h->pc = pc_plus_one;
+			core[++sp] = tos;
+			tos        = literal;
+			pc         = pc_plus_one;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
-			uint16_t rd  = delta[(instruction >> 2) & 0x3];
-			uint16_t dd  = delta[ instruction       & 0x3];
-			uint16_t nos = h->core[h->sp];
-			uint16_t tos = h->tos;
-			uint16_t npc = pc_plus_one;
+			uint16_t rd   = delta[(instruction >> 2) & 0x3];
+			uint16_t dd   = delta[ instruction       & 0x3];
+			uint16_t nos  = core[sp];
+			uint16_t _tos = tos;
+			uint16_t npc  = pc_plus_one;
 
 			if(instruction & 0x10)
-				npc = h->core[h->rp] >> 1;
+				npc = core[rp] >> 1;
 
 			switch((instruction >> 8u) & 0x1f) {
-			case  0: /* tos = tos; */                      break;
-			case  1: tos = nos;                            break;
-			case  2: tos += nos;                           break;
-			case  3: tos &= nos;                           break;
-			case  4: tos |= nos;                           break;
-			case  5: tos ^= nos;                           break;
-			case  6: tos = ~tos;                           break;
-			case  7: tos = -(tos == nos);                  break;
-			case  8: tos = -((int16_t)nos < (int16_t)tos); break;
-			case  9: tos = nos >> tos;                     break;
-			case 10: tos--;                                break;
-			case 11: tos = h->core[h->rp];                 break;
-			case 12: tos = h->core[(h->tos >> 1)];         break;
-			case 13: tos = nos << tos;                     break;
-			case 14: tos = h->sp - SP0;                    break;
-			case 15: tos = -(nos < tos);                   break;
-			case 16: tos = wrap_getch();                   break;
-			case 17: putch(tos); tos = nos;                break;
-			case 18: save(h, FORTH_BLOCK, CORE/2);         break;
-			case 19: return tos;
-			case 20: tos = h->rp - RP0;                    break;
-			case 21: tos = -(tos == 0);                    break;
+			case  0: _tos = tos;                            break;
+			case  1: _tos = nos;                            break;
+			case  2: _tos += nos;                           break;
+			case  3: _tos &= nos;                           break;
+			case  4: _tos |= nos;                           break;
+			case  5: _tos ^= nos;                           break;
+			case  6: _tos = ~tos;                           break;
+			case  7: _tos = -(tos == nos);                  break;
+			case  8: _tos = -((int16_t)nos < (int16_t)tos); break;
+			case  9: _tos = nos >> tos;                     break;
+			case 10: _tos--;                                break;
+			case 11: _tos = core[rp];                       break;
+			case 12: _tos = core[(tos >> 1)];               break;
+			case 13: _tos = nos << tos;                     break;
+			case 14: _tos = sp - SP0;                       break;
+			case 15: _tos = -(nos < tos);                   break;
+			case 16: _tos = wrap_getch();                   break;
+			case 17: putch(tos); _tos = nos;                break;
+			case 18: save(h, FORTH_BLOCK, CORE/2);          break;
+			case 19: return _tos; /* @todo move this, make it the last instruction */
+			case 20: _tos = rp - RP0;                       break;
+			case 21: _tos = -(tos == 0);                    break;
 			}
 
-			h->sp += dd;
-			h->rp += rd;
+			sp += dd;
+			rp += rd;
 
 			if(instruction & 0x40)
-				h->core[h->rp] = h->tos;
+				core[rp] = tos;
 
 			if(instruction & 0x80)
-				h->core[h->sp] = h->tos;
+				core[sp] = tos;
 
 			if(instruction & 0x20)
-				h->core[(h->tos >> 1)] = nos;
+				core[(tos >> 1)] = nos;
 
-			h->tos = tos;
-			h->pc  = npc;
+			tos = _tos;
+			pc  = npc;
 		} else if (0x4000 & instruction) { /* call */
-			rpush(h, pc_plus_one << 1);
-			h->pc = address;
+			core[++rp] = pc_plus_one << 1;
+			pc = address;
 		} else if (0x2000 & instruction) { /* 0branch */
-			h->pc = !dpop(h) ? address : pc_plus_one;
+			pc = !tos ? address : pc_plus_one;
+			tos = core[sp--];
 		} else { /* branch */
-			h->pc = address;
+			pc = address;
 		}
 	}
 	return 0;
@@ -244,9 +224,6 @@ int forth(forth_t *h)
 int main(void)
 {
 	static forth_t h;
-	h.pc = 0;
-	h.rp = RP0;
-	h.sp = SP0;
 	memset(h.core, 0, CORE);
 	load(&h, FORTH_BLOCK);
 	return forth(&h);

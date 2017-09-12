@@ -52,7 +52,7 @@ location _do_semi_colon   0
 ( ======================== System Constants ================= )
 
 ( ======================== System Variables ================= )
-location _key?      0  ( -- c -1 | 0 : new character available? )
+location _key       0  ( -- c : new character, blocking input )
 location _emit      0  ( c -- : emit character )
 location _expect    0  ( "accept" vector )
 location _tap       0  ( "tap" vector, for terminal handling )
@@ -143,8 +143,8 @@ constant l/b           16    hidden ( lines in a block )
 	swap over dup ( -2 and ) @ swap 1 and 0 = $ff xor
 	>r over xor r> and xor swap ( -2 and ) store drop ;
 : c, cp @ c! cp 1+! ;    ( c -- : store 'c' at next available location in the dictionary )
-: 40ns begin dup while 1- repeat drop ; hidden ( n -- : wait for 'n'*40ns + 30us )
-: ms for 25000 40ns next ; ( n -- : wait for 'n' milliseconds )
+\ : 40ns begin dup while 1- repeat drop ; hidden ( n -- : wait for 'n'*40ns + 30us )
+\ : ms for 25000 40ns next ; ( n -- : wait for 'n' milliseconds )
 : doNext r> r> ?dup if 1- >r @ >r exit then cell+ >r ; hidden
 
 : um+ ( w w -- w carry )
@@ -196,8 +196,7 @@ they can implemented in terms of instructions )
 : >char $7f and dup 127 =bl within if drop [char] _ then ; ( c -- c )
 : tib #tib cell+ @ ; hidden               ( -- a )
 : echo _echo @execute ; hidden            ( c -- )
-: key? _key? @execute ;                   ( -- c -1 | 0 )
-: key begin key? until ;                  ( -- c )
+: key _key @execute ;                     ( -- c )
 : allot cp +! ;                           ( u -- )
 : /string over min rot over + -rot - ;    ( b u1 u2 -- b u : advance a string u2 characters )
 : last context @ @ ;                      ( -- pwd )
@@ -589,14 +588,9 @@ choice words that need depth checking to get quite a large coverage )
 : pace 11 emit ; hidden
 : xio  ' accept _expect ! _tap ! _echo ! _prompt ! ; hidden
 : file ' pace ' "drop" ' ktap xio ;
-: star $2A emit ; hidden
-: rx? _rx? [-1] ; ( @todo remove the need for this )
-\ : [conceal] dup 33 127 within if drop star else tx! then ; hidden
-\ : conceal ' .ok ' [conceal] ' ktap xio ;
 : hand ' .ok  '  emit  ' ktap xio ; hidden
-: console ' rx? _key? ! ' "tx!" _emit ! hand ;
+: console ' "rx?" _key ! ' "tx!" _emit ! hand ;
 : io! console ; ( -- : initialize I/O )
-
 : hi io! hex cr hi-string print ver <# # # 46 hold # #> type cr here . .free cr [ ;
 
 ( ==================== Advanced I/O Control ========================== )
@@ -881,7 +875,7 @@ things, the 'decompiler' word could be called manually on an address if desired 
 : i 0 swap ia ;
 : u update ;
 : w words ;
-: yank pad c/l ;
+: yank pad c/l ; hidden
 : c [line] yank >r swap r> cmove ;
 : y [line] yank cmove ;
 : ct swap y c ;
@@ -905,16 +899,16 @@ start:
 
 .set cp  $pc
 
-.set _do_colon  ":"
+.set _do_colon      ":"
 .set _do_semi_colon ";"
-.set _forth     [forth]
-.set _set-order [set-order]
-.set _words    [words]
-.set _key?     rx?         ( execution vector of ?key )
-.set _emit     "tx!"       ( execution vector of emit )
-.set _expect   accept      ( execution vector of expect, default to 'accept'. )
-.set _tap      ktap        ( execution vector of tap,    default the ktap. )
-.set _echo     "tx!"       ( execution vector of echo )
-.set _prompt   .ok         ( execution vector of prompt, default to '.ok'. )
-.set _boot     0           ( @execute does nothing if zero )
-.set _message  message     ( execution vector of _message, used in ?error )
+.set _forth         [forth]
+.set _set-order     [set-order]
+.set _words         [words]
+.set _key           "rx?"      ( execution vector of ?key )
+.set _emit          "tx!"       ( execution vector of emit )
+.set _expect        accept      ( execution vector of expect, default to 'accept'. )
+.set _tap           ktap        ( execution vector of tap,    default the ktap. )
+.set _echo          "tx!"       ( execution vector of echo )
+.set _prompt        .ok         ( execution vector of prompt, default to '.ok'. )
+.set _boot          0           ( @execute does nothing if zero )
+.set _message       message     ( execution vector of _message, used in ?error )

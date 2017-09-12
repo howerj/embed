@@ -145,12 +145,12 @@ typedef enum {
 	ALU_OP_DEPTH,              /**< Depth of stack       */
 	ALU_OP_N_ULESS_T,          /**< Unsigned comparison  */
 
-	ALU_OP_RX,                 /**< Send byte            */
-	ALU_OP_TX,                 /**< Get byte             */
-	ALU_OP_SAVE,               /**< Save Image           */
-	ALU_OP_BYE,                /**< Return               */
 	ALU_OP_RDEPTH,             /**< R Stack Depth        */
 	ALU_OP_T_EQUAL_0,          /**< T == 0               */
+	ALU_OP_SAVE,               /**< Save Image           */
+	ALU_OP_TX,                 /**< Get byte             */
+	ALU_OP_RX,                 /**< Send byte            */
+	ALU_OP_BYE,                /**< Return               */
 } alu_code_e;
 
 #define DELTA_0  (0)

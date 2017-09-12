@@ -209,7 +209,7 @@ they can implemented in terms of instructions )
 : type begin dup while swap count emit swap 1- repeat 2drop ; ( b u -- : print a string )
 : $type begin dup while swap count >char emit swap 1- repeat 2drop ; hidden ( b u -- : print a string )
 : print count type ; hidden               ( b -- )
-: nuf? ( -- f ) key =cr = ;  ( -- f : true if 'cr' pressed, blocking )
+: nuf? ( -- f ) key =lf = ;  ( -- f : true if 'lf' pressed, blocking )
 : decimal? 48 58 within ; hidden            ( c -- f : decimal char? )
 : lowercase? [char] a [char] { within ; hidden  ( c -- f : is character lower case? )
 : uppercase? [char] A [char] [ within ; hidden  ( c -- f : is character upper case? )
@@ -312,7 +312,6 @@ choice words that need depth checking to get quite a large coverage )
 : octal  8 base ! ;                        ( -- )
 : .base base @ dup decimal base ! ; ( -- )
 
-
 : pack$ ( b u a -- a ) \ null fill
 	aligned dup >r over
 	dup 0 cell um/mod drop
@@ -327,7 +326,7 @@ choice words that need depth checking to get quite a large coverage )
 : tap dup echo over c! 1+ ; hidden ( bot eot cur c -- bot eot cur )
 
 : ktap ( bot eot cur c -- bot eot cur )
-	dup =cr xor
+	dup =lf ( <-- was =cr ) xor
 	if =bs xor
 		if =bl tap else ^h then
 		exit
@@ -588,9 +587,9 @@ choice words that need depth checking to get quite a large coverage )
 : pace 11 emit ; hidden
 : xio  ' accept _expect ! _tap ! _echo ! _prompt ! ; hidden
 : file ' pace ' "drop" ' ktap xio ;
-: hand ' .ok  '  emit  ' ktap xio ; hidden
+: hand ' .ok  ' "drop" ( <-- was emit )  ' ktap xio ; hidden
 : console ' "rx?" _key ! ' "tx!" _emit ! hand ;
-: io! console ; ( -- : initialize I/O )
+: io!  console ; ( -- : initialize I/O )
 : hi io! hex cr hi-string print ver <# # # 46 hold # #> type cr here . .free cr [ ;
 
 ( ==================== Advanced I/O Control ========================== )

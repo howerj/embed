@@ -1696,20 +1696,34 @@ static void assemble(h2_t *h, assembler_t *a, node_t *n, symbol_table_t *t, erro
 		break;
 	}
 	case SYM_FOR_AFT_THEN_NEXT:
-	/**@todo sort this out */
-		generate(h, a, CODE_TOR);
-		assemble(h, a, n->o[0], t, e);
-		hole1 = hole(h, a);
-		generate(h, a, CODE_RAT);
-		generate_loop_decrement(h, a, t);
-		hole2 = hole(h, a);
-		assemble(h, a, n->o[1], t, e);
-		fix(h, hole1, OP_BRANCH | (here(h, a)));
-		assemble(h, a, n->o[2], t, e);
-		generate(h, a, OP_BRANCH | (hole1 + 1));
-		fix(h, hole2, OP_0BRANCH | (here(h, a)));
-		generate(h, a, CODE_RDROP);
+	{
+		symbol_t *s = a->do_next ? a->do_next : symbol_table_lookup(t, "doNext");
+		if(s && a->mode & MODE_OPTIMIZATION_ON) {
+			generate(h, a, CODE_TOR);
+			assemble(h, a, n->o[0], t, e);
+			hole1 = hole(h, a);
+			hole2 = here(h, a);
+			assemble(h, a, n->o[1], t, e);
+			fix(h, hole1, OP_BRANCH | here(h, a));
+			assemble(h, a, n->o[2], t, e);
+			generate(h, a, OP_CALL | s->value);
+			generate(h, a, hole2 << 1);
+		} else {
+			generate(h, a, CODE_TOR);
+			assemble(h, a, n->o[0], t, e);
+			hole1 = hole(h, a);
+			generate(h, a, CODE_RAT);
+			generate_loop_decrement(h, a, t);
+			hole2 = hole(h, a);
+			assemble(h, a, n->o[1], t, e);
+			fix(h, hole1, OP_BRANCH | (here(h, a)));
+			assemble(h, a, n->o[2], t, e);
+			generate(h, a, OP_BRANCH | (hole1 + 1));
+			fix(h, hole2, OP_0BRANCH | (here(h, a)));
+			generate(h, a, CODE_RDROP);
+		}
 		break;
+	}
 	case SYM_BEGIN_WHILE_REPEAT:
 		hole1 = here(h, a);
 		assemble(h, a, n->o[0], t, e);

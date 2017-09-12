@@ -94,39 +94,6 @@ follows ('#' are numbers):
  -58 [IF], [ELSE], or [THEN] exception
 
 
-; ==== Description of this file ================================
-The next screens contain extra code that can be loaded into the
-interpreter if needed. Some of the standard Forth words are
-placed here instead of in the image to save on space.
-
-The blocks should be loaded in order unless otherwise stated.
-
-This file is first converted by a utility into a fixed width
-format, which can then be loaded onto the target board with
-the same utility used to uploaded the bitfile to the FPGA.
-
-Form feeds are used to mark the boundaries between blocks,
-this does not have any special significance and is only there
-to make editing easier. Line lengths are limited to 64
-characters wide, each block contains 16 lines.
-
-; ==== Scratch Block ===========================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-\ ==== Assembler word set ======================================
 variable assembler-voc
 bl parse rdrop pad pack$ find drop assembler-voc !
 : assembler assembler-voc 1 set-order ;
@@ -308,22 +275,6 @@ mk.user lana  sterling  mk.user cyril  figgis
 
 
 
-\ ==== Roulette ================================================
-\ Russian Roulette: It would be interesting to do something
-\ killed the computer when the player dies
-
-: click ."  *click*" cr ;
-: bang  ."  BANG!" cr ;
-: roulette random 6 mod if click else bang then ; ( -- )
-
-
-
-
-
-
-
-
-
 \ ==== Extended ANSI Escape Codes ==============================
 0 constant black 1 constant red 2 constant green 4 constant blue
 red green        + constant yellow
@@ -338,38 +289,5 @@ red green blue + + constant white
 : down  [char] B ansi ; ( n -- )
 : left  [char] C ansi ; ( n -- )
 : right [char] D ansi ; ( n -- )
-
-
-\ ==== Screen Saver ============================================
-\ An incredibly simple screen saver using ANSI Escape codes
-\ for placement and coloring of random characters
-
-: screen-saver ( -- )
-  page
-  begin
-    random 80 mod
-    random 40 mod at-xy
-    random >char emit
-    random 8  mod
-    ( random 1 and if background then )
-    color
-  again ;
-
-
-; ==== Game: YOU ARE DEAD (HELP) ===============================
-This is a clone of the one dimensional rogue like game
-available at <https://github.com/rupa/YOU_ARE_DEAD>. The
-object is to get to the other side of the screen.
-
-Keys:
-w  Turn into '.'
-a  Turn into '~'
-s  Turn into '>'
-d  Move right
-q  Quit
-
-Block number 7 is used to store the game state.
-
-
 
 

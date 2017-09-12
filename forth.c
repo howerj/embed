@@ -66,7 +66,7 @@ static int save(forth_t *h, const char *name, size_t length)
 	return r;
 }
 
-static int forth(forth_t *h, FILE *in, FILE *out)
+static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
 	static const uint16_t delta[4] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
 	register uint16_t pc = 0, tos = 0, rp = RP0, sp = SP0;
@@ -110,7 +110,7 @@ static int forth(forth_t *h, FILE *in, FILE *out)
 			case 15: _tos = nos << tos;                             break;
 			case 16: _tos = sp - SP0;                               break;
 			case 17: _tos = rp - RP0;                               break;
-			case 18: save(h, FORTH_BLOCK, CORE/sizeof(uint16_t));   break;
+			case 18: save(h, block, CORE/sizeof(uint16_t));         break;
 			case 19: fputc(tos, out); _tos = nos;                   break;
 			case 20: if((c = fgetc(in)) == EOF) return 0; _tos = c; break;
 			case 21: return _tos; 
@@ -148,6 +148,6 @@ int main(void)
 	static forth_t h;
 	memset(h.core, 0, CORE);
 	load(&h, FORTH_BLOCK);
-	return forth(&h, stdin, stdout);
+	return forth(&h, stdin, stdout, FORTH_BLOCK);
 }
 

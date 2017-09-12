@@ -16,8 +16,7 @@ static FILE *fopen_or_die(const char *file, const char *mode)
 {
 	FILE *f = NULL;
 	errno = 0;
-	f = fopen(file, mode);
-	if(!f) {
+	if(!(f = fopen(file, mode))) {
 		fprintf(stderr, "failed to open file '%s' (mode %s): %s\n", file, mode, strerror(errno));
 		exit(EXIT_FAILURE);
 	}
@@ -41,8 +40,8 @@ static int binary_memory_save(FILE *output, uint16_t *p, size_t length)
 {
 	for(size_t i = 0; i < length; i++) {
 		errno = 0;
-		int r1 = fputc((p[i])     & 0xff,output);
-		int r2 = fputc((p[i]>>8u) & 0xff, output);
+		int r1 = fputc((p[i])       & 0xff, output);
+		int r2 = fputc((p[i] >> 8u) & 0xff, output);
 		if(r1 < 0 || r2 < 0) {
 			fprintf(stderr, "memory write failed: %s\n", strerror(errno));
 			return -1;
@@ -95,22 +94,22 @@ static int forth(forth_t *h, FILE *in, FILE *out)
 			switch((instruction >> 8u) & 0x1f) {
 			case  0: _tos = tos;                                    break;
 			case  1: _tos = nos;                                    break;
-			case  2: _tos += nos;                                   break;
-			case  3: _tos &= nos;                                   break;
-			case  4: _tos |= nos;                                   break;
-			case  5: _tos ^= nos;                                   break;
-			case  6: _tos = ~tos;                                   break;
-			case  7: _tos = -(tos == nos);                          break;
-			case  8: _tos = -((int16_t)nos < (int16_t)tos);         break;
-			case  9: _tos = nos >> tos;                             break;
-			case 10: _tos--;                                        break;
-			case 11: _tos = core[rp];                               break;
-			case 12: _tos = core[(tos >> 1)];                       break;
-			case 13: _tos = nos << tos;                             break;
-			case 14: _tos = sp - SP0;                               break;
-			case 15: _tos = -(nos < tos);                           break;
-			case 16: _tos = rp - RP0;                               break;
-			case 17: _tos = -(tos == 0);                            break;
+			case  2: _tos = core[rp];                               break;
+			case  3: _tos = core[(tos >> 1)];                       break;
+			case  4: _tos += nos;                                   break;
+			case  5: _tos &= nos;                                   break;
+			case  6: _tos |= nos;                                   break;
+			case  7: _tos ^= nos;                                   break;
+			case  8: _tos = ~tos;                                   break;
+			case  9: _tos--;                                        break;
+			case 10: _tos = -(tos == 0);                            break;
+			case 11: _tos = -(tos == nos);                          break;
+			case 12: _tos = -(nos < tos);                           break;
+			case 13: _tos = -((int16_t)nos < (int16_t)tos);         break;
+			case 14: _tos = nos >> tos;                             break;
+			case 15: _tos = nos << tos;                             break;
+			case 16: _tos = sp - SP0;                               break;
+			case 17: _tos = rp - RP0;                               break;
 			case 18: save(h, FORTH_BLOCK, CORE/sizeof(uint16_t));   break;
 			case 19: fputc(tos, out); _tos = nos;                   break;
 			case 20: if((c = fgetc(in)) == EOF) return 0; _tos = c; break;

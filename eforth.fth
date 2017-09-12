@@ -1,6 +1,6 @@
 ( ======================== System Constants ================= )
 constant =exit         $601c hidden ( op code for exit )
-constant =invert       $6600 hidden ( op code for invert )
+constant =invert       $6800 hidden ( op code for invert )
 constant =>r           $6147 hidden ( op code for >r )
 constant =bl           32    hidden ( blank, or space )
 constant =cr           13    hidden ( carriage return )
@@ -83,9 +83,9 @@ location tib-buf          0 ( ... and address )
 .set tib-buf $pc            ( set tib-buf to current dictionary location )
 .allocate tib-length        ( allocate enough for the terminal input buffer )
 .allocate cell              ( plus one extra cell for safety )
-constant b/buf 1024 ( size of a block )
+constant b/buf 1024          ( size of a block )
 variable blk              17 ( current blk loaded )
-location block-dirty      0 ( -1 if loaded block buffer is modified )
+location block-dirty      0             ( -1 if loaded block buffer is modified )
 location bcount           0             ( instruction counter used in 'see' )
 location _test            0             ( used in skip/test )
 location .s-string        " <sp"        ( used by .s )
@@ -100,9 +100,11 @@ location see.inline       " inline "    ( used by "see", for inline words )
 location OK               "ok"          ( used by "prompt" )
 location redefined        " redefined"  ( used by ":" when a word has been redefined )
 location hi-string        "eFORTH V"    ( used by "hi" )
-constant ver $666
-constant c/l           64    hidden ( characters per line in a block )
-constant l/b           16    hidden ( lines in a block )
+constant ver              $666
+constant c/l              64    hidden ( characters per line in a block )
+constant l/b              16    hidden ( lines in a block )
+constant sp0              $4000 hidden
+constant rp0              $4040 hidden
 
 ( ======================== System Variables ================= )
 

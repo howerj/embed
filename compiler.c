@@ -130,23 +130,22 @@ extern log_level_e log_level;
 typedef enum {
 	ALU_OP_T,                  /**< Top of Stack         */
 	ALU_OP_N,                  /**< Copy T to N          */
+	ALU_OP_R,                  /**< Top of return stack  */
+	ALU_OP_T_LOAD,             /**< Load from address    */
 	ALU_OP_T_PLUS_N,           /**< Addition             */
 	ALU_OP_T_AND_N,            /**< Bitwise AND          */
 	ALU_OP_T_OR_N,             /**< Bitwise OR           */
 	ALU_OP_T_XOR_N,            /**< Bitwise XOR          */
 	ALU_OP_T_INVERT,           /**< Bitwise Inversion    */
+	ALU_OP_T_DECREMENT,        /**< Decrement            */
+	ALU_OP_T_EQUAL_0,          /**< T == 0               */
 	ALU_OP_T_EQUAL_N,          /**< Equality test        */
+	ALU_OP_N_ULESS_T,          /**< Unsigned comparison  */
 	ALU_OP_N_LESS_T,           /**< Signed comparison    */
 	ALU_OP_N_RSHIFT_T,         /**< Logical Right Shift  */
-	ALU_OP_T_DECREMENT,        /**< Decrement            */
-	ALU_OP_R,                  /**< Top of return stack  */
-	ALU_OP_T_LOAD,             /**< Load from address    */
 	ALU_OP_N_LSHIFT_T,         /**< Logical Left Shift   */
 	ALU_OP_DEPTH,              /**< Depth of stack       */
-	ALU_OP_N_ULESS_T,          /**< Unsigned comparison  */
-
 	ALU_OP_RDEPTH,             /**< R Stack Depth        */
-	ALU_OP_T_EQUAL_0,          /**< T == 0               */
 	ALU_OP_SAVE,               /**< Save Image           */
 	ALU_OP_TX,                 /**< Get byte             */
 	ALU_OP_RX,                 /**< Send byte            */
@@ -585,10 +584,6 @@ typedef struct {
 } lexer_t;
 
 /********* LEXER *********/
-
-/**@note it would be possible to add a very small amount of state to the
- * lexer, so when keywords like 'hex' and 'decimal' are encountered, the
- * base is changed. */
 
 static token_t *token_new(token_e type, unsigned line)
 {

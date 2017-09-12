@@ -169,8 +169,8 @@ constant rp0              $4080 hidden
 : source #tib 2@ ;                        ( -- a u )
 : source-id _id @ ;                       ( -- 0 | -1 )
 : pad here pad-length + ;                 ( -- a )
-: @execute @ ?dup if >r then ;            ( cfa -- )
-: 3drop drop 2drop ; hidden               ( n n n -- )
+: @execute @ ?dup if >r then ; hidden     ( cfa -- )
+: drop0 drop 0 ; hidden
 : bl =bl ;                                ( -- c )
 : within over - >r - r> u< ;              ( u lo hi -- f )
 : dnegate invert >r invert 1 um+ r> + ;   ( d -- d )
@@ -292,9 +292,6 @@ choice words that need depth checking to get quite a large coverage )
 : u.  <# #s #> space type ;                  ( u -- : print unsigned number )
 :  .  radix 10 xor if u. exit then str space type ; ( n -- print space, signed number )
 : ? @ . ;                                    ( a -- : display the contents in a memory cell )
-
-: binary  2 base ! ;                       ( -- )
-: octal  8 base ! ;                        ( -- )
 : .base base @ dup decimal base ! ; ( -- )
 
 : pack$ ( b u a -- a ) \ null fill
@@ -327,15 +324,15 @@ choice words that need depth checking to get quite a large coverage )
 	repeat drop over - ;
 
 : expect ( b u -- ) _expect @execute span ! drop ;
-: query tib tib-length _expect @execute #tib !  drop 0 >in ! ; ( -- )
+: query tib tib-length _expect @execute #tib !  drop0 >in ! ; ( -- )
 
 : =string ( a1 u2 a1 u2 -- f : string equality )
 	>r swap r> ( a1 a2 u1 u2 )
-	over xor if 3drop  0 exit then
+	over xor if 2drop drop0 exit then
 	for ( a1 a2 )
 		aft
 			count >r swap count r> xor
-			if 2drop rdrop 0 exit then
+			if rdrop drop drop0 exit then
 		then
 	next 2drop [-1] ;
 
@@ -467,7 +464,7 @@ choice words that need depth checking to get quite a large coverage )
 	?compile
 	dup 0x8000 and ( n > $7fff ? )
 	if
-		invert doLit =invert , ( store inversion of n the invert it )
+		invert doLit =invert , exit ( store inversion of n the invert it )
 	else
 		doLit exit ( turn into literal, write into dictionary )
 	then ; immediate
@@ -533,7 +530,7 @@ choice words that need depth checking to get quite a large coverage )
 : random seed @ dup 15 lshift ccitt dup 27 + seed ! ; ( -- u )
 
 : 5u.r 5 u.r ; hidden
-: dm+ chars for aft dup @ space 5u.r cell+ then next ; ( a u -- a )
+: dm+ chars for aft dup @ space 5u.r cell+ then next ; hidden ( a u -- a )
 : colon 58 emit ; hidden ( -- )
 
 : dump ( a u -- )
@@ -718,7 +715,7 @@ to work / break everything it touches )
 : abits $1fff and ; hidden
 
 : validate ( cfa pwd -- nfa | 0 )
-	tuck cfa <> if drop 0 else nfa exit then ; hidden
+	tuck cfa <> if drop0 exit else nfa exit then ; hidden
 
 ( @todo Do this for every vocabulary loaded )
 : name ( cfa -- nfa )
@@ -751,7 +748,7 @@ i.end:   5u.r rdrop exit
 : continue? ( u a -- f : determine whether to continue decompilation  )
 	bcount @ if 2drop [-1] exit then
 	over $e000 and 0= if u> exit else drop then
-	dup ' doVar make-callable = if drop 0 exit then ( print next address ? )
+	dup ' doVar make-callable = if drop0 exit then ( print next address ? )
 	=exit and =exit <> ; hidden
 
 : decompile ( a -- a : decompile a single instruction )

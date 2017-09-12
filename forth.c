@@ -6,7 +6,6 @@
 
 #define FORTH_BLOCK ("forth.blk")
 #define CORE        (65536u)
-#define PRG         (8192u)
 #define SP0         (8192u)
 #define RP0         (8256u)
 

@@ -591,6 +591,7 @@ choice words that need depth checking to get quite a large coverage )
 : console ' "rx?" _key ! ' "tx!" _emit ! hand ;
 : io!  console ; ( -- : initialize I/O )
 : hi io! hex cr hi-string print ver <# # # 46 hold # #> type cr here . .free cr [ ;
+: boot hi quit ;
 
 ( ==================== Advanced I/O Control ========================== )
 
@@ -682,7 +683,6 @@ displaying block files as they are read in )
 \ : "exit" compile-exit ; immediate
 \ : "exit" =exit , ; immediate
 
-
 ( ==================== Control Structures ============================ )
 
 ( ==================== Strings ======================================= )
@@ -773,8 +773,6 @@ i.end2t: cells
 i.end:   5u.r rdrop exit
 : i.print print abits ; hidden
 
-( @note A recursive version of 'see' that decompiled no-name words would complicate
-things, the 'decompiler' word could be called manually on an address if desired )
 : instruction ( decode instruction )
 	over >r
 	0x8000 mask-off if see.lit     print $7fff and      branch i.end then
@@ -888,11 +886,7 @@ things, the 'decompiler' word could be called manually on an address if desired 
 start:
 .set entry start
 	_boot @execute  ( _boot contains zero by default, does nothing )
-	hi
-	\ ' boot catch if .failed else .ok then
-	\ loaded @ if 1 list then
-	\ login 0 load 1 list
-	branch quitLoop ( jump to main interpreter loop if _boot returned )
+	
 
 ( ==================== Startup Code ================================== )
 
@@ -909,5 +903,5 @@ start:
 .set _tap           ktap        ( execution vector of tap,    default the ktap. )
 .set _echo          "tx!"       ( execution vector of echo )
 .set _prompt        .ok         ( execution vector of prompt, default to '.ok'. )
-.set _boot          0           ( @execute does nothing if zero )
+.set _boot          boot        ( @execute does nothing if zero )
 .set _message       message     ( execution vector of _message, used in ?error )

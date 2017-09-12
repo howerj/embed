@@ -5,10 +5,10 @@
 #include <string.h>
 
 #define FORTH_BLOCK ("forth.blk")
-#define CORE  (65536u)
-#define PRG   (8192u)
-#define SP0   (8192u)
-#define RP0   (8256u)
+#define CORE        (65536u)
+#define PRG         (8192u)
+#define SP0         (8192u)
+#define RP0         (8256u)
 
 typedef struct { uint16_t core[CORE/sizeof(uint16_t)]; } forth_t;
 
@@ -54,25 +54,16 @@ static int binary_memory_save(FILE *output, uint16_t *p, size_t length)
 static int load(forth_t *h, const char *name)
 {
 	FILE *input = fopen_or_die(name, "rb");
-	int r = 0;
-	errno = 0;
-	r = binary_memory_load(input, h->core, CORE/2);
+	int r = binary_memory_load(input, h->core, CORE/sizeof(uint16_t));
 	fclose(input);
 	return r;
 }
 
 static int save(forth_t *h, const char *name, size_t length)
 {
-	FILE *output = NULL;
-	int r = 0;
-	errno = 0;
-	if((output = fopen(name, "wb"))) {
-		r = binary_memory_save(output, h->core, length);
-		fclose(output);
-	} else {
-		fprintf(stderr, "block write (to %s) failed: %s\n", name, strerror(errno));
-		r = -1;
-	}
+	FILE *output = fopen_or_die(name, "wb");
+	int r = binary_memory_save(output, h->core, length);
+	fclose(output);
 	return r;
 }
 
@@ -96,32 +87,33 @@ static int forth(forth_t *h, FILE *in, FILE *out)
 			uint16_t nos  = core[sp];
 			uint16_t _tos = tos;
 			uint16_t npc  = pc_plus_one;
+			int      c    = 0;
 
 			if(instruction & 0x10)
 				npc = core[rp] >> 1;
 
 			switch((instruction >> 8u) & 0x1f) {
-			case  0: _tos = tos;                            break;
-			case  1: _tos = nos;                            break;
-			case  2: _tos += nos;                           break;
-			case  3: _tos &= nos;                           break;
-			case  4: _tos |= nos;                           break;
-			case  5: _tos ^= nos;                           break;
-			case  6: _tos = ~tos;                           break;
-			case  7: _tos = -(tos == nos);                  break;
-			case  8: _tos = -((int16_t)nos < (int16_t)tos); break;
-			case  9: _tos = nos >> tos;                     break;
-			case 10: _tos--;                                break;
-			case 11: _tos = core[rp];                       break;
-			case 12: _tos = core[(tos >> 1)];               break;
-			case 13: _tos = nos << tos;                     break;
-			case 14: _tos = sp - SP0;                       break;
-			case 15: _tos = -(nos < tos);                   break;
-			case 16: _tos = rp - RP0;                       break;
-			case 17: _tos = -(tos == 0);                    break;
-			case 18: save(h, FORTH_BLOCK, CORE/2);          break;
-			case 19: fputc(tos, out); _tos = nos;           break;
-			case 20: _tos = fgetc(in); if(_tos==0xffff)return 0; break;
+			case  0: _tos = tos;                                    break;
+			case  1: _tos = nos;                                    break;
+			case  2: _tos += nos;                                   break;
+			case  3: _tos &= nos;                                   break;
+			case  4: _tos |= nos;                                   break;
+			case  5: _tos ^= nos;                                   break;
+			case  6: _tos = ~tos;                                   break;
+			case  7: _tos = -(tos == nos);                          break;
+			case  8: _tos = -((int16_t)nos < (int16_t)tos);         break;
+			case  9: _tos = nos >> tos;                             break;
+			case 10: _tos--;                                        break;
+			case 11: _tos = core[rp];                               break;
+			case 12: _tos = core[(tos >> 1)];                       break;
+			case 13: _tos = nos << tos;                             break;
+			case 14: _tos = sp - SP0;                               break;
+			case 15: _tos = -(nos < tos);                           break;
+			case 16: _tos = rp - RP0;                               break;
+			case 17: _tos = -(tos == 0);                            break;
+			case 18: save(h, FORTH_BLOCK, CORE/sizeof(uint16_t));   break;
+			case 19: fputc(tos, out); _tos = nos;                   break;
+			case 20: if((c = fgetc(in)) == EOF) return 0; _tos = c; break;
 			case 21: return _tos; 
 			}
 

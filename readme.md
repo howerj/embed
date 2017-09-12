@@ -22,19 +22,9 @@ The project is a word in progress, but most of the system is in place.
 * Documentation of the project, some words, and the instruction set, as well as
 the memory layout
 * Make prepared images, as C code and as binary files
-* Test on Windows, the project has only been tested under Linux
 * Remove the compiler after a cross compiler has been made within the Forth
 interpreter
-* Make the interpreter I/O more portable (remove 'getch' and terminal
-manipulations)
-* Improve the compilation of "for...aft...then...next" constructs
-* Move headerless variables to after the stack area.
-* Add a way of directing the compiler to add blocks to the memory
-image it generates
 * A simple run length compressor would reduce the size of the blocks, as well
 as other simple memory compression techniques
-* Find a way to make simple command line utilities with this Forth, and
-possibly run blocks directly with a 'shebang' line and some hacks
-* The Format of Forth block file could be improved upon, instead of it just
-being a binary file, there is no way of identify the file at the moment, and
-there should be
+* Improve the instruction set with a better choice of ALU operation, as well
+as fixing the store instruction.

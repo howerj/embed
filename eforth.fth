@@ -27,8 +27,8 @@ location _forth-wordlist  0 ( set at the end near the end of the file )
 location _words           0 ( words execution vector )
 location _forth           0 ( forth execution vector )
 location _set-order       0 ( set-order execution vector )
-location _do_colon        0
-location _do_semi_colon   0
+location _do_colon        0 ( execution vector for ':' )
+location _do_semi_colon   0 ( execution vector for ';' )
 
 .mode 3   ( Turn word header compilation and optimization on )
 : execute-location @ >r ; hidden
@@ -104,7 +104,7 @@ constant ver              $666
 constant c/l              64    hidden ( characters per line in a block )
 constant l/b              16    hidden ( lines in a block )
 constant sp0              $4000 hidden
-constant rp0              $4040 hidden
+constant rp0              $4080 hidden
 
 ( ======================== System Variables ================= )
 
@@ -113,7 +113,6 @@ constant rp0              $4040 hidden
 : [-1] -1 ; hidden         ( -- -1 : space saving measure, push -1 onto stack )
 : 0x8000 $8000 ; hidden    ( -- $8000 : space saving measure, push $8000 onto stack )
 : ! store drop ;           ( n a -- : store a value 'n' at location 'a'  )
-: 256* 8 lshift ; hidden   ( u -- u : shift left by 8, or multiple by 256 )
 : 256/ 8 rshift ; hidden   ( u -- u : shift right by 8, or divide by 256 )
 : 1+ 1 + ;                 ( n -- n : increment a value  )
 : negate invert 1 + ;      ( n -- n : negate a number )
@@ -145,8 +144,6 @@ constant rp0              $4040 hidden
 	swap over dup ( -2 and ) @ swap 1 and 0 = $ff xor
 	>r over xor r> and xor swap ( -2 and ) store drop ;
 : c, cp @ c! cp 1+! ;    ( c -- : store 'c' at next available location in the dictionary )
-\ : 40ns begin dup while 1- repeat drop ; hidden ( n -- : wait for 'n'*40ns + 30us )
-\ : ms for 25000 40ns next ; ( n -- : wait for 'n' milliseconds )
 : doNext r> r> ?dup if 1- >r @ >r exit then cell+ >r ; hidden
 
 : um+ ( w w -- w carry )
@@ -160,19 +157,7 @@ constant rp0              $4040 hidden
 : rp! ( n -- , R: ??? -- ??? : set the return stack pointer )
 	r> swap begin dup rp@ = 0= while rdrop repeat drop >r ; hidden
 
-: rpick ( n -- u, R: un ... u0 )
-	rdrop
-	dup
-	begin dup while rdrop 1- repeat drop r@ swap
-	begin dup while rup   1- repeat drop
-	rup ;
-
-: bye 0 (bye) ;
-
-( With the built in words defined in the assembler, and the words
-defined so far, all of the primitive words needed by eForth should
-be available. "doList" and "doLit" do not need to be implemented as
-they can implemented in terms of instructions )
+\ : rpick rp@ swap - cells rp0 + @ ; ( n -- u, R: un ... u0 )
 
 ( ======================== Forth Kernel ===================== )
 
@@ -195,7 +180,7 @@ they can implemented in terms of instructions )
 : -rot swap >r swap r> ;                  ( n1 n2 n3 -- n3 n1 n2 )
 : min over over < if drop else nip then ; ( n n -- n )
 : max over over > if drop else nip then ; ( n n -- n )
-: >char $7f and dup 127 =bl within if drop [char] _ then ; ( c -- c )
+: >char $7f and dup 127 =bl within if drop [char] _ then ; hidden ( c -- c )
 : tib #tib cell+ @ ; hidden               ( -- a )
 : echo _echo @execute ; hidden            ( c -- )
 : key _key @execute ;                     ( -- c )
@@ -206,7 +191,7 @@ they can implemented in terms of instructions )
 : toggle over @ xor swap ! ; hidden       ( a u -- : xor value at addr with u )
 : cr =cr emit =lf emit ;                  ( -- )
 : space =bl emit ;                        ( -- )
-: pick ?dup if swap >r 1- pick r> swap exit then dup ; ( @bug does not work for high stack depths - mashes the return stack )
+: pick sp@ swap - cells sp0 + @ ;         ( vn...v0 u -- vn...v0 vu )
 : ndrop for aft drop then next ; hidden   ( n1 ... nu u -- )
 : type begin dup while swap count emit swap 1- repeat 2drop ; ( b u -- : print a string )
 : $type begin dup while swap count >char emit swap 1- repeat 2drop ; hidden ( b u -- : print a string )
@@ -221,8 +206,6 @@ they can implemented in terms of instructions )
 : spaces =bl nchars ;                     ( +n -- )
 : cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop ; ( b b u -- )
 : fill swap for swap aft 2dup c! 1+ then next 2drop ; ( b u c -- )
-: substitute dup @ >r ! r> ; hidden ( u a -- u : substitute value at address )
-: switch 2dup @ >r @ swap ! r> swap ! ; hidden ( a a -- : swap contents )
 : aligned dup 1 and if 1+ then ;          ( b -- a )
 : align cp @ aligned cp ! ;               ( -- )
 

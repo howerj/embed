@@ -27,8 +27,8 @@ static int binary_memory_load(FILE *input, uint16_t *p, size_t length)
 {
 	for(size_t i = 0; i < length; i++) {
 		errno = 0;
-		int r1 = fgetc(input);
-		int r2 = fgetc(input);
+		const int r1 = fgetc(input);
+		const int r2 = fgetc(input);
 		if(r1 < 0 || r2 < 0)
 			return -1;
 		p[i] = (((unsigned)r1 & 0xffu)) | (((unsigned)r2 & 0xffu) << 8u);
@@ -40,8 +40,8 @@ static int binary_memory_save(FILE *output, uint16_t *p, size_t length)
 {
 	for(size_t i = 0; i < length; i++) {
 		errno = 0;
-		int r1 = fputc((p[i])       & 0xff, output);
-		int r2 = fputc((p[i] >> 8u) & 0xff, output);
+		const int r1 = fputc((p[i])       & 0xff, output);
+		const int r2 = fputc((p[i] >> 8u) & 0xff, output);
 		if(r1 < 0 || r2 < 0) {
 			fprintf(stderr, "memory write failed: %s\n", strerror(errno));
 			return -1;
@@ -53,7 +53,7 @@ static int binary_memory_save(FILE *output, uint16_t *p, size_t length)
 static int load(forth_t *h, const char *name)
 {
 	FILE *input = fopen_or_die(name, "rb");
-	int r = binary_memory_load(input, h->core, CORE/sizeof(uint16_t));
+	const int r = binary_memory_load(input, h->core, CORE/sizeof(uint16_t));
 	fclose(input);
 	return r;
 }
@@ -61,31 +61,27 @@ static int load(forth_t *h, const char *name)
 static int save(forth_t *h, const char *name, size_t length)
 {
 	FILE *output = fopen_or_die(name, "wb");
-	int r = binary_memory_save(output, h->core, length);
+	const int r = binary_memory_save(output, h->core, length);
 	fclose(output);
 	return r;
 }
 
 static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
-	static const uint16_t delta[4] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
+	static const uint16_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
 	register uint16_t pc = 0, tos = 0, rp = RP0, sp = SP0;
 	uint16_t *core = h->core;
 	for(;;) {
 		uint16_t instruction = core[pc];
-		uint16_t address     = instruction & 0x1FFF;
-		uint16_t pc_plus_one = pc + 1;
 
 		if(0x8000 & instruction) { /* literal */
 			core[++sp] = tos;
 			tos        = instruction & 0x7FFF;
-			pc         = pc_plus_one;
+			pc++;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
-			uint16_t rd   = delta[(instruction >> 2) & 0x3];
-			uint16_t dd   = delta[ instruction       & 0x3];
 			uint16_t nos  = core[sp];
 			uint16_t _tos = tos;
-			uint16_t npc  = pc_plus_one;
+			uint16_t npc  = pc + 1;
 			int      c    = 0;
 
 			if(instruction & 0x10)
@@ -116,8 +112,11 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 21: return _tos; 
 			}
 
-			sp += dd;
-			rp += rd;
+			sp += delta[ instruction       & 0x3];
+			rp += delta[(instruction >> 2) & 0x3];
+
+			if(instruction & 0x20)
+				core[(tos >> 1)] = nos;
 
 			if(instruction & 0x40)
 				core[rp] = tos;
@@ -125,19 +124,16 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			if(instruction & 0x80)
 				core[sp] = tos;
 
-			if(instruction & 0x20)
-				core[(tos >> 1)] = nos;
-
 			tos = _tos;
 			pc  = npc;
 		} else if (0x4000 & instruction) { /* call */
-			core[++rp] = pc_plus_one << 1;
-			pc = address;
+			core[++rp] = (pc + 1 ) << 1;
+			pc = instruction & 0x1FFF;
 		} else if (0x2000 & instruction) { /* 0branch */
-			pc = !tos ? address : pc_plus_one;
+			pc = !tos ? instruction & 0x1FFF : pc + 1;
 			tos = core[sp--];
 		} else { /* branch */
-			pc = address;
+			pc = instruction & 0x1FFF;
 		}
 	}
 	return 0;

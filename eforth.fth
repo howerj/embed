@@ -41,7 +41,7 @@ location _do_semi_colon   0 ( execution vector for ';' )
 .set assembler-voc $pwd
 
 : assembler root-voc assembler-voc 2 set-order ;
-: ;code assembler ; immediate 
+: ;code assembler ; immediate
 : code _do_colon execute-location assembler ;
 
 ( ======================== System Constants ================= )
@@ -73,9 +73,11 @@ constant #vocs            8 ( number of vocabularies in allowed )
 location context          0 ( holds current context for vocabulary search order )
 location context0         0 ( holds space for root wordset in vocabulary search order )
 .allocate 14                ( ... space for context )
+location tib-start        0 ( backup tib-buf value )
 location #tib             0 ( Current count of terminal input buffer    )
 location tib-buf          0 ( ... and address )
-.set tib-buf $pc            ( set tib-buf to current dictionary location )
+.set tib-buf   $pc          ( set tib-buf to current dictionary location )
+.set tib-start $pc          ( set tib-start to initial buffer as well )
 .allocate tib-length        ( allocate enough for the terminal input buffer @todo move to the data section )
 .allocate cell              ( plus one extra cell for safety )
 constant b/buf 1024          ( size of a block )
@@ -92,7 +94,7 @@ location see.branch       "BRN"         ( decompilation -> Branch )
 location see.0branch      "BRZ"         ( decompilation -> 0 Branch )
 location see.immediate    " immediate " ( used by "see", for immediate words )
 location see.inline       " inline "    ( used by "see", for inline words )
-location OK               "ok"          ( used by "prompt" )
+location OK               " ok"         ( used by "prompt" )
 location redefined        " redefined"  ( used by ":" when a word has been redefined )
 location hi-string        "eFORTH V"    ( used by "hi" )
 constant ver              $666
@@ -139,8 +141,6 @@ constant rp0              $4080 hidden
 : c, cp @ c! cp 1+! ;    ( c -- : store 'c' at next available location in the dictionary )
 : doNext r> r> ?dup if 1- >r @ >r exit then cell+ >r ; hidden
 
-\ : rpick rp@ swap - cells rp0 + @ ; ( n -- u, R: un ... u0 )
-
 ( ======================== Forth Kernel ===================== )
 
 ( ======================== Word Set ========================= )
@@ -167,7 +167,7 @@ constant rp0              $4080 hidden
 : tib #tib cell+ @ ; hidden               ( -- a )
 : echo _echo @execute ; hidden            ( c -- )
 : key _key @execute ;                     ( -- c )
-: allot cp +! ;                           ( u -- )
+: allot cp +! ;                           ( n -- )
 : /string over min rot over + -rot - ;    ( b u1 u2 -- b u : advance a string u2 characters )
 : last context @ @ ;                      ( -- pwd )
 : emit _emit @execute ;                   ( c -- : write out a char )
@@ -175,17 +175,15 @@ constant rp0              $4080 hidden
 : cr =cr emit =lf emit ;                  ( -- )
 : space =bl emit ;                        ( -- )
 : depth sp@ sp0 - chars ; hidden
-: vrelative cells sp@ swap - ; hidden   
+: vrelative cells sp@ swap - ; hidden
 : pick  vrelative @ ;                     ( vn...v0 u -- vn...v0 vu )
 : ndrop vrelative sp! drop ; hidden       ( vn...v0 u -- vn...vu )
 : type begin dup while swap count emit swap 1- repeat 2drop ; ( b u -- : print a string )
 : $type begin dup while swap count >char emit swap 1- repeat 2drop ; hidden ( b u -- : print a string )
 : print count type ; hidden               ( b -- )
-\ : nuf? ( -- f ) key =lf = ;  ( -- f : true if 'lf' pressed, blocking )
 : decimal? 48 58 within ; hidden            ( c -- f : decimal char? )
 : lowercase? [char] a [char] { within ; hidden  ( c -- f : is character lower case? )
 : uppercase? [char] A [char] [ within ; hidden  ( c -- f : is character upper case? )
-\ : >upper dup lowercase? if =bl xor exit then ; ( c -- c : convert to upper case )
 : >lower dup uppercase? if =bl xor exit then ; hidden ( c -- c : convert to lower case )
 : nchars swap 0 max for aft dup emit then next drop ; hidden ( +n c -- : emit c n times  )
 : spaces =bl nchars ;                     ( +n -- )
@@ -212,10 +210,8 @@ constant rp0              $4080 hidden
 
 : -throw negate throw ; hidden ( space saving measure )
 
-: ?depth depth 1- u> if 4 -throw exit then ;
+: ?depth depth 1- u> if 4 -throw exit then ; hidden
 : 1depth 1 ?depth ; hidden
-\ : 2depth 2 ?depth ; hidden
-\ : 3depth 3 ?depth ; hidden
 
 : um/mod ( ud u -- ur uq )
 	?dup 0= if 10 -throw exit then
@@ -239,11 +235,6 @@ constant rp0              $4080 hidden
 : /mod  over 0< swap m/mod ; ( n n -- r q )
 : mod  /mod drop ;           ( n n -- r )
 : /    /mod nip ;            ( n n -- q )
-\ : m* 2dup xor 0< >r abs swap abs um* r> if dnegate exit then ;
-\ : */mod  >r m* r> m/mod ;  ( n n n -- r q )
-\ : */  */mod nip ;          ( n n n -- q )
-\ : s>d dup 0< ;             ( n -- d : single to double )
-
 : decimal 10 base ! ;                       ( -- )
 : hex     16 base ! ;                       ( -- )
 : radix base @ dup 2 - 34 u> if hex 40 -throw exit then ; hidden
@@ -312,7 +303,6 @@ constant rp0              $4080 hidden
 : nfa address cell+ ; hidden ( pwd -- nfa : move to name field address)
 : cfa nfa dup count nip + cell + $fffe and ; hidden ( pwd -- cfa : move to code field address )
 : .id nfa print ; hidden ( pwd -- : print out a word )
-
 : logical 0= 0= ; hidden ( n -- f )
 : immediate? @ $4000 and logical ; hidden ( pwd -- f : is immediate? )
 : inline?    @ 0x8000 and logical ; hidden ( pwd -- f : is inline? )
@@ -412,17 +402,15 @@ constant rp0              $4080 hidden
 : .s ( -- ) cr depth for aft r@ pick . then next .s-string print ;
 : unused $4000 here - ; hidden
 : .free unused u. ; hidden
-: preset depth ndrop tib #tib cell+ ! 0 >in ! 0 _id ! ; hidden
+: preset ( tib ) tib-start @ #tib cell+ ! 0 >in ! 0 _id ! ; hidden
 : ] [-1] state ! ;
 : [  0 state ! ; immediate
-
-: .error . cr ; hidden ( n -- )
 
 : ?error ( n -- : perform actions on error )
 	?dup if
 		[char] ? emit ( print error message )
-		.error
-		\ restore     ( restore dictionary to point before error )
+		. cr
+		depth ndrop
 		preset        ( reset machine )
 		[             ( back into interpret mode )
 		exit
@@ -467,7 +455,7 @@ constant rp0              $4080 hidden
 	then ;
 
 : "immediate" last address $4000 toggle ;
-: .ok state @ 0= if space OK print space then cr ;
+: .ok state @ 0= if OK print space then cr ;
 : eval begin token dup count nip while interpret repeat drop _prompt @execute ; hidden
 : quit quitLoop: preset [ begin query ' eval catch ?error again ;
 
@@ -484,22 +472,12 @@ constant rp0              $4080 hidden
 	r> _prompt !
 	throw ;
 
-: ccitt ( crc c -- crc : calculate polynomial $1021 AKA "x16 + x12 + x5 + 1" )
-	over 256/ xor        ( crc x )
-	dup  4  rshift xor   ( crc x )
-	dup  5  lshift xor   ( crc x )
-	dup  12 lshift xor   ( crc x )
-	swap 8  lshift xor ; ( crc )
-
-: crc ( b u -- u : calculate ccitt-ffff CRC )
-	$ffff >r
-	begin
-		dup
-	while
-		over c@ r> swap ccitt >r 1 /string
-	repeat 2drop r> ;
-
-: random seed @ dup 15 lshift ccitt dup 27 + seed ! ; ( -- u )
+: random ( -- u : 16-bit xorshift PRNG )
+	seed @ dup 0= if 7 seed ! then
+	dup 13 lshift xor
+	dup  9 rshift xor
+	dup  7 lshift xor
+	dup seed ! ;
 
 : 5u.r 5 u.r ; hidden
 : dm+ chars for aft dup @ space 5u.r cell+ then next ; hidden ( a u -- a )
@@ -523,21 +501,14 @@ constant rp0              $4080 hidden
 : page 2 [char] J ansi 1 1 at-xy ; ( -- )
 : sgr [char] m ansi ; ( -- )
 
-( ==================== Extra Words =================================== )
-
-\ : gcd gcdStart: dup if tuck mod branch gcdStart then drop ; ( u1 u2 -- u : greatest common divisor )
-\ : lcm 2dup gcd / * ; ( u1 u2 -- u : lowest common multiple of u1 and u2 )
-
-( ==================== Extra Words =================================== )
-
 ( ==================== Advanced I/O Control ========================== )
 
-: pace 11 emit ; hidden
+\ : pace 11 emit ; hidden
 : xio  ' accept _expect ! _tap ! _echo ! _prompt ! ; hidden
-: file ' pace ' "drop" ' ktap xio ;
+\ : file ' pace ' "drop" ' ktap xio ;
 : hand ' .ok  ' "drop" ( <-- was emit )  ' ktap xio ; hidden
-: console ' "rx?" _key ! ' "tx!" _emit ! hand ;
-: io!  console ; ( -- : initialize I/O )
+: console ' "rx?" _key ! ' "tx!" _emit ! hand ; hidden
+: io! console preset ; ( -- : initialize I/O )
 : hi io! hex cr hi-string print ver <# # # 46 hold # #> type cr here . .free cr [ ;
 : boot hi quit ;
 
@@ -641,7 +612,7 @@ constant rp0              $4080 hidden
 : flush block-dirty @ if save exit then ;
 
 : block ( k -- a )
-	1depth 
+	1depth
 	dup 63 u> if 35 -throw exit then
 	dup blk !
 	10 lshift ( b/buf * ) ;
@@ -679,7 +650,7 @@ constant rp0              $4080 hidden
 
 ( ==================== See =========================================== )
 
-( @warning This disassembler is experimental, and not liable to work ) 
+( @warning This disassembler is experimental, and not liable to work )
 
 : bcounter! bcount @ 0= if chars over swap -  bcount ! exit else drop exit then ; hidden ( u a -- u )
 : -bcount   bcount @ if bcount 1-! exit then ; hidden ( -- )
@@ -819,7 +790,7 @@ i.end:   5u.r rdrop exit
 start:
 .set entry start
 	_boot @execute  ( _boot contains zero by default, does nothing )
-	
+
 
 ( ==================== Startup Code ================================== )
 

@@ -1,3 +1,8 @@
+/** @file      forth.c
+ *  @brief     Forth Virtual Machine
+ *  @copyright Richard James Howe (2017)
+ *  @license   MIT */
+
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -86,13 +91,11 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			ud_t d;
 			uw_t nos  = core[sp];
 			uw_t _tos = tos;
-			uw_t npc  = pc + 1;
 
-			if(instruction & 0x10)
-				npc = core[rp] >> 1;
+			pc = instruction & 0x10 ? core[rp] >> 1 : pc + 1;
 
 			switch((instruction >> 8u) & 0x1f) {
-			case  0: _tos = tos;                                    break;
+			case  0: /*_tos = tos;*/                                break;
 			case  1: _tos = nos;                                    break;
 			case  2: _tos = core[rp];                               break;
 			case  3: _tos = core[tos >> 1];                         break;
@@ -117,13 +120,13 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 22: save(h, block, CORE/sizeof(uw_t));             break;
 			case 23: fputc(tos, out); _tos = nos;                   break;
 			case 24: if((c = fgetc(in)) == EOF) return 0; _tos = c; break;
-			case 25: return _tos; 
+			case 25: return _tos;
 			}
 
 			sp += delta[ instruction       & 0x3];
 			rp += delta[(instruction >> 2) & 0x3];
 
-			if(instruction & 0x20) 
+			if(instruction & 0x20)
 				_tos = nos;
 
 			if(instruction & 0x40)
@@ -133,7 +136,6 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 				core[sp] = tos;
 
 			tos = _tos;
-			pc  = npc;
 		} else if (0x4000 & instruction) { /* call */
 			core[++rp] = (pc + 1 ) << 1;
 			pc = instruction & 0x1FFF;

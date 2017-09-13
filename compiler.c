@@ -1,9 +1,7 @@
-/** @file      h2.c
- *  @brief     Compile for a small Forth
+/** @file      forth.c
+ *  @brief     Forth Virtual Machine
  *  @copyright Richard James Howe (2017)
  *  @license   MIT */
-
-/* ========================== Preamble: Types, Macros, Globals ============= */
 
 #include <assert.h>
 #include <ctype.h>

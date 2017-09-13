@@ -1,4 +1,4 @@
-CFLAGS=-Os -std=c99 -Wall -Wextra
+CFLAGS=-O2 -std=c99 -Wall -Wextra
 CC=gcc
 
 .PHONY: clean all run static

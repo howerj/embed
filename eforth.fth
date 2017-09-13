@@ -13,11 +13,6 @@ constant tib-length    80    hidden ( size of terminal input buffer )
 constant pad-length    80    hidden ( pad area begins HERE + pad-length )
 constant word-length   31    hidden ( maximum length of a word )
 
-( The first 8 cells [16 bytes] of memory contain the entry point and interrupt
-service routine call locations, we can set the instruction to be run [such as
-a jump or a call] by setting the label to it with the ".set" directive. Later
-in the program the entry point, the first location in memory, is set to the
-start label )
 entry:             .allocate 2 ( Entry point - not an interrupt )
 
 location root-voc         0 ( root vocabulary )
@@ -55,7 +50,7 @@ location _do_semi_colon   0 ( execution vector for ';' )
 location _key       0  ( -- c : new character, blocking input )
 location _emit      0  ( c -- : emit character )
 location _expect    0  ( "accept" vector )
-\ location _tap       0  ( "tap" vector, for terminal handling )
+location _tap       0  ( "tap" vector, for terminal handling )
 location _echo      0  ( c -- : emit character )
 location _prompt    0  ( -- : display prompt )
 location _boot      0  ( -- : execute program at startup )
@@ -81,7 +76,7 @@ location context0         0 ( holds space for root wordset in vocabulary search 
 location #tib             0 ( Current count of terminal input buffer    )
 location tib-buf          0 ( ... and address )
 .set tib-buf $pc            ( set tib-buf to current dictionary location )
-.allocate tib-length        ( allocate enough for the terminal input buffer )
+.allocate tib-length        ( allocate enough for the terminal input buffer @todo move to the data section )
 .allocate cell              ( plus one extra cell for safety )
 constant b/buf 1024          ( size of a block )
 variable blk              17 ( current blk loaded )
@@ -182,11 +177,11 @@ constant rp0              $4080 hidden
 : depth sp@ sp0 - chars ; hidden
 : vrelative cells sp@ swap - ; hidden   
 : pick  vrelative @ ;                     ( vn...v0 u -- vn...v0 vu )
-: ndrop vrelative sp! drop ;              ( vn...v0 u -- vn...vu )
+: ndrop vrelative sp! drop ; hidden       ( vn...v0 u -- vn...vu )
 : type begin dup while swap count emit swap 1- repeat 2drop ; ( b u -- : print a string )
 : $type begin dup while swap count >char emit swap 1- repeat 2drop ; hidden ( b u -- : print a string )
 : print count type ; hidden               ( b -- )
-: nuf? ( -- f ) key =lf = ;  ( -- f : true if 'lf' pressed, blocking )
+\ : nuf? ( -- f ) key =lf = ;  ( -- f : true if 'lf' pressed, blocking )
 : decimal? 48 58 within ; hidden            ( c -- f : decimal char? )
 : lowercase? [char] a [char] { within ; hidden  ( c -- f : is character lower case? )
 : uppercase? [char] A [char] [ within ; hidden  ( c -- f : is character upper case? )
@@ -275,30 +270,29 @@ constant rp0              $4080 hidden
 	dup 0 cell um/mod ( use -2 and instead of um/mod? ) drop
 	- over +  0 swap !  2dup c!  1+ swap cmove  r> ;
 
-\ : ^h ( bot eot cur c -- bot eot cur )
-\ 	>r over r@ < dup
-\ 	if
-\ 		=bs dup echo =bl echo echo
-\ 	then r> + ; hidden
-
-
-\ : ktap ( bot eot cur c -- bot eot cur )
-\ 	dup =lf ( <-- was =cr ) xor
-\ 	if =bs xor
-\ 		if =bl tap else ^h then
-\ 		exit
-\ 	then drop nip dup ; hidden
+: ^h ( bot eot cur c -- bot eot cur )
+	>r over r@ < dup
+	if
+		=bs dup echo =bl echo echo
+	then r> + ; hidden
 
 : tap dup echo over c! 1+ ; hidden ( bot eot cur c -- bot eot cur )
+
+: ktap ( bot eot cur c -- bot eot cur )
+	dup =lf ( <-- was =cr ) xor
+	if =bs xor
+		if =bl tap else ^h then
+		exit
+	then drop nip dup ; hidden
 
 : accept ( b u -- b u )
 	over + over
 	begin
 		2dup xor
 	while
-		key dup =lf xor if tap else drop nip dup then
-		( key  dup =bl - 95 u<
-		if tap else _tap @execute then )
+		\ key dup =lf xor if tap else drop nip dup then
+		key  dup =bl - 95 u<
+		if tap else _tap @execute then
 	repeat drop over - ;
 
 : expect ( b u -- ) _expect @execute span ! drop ;
@@ -539,9 +533,9 @@ constant rp0              $4080 hidden
 ( ==================== Advanced I/O Control ========================== )
 
 : pace 11 emit ; hidden
-: xio  ' accept _expect ! ( _tap ! ) _echo ! _prompt ! ; hidden
-: file ' pace ' "drop"  ( ' ktap ) xio ;
-: hand ' .ok  ' "drop" ( <-- was emit )  ( ' ktap ) xio ; hidden
+: xio  ' accept _expect ! _tap ! _echo ! _prompt ! ; hidden
+: file ' pace ' "drop" ' ktap xio ;
+: hand ' .ok  ' "drop" ( <-- was emit )  ' ktap xio ; hidden
 : console ' "rx?" _key ! ' "tx!" _emit ! hand ;
 : io!  console ; ( -- : initialize I/O )
 : hi io! hex cr hi-string print ver <# # # 46 hold # #> type cr here . .free cr [ ;
@@ -685,8 +679,7 @@ constant rp0              $4080 hidden
 
 ( ==================== See =========================================== )
 
-( @warning This disassembler is experimental, and liable not
-to work / break everything it touches )
+( @warning This disassembler is experimental, and not liable to work ) 
 
 : bcounter! bcount @ 0= if chars over swap -  bcount ! exit else drop exit then ; hidden ( u a -- u )
 : -bcount   bcount @ if bcount 1-! exit then ; hidden ( -- )
@@ -837,10 +830,10 @@ start:
 .set _forth         [forth]
 .set _set-order     [set-order]
 .set _words         [words]
-.set _key           "rx?"      ( execution vector of ?key )
+.set _key           "rx?"       ( execution vector of ?key )
 .set _emit          "tx!"       ( execution vector of emit )
 .set _expect        accept      ( execution vector of expect, default to 'accept'. )
-\ .set _tap           ktap        ( execution vector of tap,    default the ktap. )
+.set _tap           ktap        ( execution vector of tap,    default the ktap. )
 .set _echo          "tx!"       ( execution vector of echo )
 .set _prompt        .ok         ( execution vector of prompt, default to '.ok'. )
 .set _boot          boot        ( @execute does nothing if zero )

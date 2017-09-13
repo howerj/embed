@@ -111,8 +111,8 @@ constant rp0              $4080 hidden
 : 2drop drop drop ;        ( n n -- )
 : 2drop-1 2drop [-1] ; hidden
 : 1+ 1 + ;                 ( n -- n : increment a value  )
-: negate invert 1 + ;      ( n -- n : negate a number )
-: - invert 1 + + ;         ( n1 n2 -- n : subtract n1 from n2 )
+: negate invert 1+ ;      ( n -- n : negate a number )
+: - invert 1+ + ;         ( n1 n2 -- n : subtract n1 from n2 )
 : cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+ cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;         ( n -- n : convert number of cells to number to increment address by )
@@ -160,7 +160,8 @@ constant rp0              $4080 hidden
 : key _key @execute ;                     ( -- c )
 : allot cp +! ;                           ( n -- )
 : /string over min rot over + -rot - ;    ( b u1 u2 -- b u : advance a string u2 characters )
-: last context @ @ ;                      ( -- pwd )
+: address $3fff and ; hidden              ( a -- a : mask off address bits )
+: last context @ @ address ;              ( -- pwd )
 : emit _emit @execute ;                   ( c -- : write out a char )
 : toggle over @ xor swap ! ; hidden       ( a u -- : xor value at addr with u )
 : cr =cr emit =lf emit ;                  ( -- )
@@ -169,8 +170,9 @@ constant rp0              $4080 hidden
 : vrelative cells sp@ swap - ; hidden
 : pick  vrelative @ ;                     ( vn...v0 u -- vn...v0 vu )
 : ndrop vrelative sp! drop ; hidden       ( vn...v0 u -- vn...vu )
-: type begin dup while swap count emit swap 1- repeat 2drop ; ( b u -- : print a string )
-: $type begin dup while swap count >char emit swap 1- repeat 2drop ; hidden ( b u -- : print a string )
+: typist >r begin dup while swap count r@ if >char then emit swap 1- repeat rdrop 2drop ; hidden ( b u f -- : print a string )
+: type 0 typist ;
+: $type [-1] typist ; hidden
 : print count type ; hidden               ( b -- )
 : decimal? 48 58 within ; hidden            ( c -- f : decimal char? )
 : lowercase? [char] a [char] { within ; hidden  ( c -- f : is character lower case? )
@@ -200,7 +202,6 @@ constant rp0              $4080 hidden
 	then ;
 
 : -throw negate throw ; hidden ( space saving measure )
-
 : ?depth depth 1- u> if 4 -throw exit then ; hidden
 : 1depth 1 ?depth ; hidden
 
@@ -210,7 +211,7 @@ constant rp0              $4080 hidden
 	if negate 15
 		for >r dup um+ >r >r dup um+ r> + dup
 			r> r@ swap >r um+ r> or
-			if >r drop 1 + r> else drop then r>
+			if >r drop 1+ r> else drop then r>
 		next
 		drop swap exit
 	then drop 2drop-1 dup ;
@@ -290,7 +291,7 @@ constant rp0              $4080 hidden
 		then
 	next 2drop-1 ;
 
-: address $3fff and ; hidden ( a -- a : mask off address bits )
+
 : nfa address cell+ ; hidden ( pwd -- nfa : move to name field address)
 : cfa nfa dup count nip + cell+ $fffe and ; hidden ( pwd -- cfa : move to code field address )
 : .id nfa print ; hidden ( pwd -- : print out a word )
@@ -445,7 +446,7 @@ constant rp0              $4080 hidden
 		then
 	then ;
 
-: "immediate" last address $4000 toggle ;
+: "immediate" last $4000 toggle ;
 : .ok state @ 0= if OK print space then cr ;
 : eval begin token dup count nip while interpret repeat drop _prompt @execute ; hidden
 : quit quitLoop: preset [ begin query ' eval catch ?error again ;
@@ -520,7 +521,7 @@ constant rp0              $4080 hidden
 : "[char]" ?compile char literal ; immediate ( --, <string> : )
 : ?quit state @ 0= if 56 -throw exit then ; hidden
 : ";" ?quit ( ?compile ) +csp ?csp context @ ! =exit , ( save )  [ ; immediate
-: ":" align ( save ) !csp here dup last-def ! last address ,  token ?nul ?unique count + aligned cp ! ] ;
+: ":" align ( save ) !csp here dup last-def ! last ,  token ?nul ?unique count + aligned cp ! ] ;
 : jumpz, chars $2000 or , ; hidden
 : jump, chars ( $0000 or ) , ; hidden
 : "begin" ?compile here -csp ; immediate
@@ -654,7 +655,7 @@ constant rp0              $4080 hidden
 : name ( cfa -- nfa )
 	abits cells
 	>r
-	last address
+	last
 	begin
 		dup
 	while
@@ -752,7 +753,7 @@ i.end:   5u.r rdrop exit
 
 .pwd 0
 : [block] blk @ block ; hidden
-: [check] dup b/buf c/l / u>= if -24 throw exit then ; hidden
+: [check] dup b/buf c/l / u>= if 24 -throw exit then ; hidden
 : [line] [check] c/l * [block] + ; hidden
 : b block drop ;
 : l blk @ list ;
@@ -781,7 +782,6 @@ i.end:   5u.r rdrop exit
 start:
 .set entry start
 	_boot @execute  ( _boot contains zero by default, does nothing )
-
 
 ( ==================== Startup Code ================================== )
 

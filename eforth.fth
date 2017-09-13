@@ -104,15 +104,22 @@ constant sp0              $4000 hidden
 constant rp0              $4080 hidden
 
 ( ======================== System Variables ================= )
+: 2drop drop drop ;       ( n n -- )
+: 1+ 1 + ;                ( n -- n : increment a value  )
+: negate invert 1+ ;      ( n -- n : negate a number )
+: - negate + ;            ( n1 n2 -- n : subtract n1 from n2 )
 
 : [-1] -1 ; hidden         ( -- -1 : space saving measure, push -1 onto stack )
 : 0x8000 $8000 ; hidden    ( -- $8000 : space saving measure, push $8000 onto stack )
-: drop0 drop 0 ; hidden
-: 2drop drop drop ;        ( n n -- )
+: drop-0 drop 0 ; hidden
 : 2drop-1 2drop [-1] ; hidden
-: 1+ 1 + ;                 ( n -- n : increment a value  )
-: negate invert 1+ ;      ( n -- n : negate a number )
-: - invert 1+ + ;         ( n1 n2 -- n : subtract n1 from n2 )
+: dup-@ dup @ ; hidden
+: over- over - ; hidden
+: base@ base @ ; hidden
+: base! base ! ; hidden
+: state@ state @ ; hidden
+: command? state@ 0= ; hidden
+
 : cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+ cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;         ( n -- n : convert number of cells to number to increment address by )
@@ -146,7 +153,7 @@ constant rp0              $4080 hidden
 : pad here pad-length + ;                 ( -- a )
 : @execute @ ?dup if >r then ; hidden     ( cfa -- )
 : bl =bl ;                                ( -- c )
-: within over - >r - r> u< ;              ( u lo hi -- f )
+: within over- >r - r> u< ;              ( u lo hi -- f )
 : dnegate invert >r invert 1 um+ r> + ;   ( d -- d )
 : abs dup 0< if negate exit then ;        ( n -- u )
 : count  dup 1+ swap c@ ;                 ( cs -- b u )
@@ -191,7 +198,7 @@ constant rp0              $4080 hidden
 	rp@ handler !
 	execute
 	r> handler !
-	r> drop0 ;
+	r> drop-0 ;
 
 : throw
 	?dup if
@@ -227,26 +234,26 @@ constant rp0              $4080 hidden
 : /mod  over 0< swap m/mod ; ( n n -- r q )
 : mod  /mod drop ;           ( n n -- r )
 : /    /mod nip ;            ( n n -- q )
-: decimal 10 base ! ;                       ( -- )
-: hex     16 base ! ;                       ( -- )
-: radix base @ dup 2 - 34 u> if hex 40 -throw exit then ; hidden
+: decimal 10 base! ;                       ( -- )
+: hex     16 base! ;                       ( -- )
+: radix base@ dup 2 - 34 u> if hex 40 -throw exit then ; hidden
 : digit  9 over < 7 and + 48 + ; hidden      ( u -- c )
 : extract  0 swap um/mod swap ; hidden       ( n base -- n c )
 : ?hold hld @ cp @ u< if 17 -throw exit then ; hidden ( -- )
 : hold  hld @ 1- dup hld ! ?hold c! ;        ( c -- )
 : holds begin dup while 1- 2dup + c@ hold repeat 2drop ;
 : sign  0< if [char] - hold exit then ;           ( n -- )
-: #>  drop hld @ pad over - ;                ( w -- b u )
+: #>  drop hld @ pad over- ;                ( w -- b u )
 : #  1depth radix extract digit hold ;       ( u -- u )
 : #s begin # dup while repeat ;              ( u -- 0 )
 : <#  pad hld ! ;                            ( -- )
 : str dup >r abs <# #s r> sign #> ;          ( n -- b u : convert a signed integer to a numeric string )
-:  .r >r str r> over - spaces type ;       ( n n : print n, right justified by +n )
-: u.r >r <# #s #> r> over - spaces type ;    ( u +n -- : print u right justified by +n)
+:  .r >r str r> over- spaces type ;       ( n n : print n, right justified by +n )
+: u.r >r <# #s #> r> over- spaces type ;    ( u +n -- : print u right justified by +n)
 : u.  <# #s #> space type ;                  ( u -- : print unsigned number )
 :  .  radix 10 xor if u. exit then str space type ; ( n -- print space, signed number )
 : ? @ . ;                                    ( a -- : display the contents in a memory cell )
-: .base base @ dup decimal base ! ; ( -- )
+: .base base@ dup decimal base! ; ( -- )
 
 : pack$ ( b u a -- a ) \ null fill
 	aligned dup >r over
@@ -276,18 +283,18 @@ constant rp0              $4080 hidden
 		\ key dup =lf xor if tap else drop nip dup then
 		key  dup =bl - 95 u<
 		if tap else _tap @execute then
-	repeat drop over - ;
+	repeat drop over- ;
 
 : expect ( b u -- ) _expect @execute span ! drop ;
-: query tib tib-length _expect @execute #tib !  drop0 >in ! ; ( -- )
+: query tib tib-length _expect @execute #tib !  drop-0 >in ! ; ( -- )
 
 : =string ( a1 u2 a1 u2 -- f : string equality )
 	>r swap r> ( a1 a2 u1 u2 )
-	over xor if 2drop drop0 exit then
+	over xor if 2drop drop-0 exit then
 	for ( a1 a2 )
 		aft
 			count >r swap count r> xor
-			if rdrop drop drop0 exit then
+			if rdrop drop drop-0 exit then
 		then
 	next 2drop-1 ;
 
@@ -317,9 +324,9 @@ constant rp0              $4080 hidden
 	>r
 	context
 	begin
-		dup @
+		dup-@
 	while
-		dup @ @ r@ swap search ?dup if rot rdrop drop exit else drop then
+		dup-@ @ r@ swap search ?dup if rot rdrop drop exit else drop then
 		cell+
 	repeat drop r> 0 ;
 
@@ -329,14 +336,14 @@ constant rp0              $4080 hidden
 	dup decimal?   if 48 - exit then ( 48 = '0' )
 	drop [-1] ; hidden
 
-: digit? >lower numeric? base @ u< ; hidden ( c -- f : is char a digit given base )
+: digit? >lower numeric? base@ u< ; hidden ( c -- f : is char a digit given base )
 
 : do-number ( n b u -- n b u : convert string )
 	begin
 		( get next character )
 		2dup >r >r drop c@ dup digit? ( n char bool, R: b u )
 		if   ( n char )
-			swap base @ * swap numeric? + ( accumulate number )
+			swap base@ * swap numeric? + ( accumulate number )
 		else ( n char )
 			drop
 			r> r> ( restore string )
@@ -352,7 +359,7 @@ constant rp0              $4080 hidden
 	over c@ $24 = if 1 /string hex then ( $hex )
 	do-number
 	r> if rot negate -rot then
-	r> base ! ; hidden
+	r> base! ; hidden
 
 : number? 0 -rot >number nip 0= ; ( b u -- n f : is number? )
 
@@ -411,7 +418,7 @@ constant rp0              $4080 hidden
 : ?dictionary dup $3f00 u> if 8 -throw exit then ; hidden
 : , here dup cell+ ?dictionary cp ! ! ; ( u -- )
 : doLit 0x8000 or , ; hidden
-: ?compile state @ 0= if 14 -throw exit then ; hidden ( fail if not compiling )
+: ?compile command? if 14 -throw exit then ; hidden ( fail if not compiling )
 : literal ( n -- : write a literal into the dictionary )
 	?compile
 	dup 0x8000 and ( n > $7fff ? )
@@ -427,7 +434,7 @@ constant rp0              $4080 hidden
 
 : interpret ( ??? a -- ??? : The command/compiler loop )
 	find ?dup if
-		state @
+		state@
 		if
 			0> if \ immediate
 				cfa execute exit
@@ -440,14 +447,14 @@ constant rp0              $4080 hidden
 	else \ not a word
 		dup count number? if
 			nip
-			state @ if literal exit then
+			state@ if literal exit then
 		else
 			drop space print 13 -throw exit
 		then
 	then ;
 
 : "immediate" last $4000 toggle ;
-: .ok state @ 0= if OK print space then cr ;
+: .ok command? if OK print space then cr ;
 : eval begin token dup count nip while interpret repeat drop _prompt @execute ; hidden
 : quit quitLoop: preset [ begin query ' eval catch ?error again ;
 
@@ -472,7 +479,7 @@ constant rp0              $4080 hidden
 	dup seed ! ;
 
 : 5u.r 5 u.r ; hidden
-: dm+ chars for aft dup @ space 5u.r cell+ then next ; hidden ( a u -- a )
+: dm+ chars for aft dup-@ space 5u.r cell+ then next ; hidden ( a u -- a )
 : colon 58 emit ; hidden ( -- )
 
 : dump ( a u -- )
@@ -487,7 +494,7 @@ constant rp0              $4080 hidden
 	next drop ;
 
 : CSI $1b emit [char] [ emit ; hidden
-: 10u. base @ >r decimal <# #s #> type r> base ! ; hidden ( u -- )
+: 10u. base@ >r decimal <# #s #> type r> base! ; hidden ( u -- )
 : ansi swap CSI 10u. emit ; ( n c -- )
 : at-xy CSI 10u. $3b emit 10u. [char] H emit ; ( x y -- )
 : page 2 [char] J ansi 1 1 at-xy ; ( -- )
@@ -515,11 +522,11 @@ constant rp0              $4080 hidden
 : ?unique dup last search if drop redefined print cr exit else drop exit then ; hidden ( a -- a )
 : ?nul count 0= if 16 -throw exit then 1- ; hidden ( b -- : check for zero length strings )
 : find-cfa token find if cfa exit else 13 -throw exit then ; hidden
-: "'" find-cfa state @ if literal exit then ; immediate
+: "'" find-cfa state@ if literal exit then ; immediate
 : [compile] ?compile find-cfa compile, ; immediate ( -- ; <string> )
-: compile  r> dup @ , cell+ >r ; ( -- : Compile next compiled word NB. Works for words, instructions, and numbers below $8000 )
+: compile  r> dup-@ , cell+ >r ; ( -- : Compile next compiled word NB. Works for words, instructions, and numbers below $8000 )
 : "[char]" ?compile char literal ; immediate ( --, <string> : )
-: ?quit state @ 0= if 56 -throw exit then ; hidden
+: ?quit command? if 56 -throw exit then ; hidden
 : ";" ?quit ( ?compile ) +csp ?csp context @ ! =exit , ( save )  [ ; immediate
 : ":" align ( save ) !csp here dup last-def ! last ,  token ?nul ?unique count + aligned cp ! ] ;
 : jumpz, chars $2000 or , ; hidden
@@ -546,7 +553,7 @@ constant rp0              $4080 hidden
 : doer create =exit last-def @ cfa ! =exit ,  ;
 : make
 	find-cfa find-cfa make-callable
-	state @
+	state@
 	if
 		literal literal compile ! exit
 	else
@@ -618,7 +625,7 @@ constant rp0              $4080 hidden
 : #line border @ if dup 2 u.r exit then ; hidden ( u -- u : print line number )
 : ?pipe border @ if pipe exit then ; hidden
 : ?page border @ if page exit then ; hidden
-: thru over - for dup load 1+ next drop ; ( k1 k2 -- )
+: thru over- for dup load 1+ next drop ; ( k1 k2 -- )
 : blank =bl fill ;
 : message l/b extract .line cr ; ( u -- )
 : list
@@ -633,7 +640,7 @@ constant rp0              $4080 hidden
 	repeat .border 2drop ;
 
 : index ( k1 k2 -- : show titles for block k1 to k2 )
-	over - cr
+	over- cr
 	for
 		dup 5u.r space pipe space dup  0 .line cr 1+
 	next drop ;
@@ -644,12 +651,13 @@ constant rp0              $4080 hidden
 
 ( @warning This disassembler is experimental, and not liable to work )
 
-: bcounter! bcount @ 0= if chars over swap -  bcount ! exit else drop exit then ; hidden ( u a -- u )
-: -bcount   bcount @ if bcount 1-! exit then ; hidden ( -- )
+: bcount@ bcount @ ; hidden
+: bcounter! bcount@ if drop exit else chars over swap -  bcount ! exit then ; hidden ( u a -- u )
+: -bcount   bcount@ if bcount 1-! exit then ; hidden ( -- )
 : abits $1fff and ; hidden
 
 : validate ( cfa pwd -- nfa | 0 )
-	tuck cfa <> if drop0 exit else nfa exit then ; hidden
+	tuck cfa <> if drop-0 exit else nfa exit then ; hidden
 
 ( @todo Do this for every vocabulary loaded )
 : name ( cfa -- nfa )
@@ -659,7 +667,7 @@ constant rp0              $4080 hidden
 	begin
 		dup
 	while
-		address dup r@ swap dup @ address swap within ( simplify? )
+		address dup r@ swap dup-@ address swap within ( simplify? )
 		if @ address r> swap validate exit then
 		address @
 	repeat rdrop ; hidden
@@ -680,22 +688,22 @@ i.end:   5u.r rdrop exit
 	                   see.branch  i.print r@ bcounter! branch i.end2t ; hidden
 
 : continue? ( u a -- f : determine whether to continue decompilation  )
-	bcount @ if 2drop-1 exit then
-	over $e000 and 0= if u> exit else drop then
-	dup ' doVar make-callable = if drop0 exit then ( print next address ? )
+	bcount@ if 2drop-1 exit then
+	over $e000 and if drop else u> exit then
+	dup ' doVar make-callable = if drop-0 exit then ( print next address ? )
 	=exit and =exit <> ; hidden
 
 : decompile ( a -- a : decompile a single instruction )
-	dup 5u.r colon dup @ 5u.r space
-	dup @ instruction
-	dup @ ' doNext make-callable = if cell+ dup ? then
+	dup 5u.r colon dup-@ 5u.r space
+	dup-@ instruction
+	dup-@ ' doNext make-callable = if cell+ dup ? then
 	cr
 	cell+ ; hidden
 
 : decompiler ( a -- : decompile starting at address )
 	0 bcount !
 	dup chars >r
-	begin dup @ r@ continue? while decompile -bcount ( nuf? ) repeat decompile rdrop
+	begin dup-@ r@ continue? while decompile -bcount ( nuf? ) repeat decompile rdrop
 	drop ; hidden
 
 : see ( --, <string> : decompile a word )
@@ -709,7 +717,7 @@ i.end:   5u.r rdrop exit
 \ : see
 \ 	token find 0= if 13 -throw exit then
 \ 	begin nuf? while
-\ 		dup @ dup $4000 and $4000
+\ 		dup-@ dup $4000 and $4000
 \ 		= if space .name else . then cell+
 \ 	repeat drop ;
 
@@ -717,14 +725,14 @@ i.end:   5u.r rdrop exit
 
 ( ==================== Vocabulary Words ============================== )
 
-: find-empty-cell begin dup @ while cell+ repeat ; hidden ( a -- a )
+: find-empty-cell begin dup-@ while cell+ repeat ; hidden ( a -- a )
 
 : get-order ( -- widn ... wid1 n : get the current search order )
 	context
 	find-empty-cell
 	dup cell- swap
 	context - chars dup >r 1- dup 0< if 50 -throw exit then
-	for aft dup @ swap cell- then next @ r> ;
+	for aft dup-@ swap cell- then next @ r> ;
 
 : [set-order] ( widn ... wid1 n -- : set the current search order )
 	dup [-1]  = if drop root-voc 1 [set-order] exit then

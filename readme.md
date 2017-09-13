@@ -106,6 +106,9 @@ as fixing the store instruction.
 * One of the two stacks should grow upwards, the other downwards. One could be
 located starting at the beginning of the data section, just after program
 storage, the other one at the very end of the memory.
+* Use
+  <https://greg.blog/2013/01/26/unix-bi-grams-tri-grams-and-topic-modeling/> to
+find common word sequences, then shrink the program size based on this.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

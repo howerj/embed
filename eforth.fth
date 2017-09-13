@@ -55,7 +55,7 @@ location _do_semi_colon   0 ( execution vector for ';' )
 location _key       0  ( -- c : new character, blocking input )
 location _emit      0  ( c -- : emit character )
 location _expect    0  ( "accept" vector )
-location _tap       0  ( "tap" vector, for terminal handling )
+\ location _tap       0  ( "tap" vector, for terminal handling )
 location _echo      0  ( c -- : emit character )
 location _prompt    0  ( -- : display prompt )
 location _boot      0  ( -- : execute program at startup )
@@ -275,28 +275,30 @@ constant rp0              $4080 hidden
 	dup 0 cell um/mod ( use -2 and instead of um/mod? ) drop
 	- over +  0 swap !  2dup c!  1+ swap cmove  r> ;
 
-: ^h ( bot eot cur c -- bot eot cur )
-	>r over r@ < dup
-	if
-		=bs dup echo =bl echo echo
-	then r> + ; hidden
+\ : ^h ( bot eot cur c -- bot eot cur )
+\ 	>r over r@ < dup
+\ 	if
+\ 		=bs dup echo =bl echo echo
+\ 	then r> + ; hidden
+
+
+\ : ktap ( bot eot cur c -- bot eot cur )
+\ 	dup =lf ( <-- was =cr ) xor
+\ 	if =bs xor
+\ 		if =bl tap else ^h then
+\ 		exit
+\ 	then drop nip dup ; hidden
 
 : tap dup echo over c! 1+ ; hidden ( bot eot cur c -- bot eot cur )
-
-: ktap ( bot eot cur c -- bot eot cur )
-	dup =lf ( <-- was =cr ) xor
-	if =bs xor
-		if =bl tap else ^h then
-		exit
-	then drop nip dup ; hidden
 
 : accept ( b u -- b u )
 	over + over
 	begin
 		2dup xor
 	while
-		key  dup =bl - 95 u<
-		if tap else _tap @execute then
+		key dup =lf xor if tap else drop nip dup then
+		( key  dup =bl - 95 u<
+		if tap else _tap @execute then )
 	repeat drop over - ;
 
 : expect ( b u -- ) _expect @execute span ! drop ;
@@ -537,9 +539,9 @@ constant rp0              $4080 hidden
 ( ==================== Advanced I/O Control ========================== )
 
 : pace 11 emit ; hidden
-: xio  ' accept _expect ! _tap ! _echo ! _prompt ! ; hidden
-: file ' pace ' "drop" ' ktap xio ;
-: hand ' .ok  ' "drop" ( <-- was emit )  ' ktap xio ; hidden
+: xio  ' accept _expect ! ( _tap ! ) _echo ! _prompt ! ; hidden
+: file ' pace ' "drop"  ( ' ktap ) xio ;
+: hand ' .ok  ' "drop" ( <-- was emit )  ( ' ktap ) xio ; hidden
 : console ' "rx?" _key ! ' "tx!" _emit ! hand ;
 : io!  console ; ( -- : initialize I/O )
 : hi io! hex cr hi-string print ver <# # # 46 hold # #> type cr here . .free cr [ ;
@@ -838,7 +840,7 @@ start:
 .set _key           "rx?"      ( execution vector of ?key )
 .set _emit          "tx!"       ( execution vector of emit )
 .set _expect        accept      ( execution vector of expect, default to 'accept'. )
-.set _tap           ktap        ( execution vector of tap,    default the ktap. )
+\ .set _tap           ktap        ( execution vector of tap,    default the ktap. )
 .set _echo          "tx!"       ( execution vector of echo )
 .set _prompt        .ok         ( execution vector of prompt, default to '.ok'. )
 .set _boot          boot        ( @execute does nothing if zero )

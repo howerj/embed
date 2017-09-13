@@ -90,32 +90,35 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case  0: _tos = tos;                                    break;
 			case  1: _tos = nos;                                    break;
 			case  2: _tos = core[rp];                               break;
-			case  3: _tos = core[(tos >> 1)];                       break;
-			case  4: _tos += nos;                                   break;
-			case  5: _tos &= nos;                                   break;
-			case  6: _tos |= nos;                                   break;
-			case  7: _tos ^= nos;                                   break;
-			case  8: _tos = ~tos;                                   break;
-			case  9: _tos--;                                        break;
-			case 10: _tos = -(tos == 0);                            break;
-			case 11: _tos = -(tos == nos);                          break;
-			case 12: _tos = -(nos < tos);                           break;
-			case 13: _tos = -((int16_t)nos < (int16_t)tos);         break;
-			case 14: _tos = nos >> tos;                             break;
-			case 15: _tos = nos << tos;                             break;
-			case 16: _tos = sp - SP0;                               break;
-			case 17: _tos = rp - RP0;                               break;
-			case 18: save(h, block, CORE/sizeof(uint16_t));         break;
-			case 19: fputc(tos, out); _tos = nos;                   break;
-			case 20: if((c = fgetc(in)) == EOF) return 0; _tos = c; break;
-			case 21: return _tos; 
+			case  3: _tos = core[tos >> 1];                         break;
+			case  4: core[tos >> 1] = nos;                          break;
+			case  5: _tos += nos;                                   break;
+			case  6: _tos &= nos;                                   break;
+			case  7: _tos |= nos;                                   break;
+			case  8: _tos ^= nos;                                   break;
+			case  9: _tos = ~tos;                                   break;
+			case 10: _tos--;                                        break;
+			case 11: _tos = -(tos == 0);                            break;
+			case 12: _tos = -(tos == nos);                          break;
+			case 13: _tos = -(nos < tos);                           break;
+			case 14: _tos = -((int16_t)nos < (int16_t)tos);         break;
+			case 15: _tos = nos >> tos;                             break;
+			case 16: _tos = nos << tos;                             break;
+			case 17: _tos = sp << 1;                                break;
+			case 18: _tos = rp << 1;                                break;
+			case 19: sp   = tos >> 1;                               break;
+			case 20: rp   = tos >> 1; _tos = nos;                   break;
+			case 21: save(h, block, CORE/sizeof(uint16_t));         break;
+			case 22: fputc(tos, out); _tos = nos;                   break;
+			case 23: if((c = fgetc(in)) == EOF) return 0; _tos = c; break;
+			case 24: return _tos; 
 			}
 
 			sp += delta[ instruction       & 0x3];
 			rp += delta[(instruction >> 2) & 0x3];
 
-			if(instruction & 0x20)
-				core[(tos >> 1)] = nos;
+			/*if(instruction & 0x20) // not needed now
+				core[tos >> 1] = nos;*/
 
 			if(instruction & 0x40)
 				core[rp] = tos;

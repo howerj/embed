@@ -132,6 +132,7 @@ typedef enum {
 	ALU_OP_N,                  /**< Copy T to N          */
 	ALU_OP_R,                  /**< Top of return stack  */
 	ALU_OP_T_LOAD,             /**< Load from address    */
+	ALU_OP_N_STORE_AT_T,       /**< Store to address     */
 	ALU_OP_T_PLUS_N,           /**< Addition             */
 	ALU_OP_T_AND_N,            /**< Bitwise AND          */
 	ALU_OP_T_OR_N,             /**< Bitwise OR           */
@@ -146,6 +147,8 @@ typedef enum {
 	ALU_OP_N_LSHIFT_T,         /**< Logical Left Shift   */
 	ALU_OP_DEPTH,              /**< Depth of stack       */
 	ALU_OP_RDEPTH,             /**< R Stack Depth        */
+	ALU_OP_SET_DEPTH,          /**< Set Stack Depth      */
+	ALU_OP_SET_RDEPTH,         /**< Set R Stack Depth    */
 	ALU_OP_SAVE,               /**< Save Image           */
 	ALU_OP_TX,                 /**< Get byte             */
 	ALU_OP_RX,                 /**< Send byte            */
@@ -174,7 +177,7 @@ typedef enum {
 	X(FROMR,  "r>",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_R)        | T_TO_N  | MK_DSTACK(DELTA_1)  | MK_RSTACK(DELTA_N1)))\
 	X(RAT,    "r@",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_R)        | T_TO_N  | MK_DSTACK(DELTA_1)))\
 	X(LOAD,   "@",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_LOAD)))\
-	X(STORE,  "store",  false, (OP_ALU_OP | MK_CODE(ALU_OP_N)        | N_TO_ADDR_T | MK_DSTACK(DELTA_N1)))\
+	X(STORE,  "store",  false, (OP_ALU_OP | MK_CODE(ALU_OP_N_STORE_AT_T)           | MK_DSTACK(DELTA_N1)))\
 	X(RSHIFT, "rshift", true,  (OP_ALU_OP | MK_CODE(ALU_OP_N_RSHIFT_T)             | MK_DSTACK(DELTA_N1)))\
 	X(LSHIFT, "lshift", true,  (OP_ALU_OP | MK_CODE(ALU_OP_N_LSHIFT_T)             | MK_DSTACK(DELTA_N1)))\
 	X(EQUAL,  "=",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_EQUAL_N)              | MK_DSTACK(DELTA_N1)))\
@@ -184,8 +187,10 @@ typedef enum {
 	X(XOR,    "xor",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_XOR_N)                | MK_DSTACK(DELTA_N1)))\
 	X(OR,     "or",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_OR_N)                 | MK_DSTACK(DELTA_N1)))\
 	X(DEPTH,  "sp@",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_DEPTH)   | T_TO_N       | MK_DSTACK(DELTA_1)))\
+	X(SDEPTH, "sp!",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_SET_DEPTH)))\
 	X(T_N1,   "1-",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_DECREMENT)))\
 	X(RDEPTH, "rp@",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_RDEPTH)  | T_TO_N       | MK_DSTACK(DELTA_1)))\
+	X(SRDEPTH,"rp!",    false, (OP_ALU_OP | MK_CODE(ALU_OP_SET_RDEPTH))            | MK_DSTACK(DELTA_N1))\
 	X(TE0,    "0=",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_EQUAL_0)))\
 	X(NOP,    "nop",    false, (OP_ALU_OP | MK_CODE(ALU_OP_T)))\
 	X(BYE,    "bye",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_BYE)))\

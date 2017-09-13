@@ -117,8 +117,6 @@ constant rp0              $4080 hidden
 : 1+ 1 + ;                 ( n -- n : increment a value  )
 : negate invert 1 + ;      ( n -- n : negate a number )
 : - invert 1 + + ;         ( n1 n2 -- n : subtract n1 from n2 )
-: 2/ 1 rshift ;            ( n -- n : divide by 2 NB. This isn't actually correct, just useful, "1 arshift" would be acceptable )
-: 2* 1 lshift ;            ( n -- n : multiply by 2 )
 : cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+ cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;         ( n -- n : convert number of cells to number to increment address by )
@@ -146,7 +144,8 @@ constant rp0              $4080 hidden
 : c, cp @ c! cp 1+! ;    ( c -- : store 'c' at next available location in the dictionary )
 : doNext r> r> ?dup if 1- >r @ >r exit then cell+ >r ; hidden
 
-: um+ ( w w -- w carry )
+ 
+: um+ 
 	over over + >r
 	r@ 0 < invert >r
 	over over and
@@ -154,8 +153,9 @@ constant rp0              $4080 hidden
 	or 0 < r> and invert 1 +
 	r> swap ;
 
-: rp! ( n -- , R: ??? -- ??? : set the return stack pointer )
-	r> swap begin dup rp@ = 0= while rdrop repeat drop >r ; hidden
+\ : umax over over u< if nip exit else drop exit then ; hidden ( u u -- u )
+\ : u<= 2dup u< >r = r> or ;
+\ : um+ 2dup + >r umax r@ u<= if 0 else 1 then r> swap ;
 
 \ : rpick rp@ swap - cells rp0 + @ ; ( n -- u, R: un ... u0 )
 
@@ -171,6 +171,7 @@ constant rp0              $4080 hidden
 : pad here pad-length + ;                 ( -- a )
 : @execute @ ?dup if >r then ; hidden     ( cfa -- )
 : drop0 drop 0 ; hidden
+: 2drop-1 2drop [-1] ; hidden
 : bl =bl ;                                ( -- c )
 : within over - >r - r> u< ;              ( u lo hi -- f )
 : dnegate invert >r invert 1 um+ r> + ;   ( d -- d )
@@ -178,8 +179,8 @@ constant rp0              $4080 hidden
 : count  dup 1+ swap c@ ;                 ( cs -- b u )
 : rot >r swap r> swap ;                   ( n1 n2 n3 -- n2 n3 n1 )
 : -rot swap >r swap r> ;                  ( n1 n2 n3 -- n3 n1 n2 )
-: min over over < if drop exit else nip exit then ; ( n n -- n )
-: max over over > if drop exit else nip exit then ; ( n n -- n )
+: min 2dup < if drop exit else nip exit then ; ( n n -- n )
+: max 2dup > if drop exit else nip exit then ; ( n n -- n )
 : >char $7f and dup 127 =bl within if drop [char] _ then ; hidden ( c -- c )
 : tib #tib cell+ @ ; hidden               ( -- a )
 : echo _echo @execute ; hidden            ( c -- )
@@ -191,8 +192,10 @@ constant rp0              $4080 hidden
 : toggle over @ xor swap ! ; hidden       ( a u -- : xor value at addr with u )
 : cr =cr emit =lf emit ;                  ( -- )
 : space =bl emit ;                        ( -- )
-: pick sp@ swap - cells sp0 + @ ;         ( vn...v0 u -- vn...v0 vu )
-: ndrop for aft drop then next ; hidden   ( n1 ... nu u -- )
+: depth sp@ sp0 - chars ; hidden
+: vrelative cells sp@ swap - ; hidden   
+: pick  vrelative @ ;                     ( vn...v0 u -- vn...v0 vu )
+: ndrop vrelative sp! drop ;              ( vn...v0 u -- vn...vu )
 : type begin dup while swap count emit swap 1- repeat 2drop ; ( b u -- : print a string )
 : $type begin dup while swap count >char emit swap 1- repeat 2drop ; hidden ( b u -- : print a string )
 : print count type ; hidden               ( b -- )
@@ -209,32 +212,25 @@ constant rp0              $4080 hidden
 : aligned dup 1 and if 1+ exit then ;          ( b -- a )
 : align cp @ aligned cp ! ;               ( -- )
 
-: catch  ( xt -- exception# | 0 : return addr on stack )
-	sp@ >r        ( xt : save data stack depth )
-	handler @ >r  ( xt : and previous handler )
-	rp@ handler ! ( xt : set current handler )
-	execute       (      execute returns if no throw )
-	r> handler !  (      restore previous handler )
-	r> drop       (      discard saved stack ptr )
-	0 ;           ( 0  : normal completion )
+: catch
+	sp@ >r
+	handler @ >r
+	rp@ handler !
+	execute
+	r> handler !
+	r> drop0 ;
 
-: throw  ( ??? exception# -- ??? exception# )
-	?dup if ( exc# \ 0 throw is no-op )
-		handler @ rp! ( exc# : restore prev return stack )
-		r> handler !  ( exc# : restore prev handler )
-		r> swap >r    ( saved-sp : exc# on return stack )
-		sp@ swap - ndrop r>   ( exc# : restore stack )
-		( return to the caller of catch because return )
-		( stack is restored to the state that existed )
-		( when catch began execution )
+: throw
+	?dup if
+		handler @ rp!
+		r> handler !
+		r> swap >r
+		sp! drop r>
 	then ;
 
 : -throw negate throw ; hidden ( space saving measure )
 
-( By making all the Forth primitives call '?depth' it should be possible
-to get quite good coverage for stack checking, if not there is only a few
-choice words that need depth checking to get quite a large coverage )
-: ?depth dup 0= if drop exit then sp@ 1- u> if 4 -throw exit then ; hidden ( u -- )
+: ?depth depth 1- u> if 4 -throw exit then ;
 : 1depth 1 ?depth ; hidden
 \ : 2depth 2 ?depth ; hidden
 \ : 3depth 3 ?depth ; hidden
@@ -248,7 +244,7 @@ choice words that need depth checking to get quite a large coverage )
 			if >r drop 1 + r> else drop then r>
 		next
 		drop swap exit
-	then drop 2drop  [-1] dup ;
+	then drop 2drop-1 dup ;
 
 : m/mod ( d n -- r q ) \ floored division
 	dup 0< dup >r
@@ -334,7 +330,7 @@ choice words that need depth checking to get quite a large coverage )
 			count >r swap count r> xor
 			if rdrop drop drop0 exit then
 		then
-	next 2drop [-1] ;
+	next 2drop-1 ;
 
 : address $3fff and ; hidden ( a -- a : mask off address bits )
 : nfa address cell+ ; hidden ( pwd -- nfa : move to name field address)
@@ -345,7 +341,7 @@ choice words that need depth checking to get quite a large coverage )
 : immediate? @ $4000 and logical ; hidden ( pwd -- f : is immediate? )
 : inline?    @ 0x8000 and logical ; hidden ( pwd -- f : is inline? )
 
-: search ( a a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
+: search ( a a -- pwd 1 | pwd -1 | a 0 : find a word in a vocabulary )
 	swap >r
 	begin
 		dup
@@ -437,10 +433,10 @@ choice words that need depth checking to get quite a large coverage )
 : word 1depth parse ?length here pack$ ;          ( c -- a ; <string> )
 : token =bl word ; hidden
 : char token count drop c@ ;               ( -- c; <string> )
-: .s ( -- ) cr sp@ for aft r@ pick . then next .s-string print ;
+: .s ( -- ) cr depth for aft r@ pick . then next .s-string print ;
 : unused $4000 here - ; hidden
 : .free unused u. ; hidden
-: preset sp@ ndrop tib #tib cell+ ! 0 >in ! 0 _id ! ; hidden
+: preset depth ndrop tib #tib cell+ ! 0 >in ! 0 _id ! ; hidden
 : ] [-1] state ! ;
 : [  0 state ! ; immediate
 
@@ -575,8 +571,8 @@ choice words that need depth checking to get quite a large coverage )
 
 : !csp sp@ csp ! ; hidden
 : ?csp sp@ csp @ xor if 22 -throw exit then ; hidden
-: +csp csp 1+! ; hidden
-: -csp csp 1-! ; hidden
+: +csp    1 cells csp +! ; hidden
+: -csp [-1] cells csp +! ; hidden
 : ?unique dup last search if drop redefined print cr exit else drop exit then ; hidden ( a -- a )
 : ?nul count 0= if 16 -throw exit then 1- ; hidden ( b -- : check for zero length strings )
 : find-cfa token find if cfa exit else 13 -throw exit then ; hidden
@@ -746,7 +742,7 @@ i.end:   5u.r rdrop exit
 	                   see.branch  i.print r@ bcounter! branch i.end2t ; hidden
 
 : continue? ( u a -- f : determine whether to continue decompilation  )
-	bcount @ if 2drop [-1] exit then
+	bcount @ if 2drop-1 exit then
 	over $e000 and 0= if u> exit else drop then
 	dup ' doVar make-callable = if drop0 exit then ( print next address ? )
 	=exit and =exit <> ; hidden

@@ -105,12 +105,11 @@ constant rp0              $4080 hidden
 
 ( ======================== System Variables ================= )
 
-( ======================== Forth Kernel ===================== )
-
 : [-1] -1 ; hidden         ( -- -1 : space saving measure, push -1 onto stack )
 : 0x8000 $8000 ; hidden    ( -- $8000 : space saving measure, push $8000 onto stack )
-: ! store drop ;           ( n a -- : store a value 'n' at location 'a'  )
-: 256/ 8 rshift ; hidden   ( u -- u : shift right by 8, or divide by 256 )
+: drop0 drop 0 ; hidden
+: 2drop drop drop ;        ( n n -- )
+: 2drop-1 2drop [-1] ; hidden
 : 1+ 1 + ;                 ( n -- n : increment a value  )
 : negate invert 1 + ;      ( n -- n : negate a number )
 : - invert 1 + + ;         ( n1 n2 -- n : subtract n1 from n2 )
@@ -127,7 +126,6 @@ constant rp0              $4080 hidden
 : 0> 0 > ;                 ( n -- f : greater than zero? )
 : 0< 0 < ;                 ( n -- f : less than zero? )
 : 2dup over over ;         ( n1 n2 -- n1 n2 n1 n2 )
-: 2drop drop drop ;        ( n n -- )
 : tuck swap over ;         ( n1 n2 -- n2 n1 n2 )
 : +! tuck @ + swap ! ;     ( n a -- : increment value at address by 'n' )
 : 1+!  1 swap +! ;         ( a -- : increment value at address by 1 )
@@ -137,14 +135,9 @@ constant rp0              $4080 hidden
 : c!                       ( c b -- )
 	swap $ff and dup 8 lshift or swap
 	swap over dup ( -2 and ) @ swap 1 and 0 = $ff xor
-	>r over xor r> and xor swap ( -2 and ) store drop ;
+	>r over xor r> and xor swap ( -2 and ) ! ;
 : c, cp @ c! cp 1+! ;    ( c -- : store 'c' at next available location in the dictionary )
 : doNext r> r> ?dup if 1- >r @ >r exit then cell+ >r ; hidden
-
-( ======================== Forth Kernel ===================== )
-
-( ======================== Word Set ========================= )
-
 : 2! ( d a -- ) tuck ! cell+ ! ;          ( n n a -- )
 : 2@ ( a -- d ) dup cell+ @ swap @ ;      ( a -- n n )
 : here cp @ ;                             ( -- a )
@@ -152,8 +145,6 @@ constant rp0              $4080 hidden
 : source-id _id @ ;                       ( -- 0 | -1 )
 : pad here pad-length + ;                 ( -- a )
 : @execute @ ?dup if >r then ; hidden     ( cfa -- )
-: drop0 drop 0 ; hidden
-: 2drop-1 2drop [-1] ; hidden
 : bl =bl ;                                ( -- c )
 : within over - >r - r> u< ;              ( u lo hi -- f )
 : dnegate invert >r invert 1 um+ r> + ;   ( d -- d )
@@ -301,7 +292,7 @@ constant rp0              $4080 hidden
 
 : address $3fff and ; hidden ( a -- a : mask off address bits )
 : nfa address cell+ ; hidden ( pwd -- nfa : move to name field address)
-: cfa nfa dup count nip + cell + $fffe and ; hidden ( pwd -- cfa : move to code field address )
+: cfa nfa dup count nip + cell+ $fffe and ; hidden ( pwd -- cfa : move to code field address )
 : .id nfa print ; hidden ( pwd -- : print out a word )
 : logical 0= 0= ; hidden ( n -- f )
 : immediate? @ $4000 and logical ; hidden ( pwd -- f : is immediate? )

@@ -174,7 +174,7 @@ typedef enum {
 	X(FROMR,  "r>",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_R)        | T_TO_N  | MK_DSTACK(DELTA_1)  | MK_RSTACK(DELTA_N1)))\
 	X(RAT,    "r@",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_R)        | T_TO_N  | MK_DSTACK(DELTA_1)))\
 	X(LOAD,   "@",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_LOAD)))\
-	X(STORE,  "store",  false, (OP_ALU_OP | MK_CODE(ALU_OP_N_STORE_AT_T)           | MK_DSTACK(DELTA_N1)))\
+	X(STORE,  "!",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_N_STORE_AT_T)           | MK_DSTACK(DELTA_N1)))\
 	X(RSHIFT, "rshift", true,  (OP_ALU_OP | MK_CODE(ALU_OP_N_RSHIFT_T)             | MK_DSTACK(DELTA_N1)))\
 	X(LSHIFT, "lshift", true,  (OP_ALU_OP | MK_CODE(ALU_OP_N_LSHIFT_T)             | MK_DSTACK(DELTA_N1)))\
 	X(EQUAL,  "=",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_EQUAL_N)              | MK_DSTACK(DELTA_N1)))\
@@ -187,14 +187,13 @@ typedef enum {
 	X(SDEPTH, "sp!",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_SET_DEPTH)))\
 	X(T_N1,   "1-",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_DECREMENT)))\
 	X(RDEPTH, "rp@",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_RDEPTH)  | T_TO_N       | MK_DSTACK(DELTA_1)))\
-	X(SRDEPTH,"rp!",    false, (OP_ALU_OP | MK_CODE(ALU_OP_SET_RDEPTH))            | MK_DSTACK(DELTA_N1))\
+	X(SRDEPTH,"rp!",    true, (OP_ALU_OP | MK_CODE(ALU_OP_SET_RDEPTH))            | MK_DSTACK(DELTA_N1))\
 	X(TE0,    "0=",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_EQUAL_0)))\
-	X(NOP,    "nop",    false, (OP_ALU_OP | MK_CODE(ALU_OP_T)))\
+	X(NOP,    "nop",    true, (OP_ALU_OP | MK_CODE(ALU_OP_T)))\
 	X(BYE,    "bye",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_BYE)))\
 	X(RX,     "rx?",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_RX)      | T_TO_N       | MK_DSTACK(DELTA_1)))\
 	X(TX,     "tx!",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_TX)                     | MK_DSTACK(DELTA_N1)))\
 	X(SAVE,   "save",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_SAVE)))\
-	X(RUP,    "rup",    false, (OP_ALU_OP | MK_CODE(ALU_OP_T))                     | MK_RSTACK(DELTA_1))\
 	X(RDROP,  "rdrop",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_T) | MK_RSTACK(DELTA_N1)))
 
 

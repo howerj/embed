@@ -99,7 +99,7 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case  1: _tos = nos;                                    break;
 			case  2: _tos = core[rp];                               break;
 			case  3: _tos = core[tos >> 1];                         break;
-			case  4: core[tos >> 1] = nos;                          break;
+			case  4: core[tos >> 1] = nos; _tos = core[sp-- - 1];   break;
 			case  5: d = (ud_t)tos + (ud_t)nos; _tos = d >> 16; core[sp] = d; nos = d; break;
 			case  6: d = (ud_t)tos * (ud_t)nos; _tos = d >> 16; core[sp] = d; nos = d; break;
 			case  7: _tos &= nos;                                   break;

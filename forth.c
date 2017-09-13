@@ -9,7 +9,11 @@
 #define SP0         (8192u)
 #define RP0         (8256u)
 
-typedef struct { uint16_t core[CORE/sizeof(uint16_t)]; } forth_t;
+typedef uint16_t uw_t;
+typedef int16_t  sw_t;
+typedef uint32_t ud_t;
+
+typedef struct { uw_t core[CORE/sizeof(uw_t)]; } forth_t;
 
 static FILE *fopen_or_die(const char *file, const char *mode)
 {
@@ -22,7 +26,7 @@ static FILE *fopen_or_die(const char *file, const char *mode)
 	return f;
 }
 
-static int binary_memory_load(FILE *input, uint16_t *p, size_t length)
+static int binary_memory_load(FILE *input, uw_t *p, size_t length)
 {
 	for(size_t i = 0; i < length; i++) {
 		errno = 0;
@@ -35,7 +39,7 @@ static int binary_memory_load(FILE *input, uint16_t *p, size_t length)
 	return 0;
 }
 
-static int binary_memory_save(FILE *output, uint16_t *p, size_t length)
+static int binary_memory_save(FILE *output, uw_t *p, size_t length)
 {
 	for(size_t i = 0; i < length; i++) {
 		errno = 0;
@@ -52,7 +56,7 @@ static int binary_memory_save(FILE *output, uint16_t *p, size_t length)
 static int load(forth_t *h, const char *name)
 {
 	FILE *input = fopen_or_die(name, "rb");
-	const int r = binary_memory_load(input, h->core, CORE/sizeof(uint16_t));
+	const int r = binary_memory_load(input, h->core, CORE/sizeof(uw_t));
 	fclose(input);
 	return r;
 }
@@ -67,21 +71,22 @@ static int save(forth_t *h, const char *name, size_t length)
 
 static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
-	static const uint16_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
-	register uint16_t pc = 0, tos = 0, rp = RP0, sp = SP0;
-	uint16_t *core = h->core;
+	static const uw_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
+	register uw_t pc = 0, tos = 0, rp = RP0, sp = SP0;
+	uw_t *core = h->core;
 	for(;;) {
-		uint16_t instruction = core[pc];
+		uw_t instruction = core[pc];
 
 		if(0x8000 & instruction) { /* literal */
 			core[++sp] = tos;
 			tos        = instruction & 0x7FFF;
 			pc++;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
-			uint16_t nos  = core[sp];
-			uint16_t _tos = tos;
-			uint16_t npc  = pc + 1;
-			int      c    = 0;
+			int  c;
+			ud_t d;
+			uw_t nos  = core[sp];
+			uw_t _tos = tos;
+			uw_t npc  = pc + 1;
 
 			if(instruction & 0x10)
 				npc = core[rp] >> 1;
@@ -92,33 +97,34 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case  2: _tos = core[rp];                               break;
 			case  3: _tos = core[tos >> 1];                         break;
 			case  4: core[tos >> 1] = nos;                          break;
-			case  5: _tos += nos;                                   break;
-			case  6: _tos &= nos;                                   break;
-			case  7: _tos |= nos;                                   break;
-			case  8: _tos ^= nos;                                   break;
-			case  9: _tos = ~tos;                                   break;
-			case 10: _tos--;                                        break;
-			case 11: _tos = -(tos == 0);                            break;
-			case 12: _tos = -(tos == nos);                          break;
-			case 13: _tos = -(nos < tos);                           break;
-			case 14: _tos = -((int16_t)nos < (int16_t)tos);         break;
-			case 15: _tos = nos >> tos;                             break;
-			case 16: _tos = nos << tos;                             break;
-			case 17: _tos = sp << 1;                                break;
-			case 18: _tos = rp << 1;                                break;
-			case 19: sp   = tos >> 1;                               break;
-			case 20: rp   = tos >> 1; _tos = nos;                   break;
-			case 21: save(h, block, CORE/sizeof(uint16_t));         break;
-			case 22: fputc(tos, out); _tos = nos;                   break;
-			case 23: if((c = fgetc(in)) == EOF) return 0; _tos = c; break;
-			case 24: return _tos; 
+			case  5: d = (ud_t)tos + (ud_t)nos; _tos = d >> 16; core[sp] = d; nos = d; break;
+			case  6: d = (ud_t)tos * (ud_t)nos; _tos = d >> 16; core[sp] = d; nos = d; break;
+			case  7: _tos &= nos;                                   break;
+			case  8: _tos |= nos;                                   break;
+			case  9: _tos ^= nos;                                   break;
+			case 10: _tos = ~tos;                                   break;
+			case 11: _tos--;                                        break;
+			case 12: _tos = -(tos == 0);                            break;
+			case 13: _tos = -(tos == nos);                          break;
+			case 14: _tos = -(nos < tos);                           break;
+			case 15: _tos = -((sw_t)nos < (sw_t)tos);               break;
+			case 16: _tos = nos >> tos;                             break;
+			case 17: _tos = nos << tos;                             break;
+			case 18: _tos = sp << 1;                                break;
+			case 19: _tos = rp << 1;                                break;
+			case 20: sp   = tos >> 1;                               break;
+			case 21: rp   = tos >> 1; _tos = nos;                   break;
+			case 22: save(h, block, CORE/sizeof(uw_t));             break;
+			case 23: fputc(tos, out); _tos = nos;                   break;
+			case 24: if((c = fgetc(in)) == EOF) return 0; _tos = c; break;
+			case 25: return _tos; 
 			}
 
 			sp += delta[ instruction       & 0x3];
 			rp += delta[(instruction >> 2) & 0x3];
 
-			/*if(instruction & 0x20) // not needed now
-				core[tos >> 1] = nos;*/
+			if(instruction & 0x20) 
+				_tos = nos;
 
 			if(instruction & 0x40)
 				core[rp] = tos;

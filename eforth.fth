@@ -144,19 +144,6 @@ constant rp0              $4080 hidden
 : c, cp @ c! cp 1+! ;    ( c -- : store 'c' at next available location in the dictionary )
 : doNext r> r> ?dup if 1- >r @ >r exit then cell+ >r ; hidden
 
- 
-: um+ 
-	over over + >r
-	r@ 0 < invert >r
-	over over and
-	0 < r> or >r
-	or 0 < r> and invert 1 +
-	r> swap ;
-
-\ : umax over over u< if nip exit else drop exit then ; hidden ( u u -- u )
-\ : u<= 2dup u< >r = r> or ;
-\ : um+ 2dup + >r umax r@ u<= if 0 else 1 then r> swap ;
-
 \ : rpick rp@ swap - cells rp0 + @ ; ( n -- u, R: un ... u0 )
 
 ( ======================== Forth Kernel ===================== )
@@ -254,20 +241,13 @@ constant rp0              $4080 hidden
 	>r dup 0< if r@ + then r> um/mod r>
 	if swap negate swap exit then ;
 
-: um* ( u u -- ud )
-	0 swap ( u1 0 u2 ) 15
-	for dup um+ >r >r dup um+ r> + r>
-		if >r over um+ r> + then
-	next rot drop ;
-
 : /mod  over 0< swap m/mod ; ( n n -- r q )
 : mod  /mod drop ;           ( n n -- r )
 : /    /mod nip ;            ( n n -- q )
-: *    um* drop ;            ( n n -- n )
-: m* 2dup xor 0< >r abs swap abs um* r> if dnegate exit then ;
-: */mod  >r m* r> m/mod ;  ( n n n -- r q )
-: */  */mod nip ;          ( n n n -- q )
-: s>d dup 0< ;             ( n -- d : single to double )
+\ : m* 2dup xor 0< >r abs swap abs um* r> if dnegate exit then ;
+\ : */mod  >r m* r> m/mod ;  ( n n n -- r q )
+\ : */  */mod nip ;          ( n n n -- q )
+\ : s>d dup 0< ;             ( n -- d : single to double )
 
 : decimal 10 base ! ;                       ( -- )
 : hex     16 base ! ;                       ( -- )

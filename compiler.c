@@ -84,12 +84,7 @@ extern log_level_e log_level;
 #define note(FMT, ...)    logger(LOG_NOTE,    __func__, __LINE__, FMT, ##__VA_ARGS__)
 #define debug(FMT, ...)   logger(LOG_DEBUG,   __func__, __LINE__, FMT, ##__VA_ARGS__)
 
-#define BACKSPACE (8)
-#define ESCAPE    (27)
-#define DELETE    (127)  /* ASCII delete */
-
 #define MAX(X, Y)     ((X) > (Y) ? (X) : (Y))
-#define MIN(X, Y)     ((X) > (Y) ? (Y) : (X))
 
 #define NUMBER_OF_INTERRUPTS (8u)
 
@@ -117,15 +112,15 @@ extern log_level_e log_level;
 #define RSTACK_START    (2u)
 #define RSTACK(INST)    (((INST) >> RSTACK_START) & ((1 << RSTACK_LENGTH) - 1))
 
-#define R_TO_PC_BIT_INDEX     (4u)
-#define N_TO_ADDR_T_BIT_INDEX (5u)
-#define T_TO_R_BIT_INDEX      (6u)
-#define T_TO_N_BIT_INDEX      (7u)
+#define R_TO_PC_BIT_INDEX (4u)
+#define N_TO_T_BIT_INDEX  (5u)
+#define T_TO_R_BIT_INDEX  (6u)
+#define T_TO_N_BIT_INDEX  (7u)
 
-#define R_TO_PC         (1u << R_TO_PC_BIT_INDEX)
-#define N_TO_ADDR_T     (1u << N_TO_ADDR_T_BIT_INDEX)
-#define T_TO_R          (1u << T_TO_R_BIT_INDEX)
-#define T_TO_N          (1u << T_TO_N_BIT_INDEX)
+#define R_TO_PC           (1u << R_TO_PC_BIT_INDEX)
+#define N_TO_T            (1u << N_TO_T_BIT_INDEX)
+#define T_TO_R            (1u << T_TO_R_BIT_INDEX)
+#define T_TO_N            (1u << T_TO_N_BIT_INDEX)
 
 typedef enum {
 	ALU_OP_T,                  /**< Top of Stack         */
@@ -133,7 +128,8 @@ typedef enum {
 	ALU_OP_R,                  /**< Top of return stack  */
 	ALU_OP_T_LOAD,             /**< Load from address    */
 	ALU_OP_N_STORE_AT_T,       /**< Store to address     */
-	ALU_OP_T_PLUS_N,           /**< Addition             */
+	ALU_OP_T_PLUS_N,           /**< Double cell addition */
+	ALU_OP_T_MUL_N,            /**< Double cell multiply */
 	ALU_OP_T_AND_N,            /**< Bitwise AND          */
 	ALU_OP_T_OR_N,             /**< Bitwise OR           */
 	ALU_OP_T_XOR_N,            /**< Bitwise XOR          */
@@ -168,7 +164,10 @@ typedef enum {
 	X(DUP,    "dup",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_T)        | T_TO_N  | MK_DSTACK(DELTA_1)))\
 	X(OVER,   "over",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_N)        | T_TO_N  | MK_DSTACK(DELTA_1)))\
 	X(INVERT, "invert", true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_INVERT)))\
-	X(ADD,    "+",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_PLUS_N)               | MK_DSTACK(DELTA_N1)))\
+	X(UM_ADD, "um+",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_PLUS_N)))\
+	X(ADD,    "+",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_PLUS_N)) | N_TO_T | MK_DSTACK(DELTA_N1))\
+	X(UM_MUL, "um*",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_MUL_N)))\
+	X(MUL,    "*",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_MUL_N)) | N_TO_T | MK_DSTACK(DELTA_N1))\
 	X(SWAP,   "swap",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_N)        | T_TO_N))\
 	X(NIP,    "nip",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_T)                      | MK_DSTACK(DELTA_N1)))\
 	X(DROP,   "drop",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_N)                      | MK_DSTACK(DELTA_N1)))\

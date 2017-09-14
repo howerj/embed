@@ -241,16 +241,18 @@ constant rp0              $7fff hidden
 : extract  0 swap um/mod swap ; hidden       ( n base -- n c )
 : ?hold hld @ cp @ u< if 17 -throw exit then ; hidden ( -- )
 : hold  hld @ 1- dup hld ! ?hold c! ;        ( c -- )
-: holds begin dup while 1- 2dup + c@ hold repeat 2drop ;
+\ : holds begin dup while 1- 2dup + c@ hold repeat 2drop ;
 : sign  0< if [char] - hold exit then ;           ( n -- )
 : #>  drop hld @ pad over- ;                ( w -- b u )
 : #  1depth radix extract digit hold ;       ( u -- u )
 : #s begin # dup while repeat ;              ( u -- 0 )
 : <#  pad hld ! ;                            ( -- )
 : str dup >r abs <# #s r> sign #> ;          ( n -- b u : convert a signed integer to a numeric string )
-:  .r >r str r> over- spaces type ;       ( n n : print n, right justified by +n )
-: u.r >r <# #s #> r> over- spaces type ;    ( u +n -- : print u right justified by +n)
-: u.  <# #s #> space type ;                  ( u -- : print unsigned number )
+: adjust over- spaces type ; hidden ( b n n -- ) 
+:  .r >r str r> adjust ;       ( n n : print n, right justified by +n )
+: (u.) <# #s #> ; hidden
+: u.r >r (u.) r> adjust ;    ( u +n -- : print u right justified by +n)
+: u.  (u.) space type ;                  ( u -- : print unsigned number )
 :  .  radix 10 xor if u. exit then str space type ; ( n -- print space, signed number )
 : ? @ . ;                                    ( a -- : display the contents in a memory cell )
 : .base base@ dup decimal base! ; ( -- )
@@ -297,7 +299,6 @@ constant rp0              $7fff hidden
 			if rdrop drop drop-0 exit then
 		then
 	next 2drop-1 ;
-
 
 : nfa address cell+ ; hidden ( pwd -- nfa : move to name field address)
 : cfa nfa dup count nip + cell+ $fffe and ; hidden ( pwd -- cfa : move to code field address )
@@ -368,7 +369,7 @@ constant rp0              $7fff hidden
 		aft =bl over r@ + c@ <
 			if r> 1+ exit then
 		then
-	next 0 ;
+	next 0 ; hidden
 
 : lookfor ( b u c -- b u : skip until _test succeeds )
 	>r
@@ -496,7 +497,7 @@ constant rp0              $7fff hidden
 	next drop ;
 
 : CSI $1b emit [char] [ emit ; hidden
-: 10u. base@ >r decimal <# #s #> type r> base! ; hidden ( u -- )
+: 10u. base@ >r decimal (u.) type r> base! ; hidden ( u -- )
 : ansi swap CSI 10u. emit ; ( n c -- )
 : at-xy CSI 10u. $3b emit 10u. [char] H emit ; ( x y -- )
 : page 2 [char] J ansi 1 1 at-xy ; ( -- )
@@ -542,10 +543,10 @@ constant rp0              $7fff hidden
 : "else" ?compile here 0 jump, swap doThen ; immediate
 : "while" ?compile call "if" ; immediate
 : "repeat" ?compile swap call "again" call "then" ; immediate
-: recurse ?compile last-def @ address cfa compile, ; immediate
-: tail ?compile last-def @ address cfa jump, ; immediate
+: recurse ?compile last-def @ cfa compile, ; immediate
+: tail ?compile last-def @ cfa jump, ; immediate
 : create call ":" compile doVar context @ ! [ ;
-: doDoes r> chars here chars last-def @ address cfa dup cell+ doLit ! , ; hidden
+: doDoes r> chars here chars last-def @ cfa dup cell+ doLit ! , ; hidden
 : does> ?compile compile doDoes nop ; immediate
 : "variable" create 0 , ;
 : ":noname" here ] !csp ;

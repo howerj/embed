@@ -3,7 +3,7 @@ CC=gcc
 
 .PHONY: all clean run static
 
-all: forth forth.blk
+all: forth eforth.blk
 
 compiler: compiler.c
 	${CC} ${CFLAGS} $< -o $@

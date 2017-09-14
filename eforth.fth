@@ -176,7 +176,6 @@ constant rp0              $4080 hidden
 : depth sp@ sp0 - chars ; hidden
 : vrelative cells sp@ swap - ; hidden
 : pick  vrelative @ ;                     ( vn...v0 u -- vn...v0 vu )
-: ndrop vrelative sp! drop ; hidden       ( vn...v0 u -- vn...vu )
 : typist >r begin dup while swap count r@ if >char then emit swap 1- repeat rdrop 2drop ; hidden ( b u f -- : print a string )
 : type 0 typist ;
 : $type [-1] typist ; hidden
@@ -209,8 +208,9 @@ constant rp0              $4080 hidden
 	then ;
 
 : -throw negate throw ; hidden ( space saving measure )
-: ?depth depth 1- u> if 4 -throw exit then ; hidden
-: 1depth 1 ?depth ; hidden
+
+: ?ndepth depth 1- u> if 4 -throw exit then ; hidden
+: 1depth 1 ?ndepth ; hidden
 
 : um/mod ( ud u -- ur uq )
 	?dup 0= if 10 -throw exit then
@@ -409,7 +409,7 @@ constant rp0              $4080 hidden
 	?dup if
 		[char] ? emit ( print error message )
 		. cr
-		depth ndrop
+		sp0 sp! 
 		preset        ( reset machine )
 		[             ( back into interpret mode )
 		exit
@@ -453,10 +453,12 @@ constant rp0              $4080 hidden
 		then
 	then ;
 
+: bye 0 (bye) ;
 : "immediate" last $4000 toggle ;
 : .ok command? if OK print space then cr ;
-: eval begin token dup count nip while interpret repeat drop _prompt @execute ; hidden
-: quit quitLoop: preset [ begin query ' eval catch ?error again ;
+: ?depth sp@ sp0 u< if 4 -throw exit then ; hidden
+: eval begin token dup count nip while interpret ?depth repeat drop _prompt @execute ; hidden
+: quit preset [ begin query ' eval catch ?error again ;
 
 : evaluate ( a u -- )
 	_prompt @ >r  0 _prompt !
@@ -527,8 +529,8 @@ constant rp0              $4080 hidden
 : compile  r> dup-@ , cell+ >r ; ( -- : Compile next compiled word NB. Works for words, instructions, and numbers below $8000 )
 : "[char]" ?compile char literal ; immediate ( --, <string> : )
 : ?quit command? if 56 -throw exit then ; hidden
-: ";" ?quit ( ?compile ) +csp ?csp context @ ! =exit , ( save )  [ ; immediate
-: ":" align ( save ) !csp here dup last-def ! last ,  token ?nul ?unique count + aligned cp ! ] ;
+: ";" ?quit ( ?compile ) +csp ?csp context @ ! =exit ,  [ ; immediate
+: ":" align !csp here dup last-def ! last ,  token ?nul ?unique count + aligned cp ! ] ;
 : jumpz, chars $2000 or , ; hidden
 : jump, chars ( $0000 or ) , ; hidden
 : "begin" ?compile here -csp ; immediate
@@ -608,6 +610,7 @@ constant rp0              $4080 hidden
 
 : update [-1] block-dirty ! ;          ( -- )
 : +block blk @ + ;                     ( -- )
+: save [-1] (save) throw ;
 : flush block-dirty @ if save exit then ;
 
 : block ( k -- a )
@@ -621,10 +624,11 @@ constant rp0              $4080 hidden
 : load 0 l/b 1- for 2dup >r >r loadline r> r> 1+ next 2drop ;
 : pipe 124 emit ; hidden
 : .line line -trailing $type ; hidden
-: .border border @ if 3 spaces c/l 45 nchars cr exit then ; hidden
-: #line border @ if dup 2 u.r exit then ; hidden ( u -- u : print line number )
-: ?pipe border @ if pipe exit then ; hidden
-: ?page border @ if page exit then ; hidden
+: border@ border @ ; hidden
+: .border border@ if 3 spaces c/l 45 nchars cr exit then ; hidden
+: #line border@ if dup 2 u.r exit then ; hidden ( u -- u : print line number )
+: ?pipe border@ if pipe exit then ; hidden
+: ?page border@ if page exit then ; hidden
 : thru over- for dup load 1+ next drop ; ( k1 k2 -- )
 : blank =bl fill ;
 : message l/b extract .line cr ; ( u -- )
@@ -639,11 +643,11 @@ constant rp0              $4080 hidden
 		2dup #line ?pipe line $type ?pipe cr 1+
 	repeat .border 2drop ;
 
-: index ( k1 k2 -- : show titles for block k1 to k2 )
-	over- cr
-	for
-		dup 5u.r space pipe space dup  0 .line cr 1+
-	next drop ;
+\ : index ( k1 k2 -- : show titles for block k1 to k2 )
+\	over- cr
+\	for
+\		dup 5u.r space pipe space dup  0 .line cr 1+
+\	next drop ;
 
 ( ==================== Block Word Set ================================ )
 

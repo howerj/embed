@@ -9,7 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define FORTH_BLOCK ("forth.blk")
 #define CORE        (65536u)
 #define SP0         (8192u)
 #define RP0         (8256u)
@@ -68,6 +67,8 @@ static int load(forth_t *h, const char *name)
 
 static int save(forth_t *h, const char *name, size_t length)
 {
+	if(!name)
+		return -1;
 	FILE *output = fopen_or_die(name, "wb");
 	const int r = binary_memory_save(output, h->core, length);
 	fclose(output);
@@ -117,8 +118,8 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 19: _tos = rp << 1;                                break;
 			case 20: sp   = tos >> 1;                               break;
 			case 21: rp   = tos >> 1; _tos = nos;                   break;
-			case 22: save(h, block, CORE/sizeof(uw_t));             break;
-			case 23: fputc(tos, out); _tos = nos;                   break;
+			case 22: _tos = save(h, block, ((ud_t)_tos + 1u) >> 1); break;
+			case 23: _tos = fputc(tos, out);                        break;
 			case 24: if((c = fgetc(in)) == EOF) return 0; _tos = c; break;
 			case 25: return _tos;
 			}
@@ -149,11 +150,15 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 	return 0;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
 	static forth_t h;
 	memset(h.core, 0, CORE);
-	load(&h, FORTH_BLOCK);
-	return forth(&h, stdin, stdout, FORTH_BLOCK);
+	if(argc != 2) {
+		fprintf(stderr, "usage: %s forth.blk\n", argv[0]);
+		return -1;
+	}
+	load(&h, argv[1]);
+	return forth(&h, stdin, stdout, argv[1]);
 }
 

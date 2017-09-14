@@ -1,7 +1,7 @@
 CFLAGS=-O2 -std=c99 -Wall -Wextra
 CC=gcc
 
-.PHONY: clean all run static
+.PHONY: all clean run static
 
 all: forth forth.blk
 
@@ -11,11 +11,11 @@ compiler: compiler.c
 forth: forth.c
 	${CC} ${CFLAGS} $< -o $@
 
-forth.blk: compiler eforth.fth
-	./$^
+%.blk: compiler %.fth
+	./$^ $@
 
-run: forth forth.blk
-	./forth
+run: forth eforth.blk
+	./$^
 
 static: CC=musl-gcc
 static: CFLAGS+=-static

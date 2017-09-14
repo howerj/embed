@@ -29,8 +29,6 @@ extern int _fileno(FILE *stream);
 #define VARIABLE_STACK_START (MAX_PROGRAM)
 #define RETURN_STACK_START   (MAX_PROGRAM+STK_SIZE)
 
-#define FORTH_BLOCK          ("forth.blk") /**< default file for flash initialization */
-
 typedef struct {
 	uint16_t core[MAX_MEMORY/2]; /**< main memory */
 	uint16_t pc;  /**< program counter */
@@ -187,13 +185,13 @@ typedef enum {
 	X(SDEPTH, "sp!",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_SET_DEPTH)))\
 	X(T_N1,   "1-",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_DECREMENT)))\
 	X(RDEPTH, "rp@",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_RDEPTH)  | T_TO_N       | MK_DSTACK(DELTA_1)))\
-	X(SRDEPTH,"rp!",    true, (OP_ALU_OP | MK_CODE(ALU_OP_SET_RDEPTH))            | MK_DSTACK(DELTA_N1))\
+	X(SRDEPTH,"rp!",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_SET_RDEPTH))            | MK_DSTACK(DELTA_N1))\
 	X(TE0,    "0=",     true,  (OP_ALU_OP | MK_CODE(ALU_OP_T_EQUAL_0)))\
-	X(NOP,    "nop",    true, (OP_ALU_OP | MK_CODE(ALU_OP_T)))\
-	X(BYE,    "bye",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_BYE)))\
+	X(NOP,    "nop",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_T)))\
+	X(BYE,    "(bye)",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_BYE)))\
 	X(RX,     "rx?",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_RX)      | T_TO_N       | MK_DSTACK(DELTA_1)))\
-	X(TX,     "tx!",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_TX)                     | MK_DSTACK(DELTA_N1)))\
-	X(SAVE,   "save",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_SAVE)))\
+	X(TX,     "tx!",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_TX)      | N_TO_T       | MK_DSTACK(DELTA_N1)))\
+	X(SAVE,   "(save)", true,  (OP_ALU_OP | MK_CODE(ALU_OP_SAVE)))\
 	X(RDROP,  "rdrop",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_T) | MK_RSTACK(DELTA_N1)))
 
 
@@ -1906,15 +1904,15 @@ int main(int argc, char **argv)
 {
 	int r = 0;
 	h2_t *h = NULL;
-	if(argc == 2) {
+	if(argc == 3) {
 		FILE *input = fopen_or_die(argv[1], "rb");
 		h = h2_assemble_core(input, NULL);
 		if(!h)
 			return -1;
 		fclose(input);
-		save(h, FORTH_BLOCK, h->pc);
+		save(h, argv[2], h->pc);
 	} else {
-		fprintf(stderr, "usage: %s file.fth\n", argv[0]);
+		fprintf(stderr, "usage: %s file.fth file.blk\n", argv[0]);
 		return -1;
 	}
 	h2_free(h);

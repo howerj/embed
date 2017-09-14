@@ -54,7 +54,7 @@ location _tap       0  ( "tap" vector, for terminal handling )
 location _echo      0  ( c -- : emit character )
 location _prompt    0  ( -- : display prompt )
 location _boot      0  ( -- : execute program at startup )
-location _message   0  ( n -- : display an error message )
+\ location _message   0  ( n -- : display an error message )
 location last-def   0  ( last, possibly unlinked, word definition )
 location cp         0  ( Dictionary Pointer: Set at end of file )
 location csp        0  ( current data stack pointer - for error checking )
@@ -97,11 +97,11 @@ location see.inline       " inline "    ( used by "see", for inline words )
 location OK               " ok"         ( used by "prompt" )
 location redefined        " redefined"  ( used by ":" when a word has been redefined )
 location hi-string        "eFORTH V"    ( used by "hi" )
-constant ver              $666
+constant ver              $1984
 constant c/l              64    hidden ( characters per line in a block )
 constant l/b              16    hidden ( lines in a block )
 constant sp0              $4000 hidden
-constant rp0              $4080 hidden
+constant rp0              $7fff hidden
 
 ( ======================== System Variables ================= )
 : 2drop drop drop ;       ( n n -- )
@@ -451,11 +451,11 @@ constant rp0              $4080 hidden
 		else
 			drop space print 13 -throw exit
 		then
-	then ;
+	then ; hidden
 
 : bye 0 (bye) ;
 : "immediate" last $4000 toggle ;
-: .ok command? if OK print space then cr ;
+: .ok command? if OK print space then cr ; hidden
 : ?depth sp@ sp0 u< if 4 -throw exit then ; hidden
 : eval begin token dup count nip while interpret ?depth repeat drop _prompt @execute ; hidden
 : quit preset [ begin query ' eval catch ?error again ;
@@ -510,7 +510,7 @@ constant rp0              $4080 hidden
 : hand ' .ok  ' "drop" ( <-- was emit )  ' ktap xio ; hidden
 : console ' "rx?" _key ! ' "tx!" _emit ! hand ; hidden
 : io! console preset ; ( -- : initialize I/O )
-: hi io! hex cr hi-string print ver <# # # 46 hold # #> type cr here . .free cr [ ;
+: hi io! hex cr hi-string print ver <# # # 46 hold # # #> type cr here . .free cr [ ;
 : boot hi quit ;
 
 ( ==================== Advanced I/O Control ========================== )
@@ -623,7 +623,7 @@ constant rp0              $4080 hidden
 : loadline line evaluate ; hidden ( k u -- )
 : load 0 l/b 1- for 2dup >r >r loadline r> r> 1+ next 2drop ;
 : pipe 124 emit ; hidden
-: .line line -trailing $type ; hidden
+\ : .line line -trailing $type ; hidden
 : border@ border @ ; hidden
 : .border border@ if 3 spaces c/l 45 nchars cr exit then ; hidden
 : #line border@ if dup 2 u.r exit then ; hidden ( u -- u : print line number )
@@ -631,7 +631,7 @@ constant rp0              $4080 hidden
 : ?page border@ if page exit then ; hidden
 : thru over- for dup load 1+ next drop ; ( k1 k2 -- )
 : blank =bl fill ;
-: message l/b extract .line cr ; ( u -- )
+\ : message l/b extract .line cr ; ( u -- )
 : list
 	dup block drop
 	?page
@@ -753,7 +753,6 @@ i.end:   5u.r rdrop exit
 : .words space begin dup while dup .id space @ address repeat drop cr ; hidden
 : [words] get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ; hidden
 
-
 .set _forth-wordlist $pwd
 .set context _forth-wordlist
 .set context0 root-voc
@@ -811,4 +810,4 @@ start:
 .set _echo          "tx!"       ( execution vector of echo )
 .set _prompt        .ok         ( execution vector of prompt, default to '.ok'. )
 .set _boot          boot        ( @execute does nothing if zero )
-.set _message       message     ( execution vector of _message, used in ?error )
+\ .set _message       message     ( execution vector of _message, used in ?error )

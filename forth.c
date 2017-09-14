@@ -11,7 +11,7 @@
 
 #define CORE        (65536u)
 #define SP0         (8192u)
-#define RP0         (8256u)
+#define RP0         (32767u)
 
 typedef uint16_t uw_t;
 typedef int16_t  sw_t;
@@ -125,7 +125,7 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			}
 
 			sp += delta[ instruction       & 0x3];
-			rp += delta[(instruction >> 2) & 0x3];
+			rp -= delta[(instruction >> 2) & 0x3];
 
 			if(instruction & 0x20)
 				_tos = nos;
@@ -138,7 +138,7 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 
 			tos = _tos;
 		} else if (0x4000 & instruction) { /* call */
-			core[++rp] = (pc + 1 ) << 1;
+			core[--rp] = (pc + 1 ) << 1;
 			pc = instruction & 0x1FFF;
 		} else if (0x2000 & instruction) { /* 0branch */
 			pc = !tos ? instruction & 0x1FFF : pc + 1;

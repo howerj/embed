@@ -19,6 +19,7 @@ constant sp0           $4400 hidden ( start of variable stack )
 constant rp0           $7fff hidden ( start of return stack )
 
 entry:             .allocate 2 ( Entry point - not an interrupt )
+error:             .allocate 2 ( Error vector )
 
 location cp               0 ( Dictionary Pointer: Set at end of file )
 location root-voc         0 ( root vocabulary )
@@ -111,6 +112,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : base@ base @ ; hidden    ( -- u )
 : base! base ! ; hidden    ( u -- )
 : here cp @ ;              ( -- a )
+: cp! cp ! ; hidden        ( u -- )
 : state@ state @ ; hidden  ( -- f )
 : command? state@ 0= ; hidden ( -- f )
 : swap! swap ! ; hidden    ( a u -- )
@@ -185,7 +187,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop ; ( b b u -- )
 : fill swap for swap aft 2dup c! 1+ then next 2drop ; ( b u c -- )
 : aligned dup 1 and if 1+ exit then ;          ( b -- a )
-: align here aligned cp ! ;               ( -- )
+: align here aligned cp! ;               ( -- )
 
 : catch
 	sp@ >r
@@ -208,26 +210,28 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : ?ndepth depth 1- u> if 4 -throw exit then ; hidden
 : 1depth 1 ?ndepth ; hidden
 
-: um/mod ( ud u -- ur uq )
-	?dup 0= if 10 -throw exit then
-	2dup u<
-	if negate 15
-		for >r dup um+ >r >r dup um+ r> + dup
-			r> r@ swap >r um+ r> or
-			if >r drop 1+ r> else drop then r>
-		next
-		drop swap exit
-	then drop 2drop-1 dup ;
+\ : um/mod ( ud u -- ur uq )
+\ 	?dup 0= if 10 -throw exit then
+\ 	2dup u<
+\ 	if negate 15
+\ 		for >r dup um+ >r >r dup um+ r> + dup
+\ 			r> r@ swap >r um+ r> or
+\ 			if >r drop 1+ r> else drop then r>
+\ 		next
+\ 		drop swap exit
+\ 	then drop 2drop-1 dup ;
 
-: m/mod ( d n -- r q ) \ floored division
-	dup 0< dup >r
-	if
-		negate >r dnegate r>
-	then
-	>r dup 0< if r@ + then r> um/mod r>
-	if swap negate swap exit then ;
+\ : m/mod ( d n -- r q ) \ floored division
+\ 	dup 0< dup >r
+\ 	if
+\ 		negate >r dnegate r>
+\ 	then
+\ 	>r dup 0< if r@ + then r> um/mod r>
+\ 	if swap negate swap exit then ;
 
-: /mod  over 0< swap m/mod ; ( n n -- r q )
+0!: 10 -throw
+.set error 0!
+: /mod over 0< swap m/mod ; ( n n -- r q )
 : mod  /mod drop ;           ( n n -- r )
 : /    /mod nip ;            ( n n -- q )
 : decimal 10 base! ;                       ( -- )
@@ -255,8 +259,8 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 
 : pack$ ( b u a -- a ) \ null fill
 	aligned dup >r over
-	dup 0 cell um/mod ( use -2 and instead of um/mod? ) drop
-	- over +  0 swap!  2dup c!  1+ swap cmove  r> ;
+	dup cell negate and ( align down )
+	- over +  0 swap!  2dup c!  1+ swap cmove  r> ; hidden
 
 \ : ^h ( bot eot cur c -- bot eot cur )
 \ 	>r over r@ < dup
@@ -427,7 +431,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 	then ; hidden
 
 : ?dictionary dup $3f00 u> if 8 -throw exit then ; hidden
-: , here dup cell+ ?dictionary cp ! ! ; ( u -- )
+: , here dup cell+ ?dictionary cp! ! ; ( u -- )
 : doLit 0x8000 or , ; hidden
 : ?compile command? if 14 -throw exit then ; hidden ( fail if not compiling )
 : literal ( n -- : write a literal into the dictionary )
@@ -542,7 +546,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : "[char]" ?compile char literal ; immediate ( --, <string> : )
 : ?quit command? if 56 -throw exit then ; hidden
 : ";" ?quit ( ?compile ) +csp ?csp context @ ! =exit ,  [ ; immediate
-: ":" align !csp here dup last-def ! last ,  token ?nul ?unique count + aligned cp ! ] ;
+: ":" align !csp here dup last-def ! last ,  token ?nul ?unique count + aligned cp! ] ;
 : jumpz, chars $2000 or , ; hidden
 : jump, chars ( $0000 or ) , ; hidden
 : "begin" ?compile here -csp ; immediate
@@ -610,7 +614,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : do$ r> r@ r> count + aligned >r swap >r ; hidden ( -- a )
 : $"| do$ nop ; hidden                             ( -- a : do string NB. nop needed to fool optimizer )
 : ."| do$ print ; hidden                           ( -- : print string )
-: $,' 34 word count + aligned cp ! ; hidden        ( -- )
+: $,' 34 word count + aligned cp! ; hidden         ( -- )
 : $"  ?compile compile $"| $,' ; immediate         ( -- ; <string> )
 : ."  ?compile compile ."| $,' ; immediate         ( -- ; <string> )
 \ : abort 0 rp! quit ;                             ( --, R: ??? --- ??? : Abort! )

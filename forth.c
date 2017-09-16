@@ -13,10 +13,12 @@
 #define CORE        (65536u)  /* core size in bytes */
 #define SP0         (8704u)   /* 8192 (end of program area) + 512 (block size) */
 #define RP0         (32767u)  /* end of CORE in words */
+#define ERROR       (1u)
 
 typedef uint16_t uw_t;
 typedef int16_t  sw_t;
 typedef uint32_t ud_t;
+typedef int32_t  sd_t;
 
 typedef struct { uw_t core[CORE/sizeof(uw_t)]; } forth_t;
 
@@ -106,7 +108,7 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case  1: _tos = nos;                                    break;
 			case  2: _tos = core[rp];                               break;
 			case  3: _tos = core[tos >> 1];                         break;
-			case  4: core[tos >> 1] = nos; _tos = core[sp-- - 1];   break;
+			case  4: core[tos >> 1] = nos; _tos = core[--sp];       break;
 			case  5: d = (ud_t)tos + (ud_t)nos; _tos = d >> 16; core[sp] = d; nos = d; break;
 			case  6: d = (ud_t)tos * (ud_t)nos; _tos = d >> 16; core[sp] = d; nos = d; break;
 			case  7: _tos &= nos;                                   break;
@@ -127,7 +129,25 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 22: _tos = save(h, block, ((ud_t)_tos + 1u) >> 1); break;
 			case 23: _tos = fputc(tos, out);                        break;
 			case 24: if((c = fgetc(in)) == EOF) return 0; _tos = c; break;
-			case 25: return _tos;
+			case 25:
+				 d  = (nos << 16) | core[--sp];
+				 if(tos) {
+					 _tos = d / (ud_t)tos;
+					 tos  = d % (ud_t)tos;
+				 } else {
+					 pc = ERROR;
+				 }
+				 break;
+			case 26:
+				 d  = (nos << 16) | core[--sp];
+				 if(tos) {
+					 _tos = (sd_t)d / (sd_t)tos;
+					 tos  = (sd_t)d % (sd_t)tos;
+				 } else {
+					 pc = ERROR;
+				 }
+				 break;
+			case 27: return _tos;
 			}
 
 			sp += delta[ instruction       & 0x3];

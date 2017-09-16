@@ -119,32 +119,34 @@ extern log_level_e log_level;
 #define T_TO_N            (1u << T_TO_N_BIT_INDEX)
 
 typedef enum {
-	ALU_OP_T,                  /**< Top of Stack         */
-	ALU_OP_N,                  /**< Copy T to N          */
-	ALU_OP_R,                  /**< Top of return stack  */
-	ALU_OP_T_LOAD,             /**< Load from address    */
-	ALU_OP_N_STORE_AT_T,       /**< Store to address     */
-	ALU_OP_T_PLUS_N,           /**< Double cell addition */
-	ALU_OP_T_MUL_N,            /**< Double cell multiply */
-	ALU_OP_T_AND_N,            /**< Bitwise AND          */
-	ALU_OP_T_OR_N,             /**< Bitwise OR           */
-	ALU_OP_T_XOR_N,            /**< Bitwise XOR          */
-	ALU_OP_T_INVERT,           /**< Bitwise Inversion    */
-	ALU_OP_T_DECREMENT,        /**< Decrement            */
-	ALU_OP_T_EQUAL_0,          /**< T == 0               */
-	ALU_OP_T_EQUAL_N,          /**< Equality test        */
-	ALU_OP_N_ULESS_T,          /**< Unsigned comparison  */
-	ALU_OP_N_LESS_T,           /**< Signed comparison    */
-	ALU_OP_N_RSHIFT_T,         /**< Logical Right Shift  */
-	ALU_OP_N_LSHIFT_T,         /**< Logical Left Shift   */
-	ALU_OP_DEPTH,              /**< Depth of stack       */
-	ALU_OP_RDEPTH,             /**< R Stack Depth        */
-	ALU_OP_SET_DEPTH,          /**< Set Stack Depth      */
-	ALU_OP_SET_RDEPTH,         /**< Set R Stack Depth    */
-	ALU_OP_SAVE,               /**< Save Image           */
-	ALU_OP_TX,                 /**< Get byte             */
-	ALU_OP_RX,                 /**< Send byte            */
-	ALU_OP_BYE,                /**< Return               */
+	ALU_OP_T,            /**< Top of Stack         */
+	ALU_OP_N,            /**< Copy T to N          */
+	ALU_OP_R,            /**< Top of return stack  */
+	ALU_OP_T_LOAD,       /**< Load from address    */
+	ALU_OP_N_STORE_AT_T, /**< Store to address     */
+	ALU_OP_T_PLUS_N,     /**< Double cell addition */
+	ALU_OP_T_MUL_N,      /**< Double cell multiply */
+	ALU_OP_T_AND_N,      /**< Bitwise AND          */
+	ALU_OP_T_OR_N,       /**< Bitwise OR           */
+	ALU_OP_T_XOR_N,      /**< Bitwise XOR          */
+	ALU_OP_T_INVERT,     /**< Bitwise Inversion    */
+	ALU_OP_T_DECREMENT,  /**< Decrement            */
+	ALU_OP_T_EQUAL_0,    /**< T == 0               */
+	ALU_OP_T_EQUAL_N,    /**< Equality test        */
+	ALU_OP_N_ULESS_T,    /**< Unsigned comparison  */
+	ALU_OP_N_LESS_T,     /**< Signed comparison    */
+	ALU_OP_N_RSHIFT_T,   /**< Logical Right Shift  */
+	ALU_OP_N_LSHIFT_T,   /**< Logical Left Shift   */
+	ALU_OP_DEPTH,        /**< Depth of stack       */
+	ALU_OP_RDEPTH,       /**< R Stack Depth        */
+	ALU_OP_SET_DEPTH,    /**< Set Stack Depth      */
+	ALU_OP_SET_RDEPTH,   /**< Set R Stack Depth    */
+	ALU_OP_SAVE,         /**< Save Image           */
+	ALU_OP_TX,           /**< Get byte             */
+	ALU_OP_RX,           /**< Send byte            */
+	ALU_OP_UM_MOD,       /**< um/mod               */
+	ALU_OP_M_MOD,        /**< m/mod                */
+	ALU_OP_BYE,          /**< Return               */
 } alu_code_e;
 
 #define DELTA_0  (0)
@@ -192,8 +194,9 @@ typedef enum {
 	X(RX,     "rx?",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_RX)      | T_TO_N       | MK_DSTACK(DELTA_1)))\
 	X(TX,     "tx!",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_TX)      | N_TO_T       | MK_DSTACK(DELTA_N1)))\
 	X(SAVE,   "(save)", true,  (OP_ALU_OP | MK_CODE(ALU_OP_SAVE)))\
+	X(UM_MOD, "um/mod", true,  (OP_ALU_OP | MK_CODE(ALU_OP_UM_MOD)) | T_TO_N)\
+	X(M_MOD,  "m/mod",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_M_MOD))  | T_TO_N)\
 	X(RDROP,  "rdrop",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_T) | MK_RSTACK(DELTA_N1)))
-
 
 typedef enum {
 #define X(NAME, STRING, DEFINE, INSTRUCTION) CODE_ ## NAME = INSTRUCTION,

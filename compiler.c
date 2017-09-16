@@ -144,8 +144,8 @@ typedef enum {
 	ALU_OP_SAVE,         /**< Save Image           */
 	ALU_OP_TX,           /**< Get byte             */
 	ALU_OP_RX,           /**< Send byte            */
-	ALU_OP_UM_MOD,       /**< um/mod               */
-	ALU_OP_M_MOD,        /**< m/mod                */
+	ALU_OP_U_DMOD,       /**< u/mod                */
+	ALU_OP_DMOD,         /**< /mod                 */
 	ALU_OP_BYE,          /**< Return               */
 } alu_code_e;
 
@@ -194,8 +194,8 @@ typedef enum {
 	X(RX,     "rx?",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_RX)      | T_TO_N       | MK_DSTACK(DELTA_1)))\
 	X(TX,     "tx!",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_TX)      | N_TO_T       | MK_DSTACK(DELTA_N1)))\
 	X(SAVE,   "(save)", true,  (OP_ALU_OP | MK_CODE(ALU_OP_SAVE)))\
-	X(UM_MOD, "um/mod", true,  (OP_ALU_OP | MK_CODE(ALU_OP_UM_MOD)) | T_TO_N)\
-	X(M_MOD,  "m/mod",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_M_MOD))  | T_TO_N)\
+	X(UM_MOD, "u/mod",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_U_DMOD) | T_TO_N))\
+	X(DMOD,   "/mod",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_DMOD)   | T_TO_N))\
 	X(RDROP,  "rdrop",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_T) | MK_RSTACK(DELTA_N1)))
 
 typedef enum {

@@ -7,6 +7,7 @@ constant =cr           13    hidden ( carriage return )
 constant =lf           10    hidden ( line feed )
 constant =bs           8     hidden ( back space )
 constant =escape       27    hidden ( escape character )
+constant eof           -1    hidden ( end of file )
 
 constant dump-width    16    hidden ( number of columns for 'dump' )
 constant tib-length    80    hidden ( size of terminal input buffer )
@@ -116,6 +117,8 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : state@ state @ ; hidden  ( -- f )
 : command? state@ 0= ; hidden ( -- f )
 : swap! swap ! ; hidden    ( a u -- )
+
+: bye 0 (bye) ;
 : cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+ cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;         ( n -- n : convert number of cells to number to increment address by )
@@ -161,7 +164,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : >char $7f and dup 127 =bl within if drop [char] _ then ; hidden ( c -- c )
 : tib #tib cell+ @ ; hidden               ( -- a )
 \ : echo _echo @execute ; hidden            ( c -- )
-: key _key @execute ;                     ( -- c )
+: key _key @execute dup eof = if bye then ; ( -- c )
 : allot cp +! ;                           ( n -- )
 : /string over min rot over + -rot - ;    ( b u1 u2 -- b u : advance a string u2 characters )
 : +string 1 /string ; hidden
@@ -206,6 +209,9 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 	then ;
 
 : -throw negate throw ; hidden ( space saving measure )
+0!: 10 -throw
+.set 2 0!
+
 
 : ?ndepth depth 1- u> if 4 -throw exit then ; hidden
 : 1depth 1 ?ndepth ; hidden
@@ -229,16 +235,14 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 \ 	>r dup 0< if r@ + then r> um/mod r>
 \ 	if swap negate swap exit then ;
 
-0!: 10 -throw
-.set error 0!
-: /mod over 0< swap m/mod ; ( n n -- r q )
+\ : /mod over 0< swap m/mod ; ( n n -- r q )
 : mod  /mod drop ;           ( n n -- r )
 : /    /mod nip ;            ( n n -- q )
 : decimal 10 base! ;                       ( -- )
 : hex     16 base! ;                       ( -- )
 : radix base@ dup 2 - 34 u> if hex 40 -throw exit then ; hidden
 : digit  9 over < 7 and + 48 + ; hidden      ( u -- c )
-: extract  0 swap um/mod swap ; hidden       ( n base -- n c )
+: extract u/mod swap ; hidden       ( n base -- n c )
 : ?hold hld @ here u< if 17 -throw exit then ; hidden ( -- )
 : hold  hld @ 1- dup hld ! ?hold c! ;        ( c -- )
 \ : holds begin dup while 1- 2dup + c@ hold repeat 2drop ;
@@ -468,7 +472,6 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 		then
 	then ; hidden
 
-: bye 0 (bye) ;
 : "immediate" last $4000 toggle ;
 : .ok command? if OK print space then cr ; hidden
 : ?depth sp@ sp0 u< if 4 -throw exit then ; hidden

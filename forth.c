@@ -13,12 +13,10 @@
 #define CORE        (65536u)  /* core size in bytes */
 #define SP0         (8704u)   /* 8192 (end of program area) + 512 (block size) */
 #define RP0         (32767u)  /* end of CORE in words */
-#define ERROR       (1u)
 
 typedef uint16_t uw_t;
 typedef int16_t  sw_t;
 typedef uint32_t ud_t;
-typedef int32_t  sd_t;
 
 typedef struct { uw_t core[CORE/sizeof(uw_t)]; } forth_t;
 
@@ -60,7 +58,7 @@ static int binary_memory_save(FILE *output, uw_t *p, size_t length)
 	return 0;
 }
 
-static int load(forth_t *h, const char *name)
+int load(forth_t *h, const char *name)
 {
 	assert(h && name);
 	FILE *input = fopen_or_die(name, "rb");
@@ -69,7 +67,7 @@ static int load(forth_t *h, const char *name)
 	return r;
 }
 
-static int save(forth_t *h, const char *name, size_t length)
+int save(forth_t *h, const char *name, size_t length)
 {
 	assert(h);
 	if(!name)
@@ -80,7 +78,7 @@ static int save(forth_t *h, const char *name, size_t length)
 	return r;
 }
 
-static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
+int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
 	static const uw_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
 	register uw_t pc = 0, tos = 0, rp = RP0, sp = SP0;
@@ -96,7 +94,6 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			tos        = instruction & 0x7FFF;
 			pc++;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
-			int  c;
 			ud_t d;
 			uw_t nos  = core[sp];
 			uw_t _tos = tos;
@@ -128,25 +125,9 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 21: rp   = tos >> 1; _tos = nos;                   break;
 			case 22: _tos = save(h, block, ((ud_t)_tos + 1u) >> 1); break;
 			case 23: _tos = fputc(tos, out);                        break;
-			case 24: if((c = fgetc(in)) == EOF) return 0; _tos = c; break;
-			case 25:
-				 d  = (nos << 16) | core[--sp];
-				 if(tos) {
-					 _tos = d / (ud_t)tos;
-					 tos  = d % (ud_t)tos;
-				 } else {
-					 pc = ERROR;
-				 }
-				 break;
-			case 26:
-				 d  = (nos << 16) | core[--sp];
-				 if(tos) {
-					 _tos = (sd_t)d / (sd_t)tos;
-					 tos  = (sd_t)d % (sd_t)tos;
-				 } else {
-					 pc = ERROR;
-				 }
-				 break;
+			case 24: _tos = fgetc(in);                              break;
+			case 25: if(tos) { _tos = nos/tos; tos = nos%tos; } else { pc=1; continue; } break;
+			case 26: if(tos) { _tos = (sw_t)nos/(sw_t)tos; tos = (sw_t)nos % (sw_t)tos; } else { pc=1; continue; } break;
 			case 27: return _tos;
 			}
 

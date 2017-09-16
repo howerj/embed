@@ -209,9 +209,8 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 	then ;
 
 : -throw negate throw ; hidden ( space saving measure )
-0!: 10 -throw
-.set 2 0!
-
+virtual-machine-error: -throw
+.set 2 virtual-machine-error
 
 : ?ndepth depth 1- u> if 4 -throw exit then ; hidden
 : 1depth 1 ?ndepth ; hidden

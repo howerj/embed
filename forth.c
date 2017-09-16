@@ -81,73 +81,72 @@ int save(forth_t *h, const char *name, size_t length)
 int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
 	static const uw_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
-	register uw_t pc = 0, tos = 0, rp = RP0, sp = SP0;
+	register uw_t pc = 0, t = 0, rp = RP0, sp = SP0;
 	assert(h && in && out);
-	uw_t *core = h->core;
+	uw_t *m = h->core;
 	for(;;) {
-		uw_t instruction = core[pc];
+		uw_t instruction = m[pc];
 
 		assert(!(sp & 0x8000) && !(rp & 0x8000));
 
 		if(0x8000 & instruction) { /* literal */
-			core[++sp] = tos;
-			tos        = instruction & 0x7FFF;
+			m[++sp] = t;
+			t        = instruction & 0x7FFF;
 			pc++;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
 			ud_t d;
-			uw_t nos  = core[sp];
-			uw_t _tos = tos;
+			uw_t n = m[sp], T = t;
 
-			pc = instruction & 0x10 ? core[rp] >> 1 : pc + 1;
+			pc = instruction & 0x10 ? m[rp] >> 1 : pc + 1;
 
 			switch((instruction >> 8u) & 0x1f) {
-			case  0: /*_tos = tos;*/                                break;
-			case  1: _tos = nos;                                    break;
-			case  2: _tos = core[rp];                               break;
-			case  3: _tos = core[tos >> 1];                         break;
-			case  4: core[tos >> 1] = nos; _tos = core[--sp];       break;
-			case  5: d = (ud_t)tos + (ud_t)nos; _tos = d >> 16; core[sp] = d; nos = d; break;
-			case  6: d = (ud_t)tos * (ud_t)nos; _tos = d >> 16; core[sp] = d; nos = d; break;
-			case  7: _tos &= nos;                                   break;
-			case  8: _tos |= nos;                                   break;
-			case  9: _tos ^= nos;                                   break;
-			case 10: _tos = ~tos;                                   break;
-			case 11: _tos--;                                        break;
-			case 12: _tos = -(tos == 0);                            break;
-			case 13: _tos = -(tos == nos);                          break;
-			case 14: _tos = -(nos < tos);                           break;
-			case 15: _tos = -((sw_t)nos < (sw_t)tos);               break;
-			case 16: _tos = nos >> tos;                             break;
-			case 17: _tos = nos << tos;                             break;
-			case 18: _tos = sp << 1;                                break;
-			case 19: _tos = rp << 1;                                break;
-			case 20: sp   = tos >> 1;                               break;
-			case 21: rp   = tos >> 1; _tos = nos;                   break;
-			case 22: _tos = save(h, block, ((ud_t)_tos + 1u) >> 1); break;
-			case 23: _tos = fputc(tos, out);                        break;
-			case 24: _tos = fgetc(in);                              break;
-			case 25: if(tos) { _tos = nos/tos; tos = nos%tos; nos = tos; } else { pc=1; continue; } break;
-			case 26: if(tos) { _tos = (sw_t)nos/(sw_t)tos; tos = (sw_t)nos % (sw_t)tos; nos = tos; } else { pc=1; continue; } break;
-			case 27: return _tos;
+			case  0: /*T = t;*/                                break;
+			case  1: T = n;                                    break;
+			case  2: T = m[rp];                                break;
+			case  3: T = m[t >> 1];                            break;
+			case  4: m[t >> 1] = n; T = m[--sp];               break;
+			case  5: d = (ud_t)t + (ud_t)n; T = d >> 16; m[sp] = d; n = d; break;
+			case  6: d = (ud_t)t * (ud_t)n; T = d >> 16; m[sp] = d; n = d; break;
+			case  7: T &= n;                                   break;
+			case  8: T |= n;                                   break;
+			case  9: T ^= n;                                   break;
+			case 10: T = ~t;                                   break;
+			case 11: T--;                                      break;
+			case 12: T = -(t == 0);                            break;
+			case 13: T = -(t == n);                            break;
+			case 14: T = -(n < t);                             break;
+			case 15: T = -((sw_t)n < (sw_t)t);                 break;
+			case 16: T = n >> t;                               break;
+			case 17: T = n << t;                               break;
+			case 18: T = sp << 1;                              break;
+			case 19: T = rp << 1;                              break;
+			case 20: sp   = t >> 1;                            break;
+			case 21: rp   = t >> 1; T = n;                     break;
+			case 22: T = save(h, block, ((ud_t)T + 1u) >> 1);  break;
+			case 23: T = fputc(t, out);                        break;
+			case 24: T = fgetc(in);                            break;
+			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
+			case 26: if(t) { T=(sw_t)n/(sw_t)t; t=(sw_t)n%(sw_t)t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
+			case 27: return T;
 			}
 
 			sp += delta[ instruction       & 0x3];
 			rp -= delta[(instruction >> 2) & 0x3];
 
 			if(instruction & 0x20)
-				_tos = nos;
+				T = n;
 			if(instruction & 0x40)
-				core[rp] = tos;
+				m[rp] = t;
 			if(instruction & 0x80)
-				core[sp] = tos;
+				m[sp] = t;
 
-			tos = _tos;
+			t = T;
 		} else if (0x4000 & instruction) { /* call */
-			core[--rp] = (pc + 1 ) << 1;
+			m[--rp] = (pc + 1 ) << 1;
 			pc = instruction & 0x1FFF;
 		} else if (0x2000 & instruction) { /* 0branch */
-			pc = !tos ? instruction & 0x1FFF : pc + 1;
-			tos = core[sp--];
+			pc = !t ? instruction & 0x1FFF : pc + 1;
+			t = m[sp--];
 		} else { /* branch */
 			pc = instruction & 0x1FFF;
 		}

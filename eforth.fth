@@ -1,4 +1,4 @@
-( ======================== System Constants ================= )
+( ======================== System Variables ================= )
 constant =exit         $601c hidden ( op code for exit )
 constant =invert       $6800 hidden ( op code for invert )
 constant =>r           $6147 hidden ( op code for >r )
@@ -13,9 +13,14 @@ constant tib-length    80    hidden ( size of terminal input buffer )
 constant pad-length    80    hidden ( pad area begins HERE + pad-length )
 constant word-length   31    hidden ( maximum length of a word )
 
+constant c/l           64    hidden ( characters per line in a block )
+constant l/b           16    hidden ( lines in a block )
+constant sp0           $4400 hidden ( start of variable stack )
+constant rp0           $7fff hidden ( start of return stack )
+
 entry:             .allocate 2 ( Entry point - not an interrupt )
 
-location cp          0 ( Dictionary Pointer: Set at end of file )
+location cp               0 ( Dictionary Pointer: Set at end of file )
 location root-voc         0 ( root vocabulary )
 location editor-voc       0 ( editor vocabulary )
 location assembler-voc    0 ( assembler vocabulary )
@@ -25,37 +30,31 @@ location _forth           0 ( forth execution vector )
 location _set-order       0 ( set-order execution vector )
 location _do_colon        0 ( execution vector for ':' )
 location _do_semi_colon   0 ( execution vector for ';' )
-location _key        0 ( -- c : new character, blocking input )
-location _emit       0 ( c -- : emit character )
-location _expect     0 ( "accept" vector )
-\ location _tap      0 ( "tap" vector, for terminal handling )
-\ location _echo     0 ( c -- : emit character )
-location _prompt     0 ( -- : display prompt )
-location _boot       0 ( -- : execute program at startup )
-\ location _message  0 ( n -- : display an error message )
+location _boot            0 ( -- : execute program at startup )
+\ location _message       0 ( n -- : display an error message )
 
-location _test       0 ( used in skip/test )
-location last-def    0 ( last, possibly unlinked, word definition )
-location csp         0 ( current data stack pointer - for error checking )
-location _id         0 ( used for source id )
-location seed        0 ( seed used for the PRNG )
-location handler     0 ( current handler for throw/catch )
-location block-dirty 0 ( -1 if loaded block buffer is modified )
-location bcount      0 ( instruction counter used in 'see' )
-location context     0 ( holds current context for vocabulary search order )
-location context0    0 ( holds space for root wordset in vocabulary search order )
-.allocate 14           ( ... space for context )
-location tib-start   0 ( backup tib-buf value )
-location #tib        0 ( Current count of terminal input buffer    )
-location tib-buf     0 ( ... and address )
-.set tib-buf   $pc   ( set tib-buf to current dictionary location )
-.set tib-start $pc   ( set tib-start to initial buffer as well )
-.allocate tib-length ( allocate enough for the terminal input buffer @todo move to the data section )
-.allocate 2          ( plus one extra cell for safety )
+constant _test       $4000 hidden ( used in skip/test )
+constant last-def    $4002 hidden ( last, possibly unlinked, word definition )
+constant csp         $4004 hidden ( current data stack pointer - for error checking )
+constant _id         $4006 hidden ( used for source id )
+constant seed        $4008 hidden ( seed used for the PRNG )
+constant handler     $400A hidden ( current handler for throw/catch )
+constant block-dirty $400C hidden ( -1 if loaded block buffer is modified )
+constant bcount      $400E hidden ( instruction counter used in 'see' )
+constant _key        $4010 hidden ( -- c : new character, blocking input )
+constant _emit       $4012 hidden ( c -- : emit character )
+constant _expect     $4014 hidden ( "accept" vector )
+\ constant _tap      $4016 hidden ( "tap" vector, for terminal handling )
+\ constant _echo     $4018 hidden ( c -- : emit character )
+constant _prompt     $4020 hidden ( -- : display prompt )
+
+constant context     $4110 hidden ( holds current context for vocabulary search order )
+constant #tib        $4122 hidden ( Current count of terminal input buffer    )
+constant tib-buf     $4124 hidden ( ... and address )
+constant tib-start   $4126 hidden ( backup tib-buf value )
 
 .mode 3   ( Turn word header compilation and optimization on )
 : execute-location @ >r ; hidden
-
 : forth-wordlist _forth-wordlist ;
 : words _words execute-location ;
 : set-order _set-order execute-location ;
@@ -72,37 +71,30 @@ location tib-buf     0 ( ... and address )
 : ;code assembler ; immediate
 : code _do_colon execute-location assembler ;
 
-( ======================== System Constants ================= )
+constant cell       2     ( size of a cell in bytes )
+variable >in        0     ( Hold character pointer when parsing input )
+variable state      0     ( compiler state variable )
+variable hld        0     ( Pointer into hold area for numeric output )
+variable base       10    ( Current output radix )
+variable span       0     ( Hold character count received by expect   )
+variable loaded     0     ( Used by boot block to indicate it has been loaded  )
+constant #vocs      8     ( number of vocabularies in allowed )
+constant b/buf      1024  ( size of a block )
+variable blk        18    ( current blk loaded )
+constant ver        $1984 ( eForth version )
 
-( ======================== System Variables ================= )
-constant cell       2  ( size of a cell in bytes )
-variable >in        0  ( Hold character pointer when parsing input )
-variable state      0  ( compiler state variable )
-variable hld        0  ( Pointer into hold area for numeric output )
-variable base       10 ( Current output radix )
-variable span       0  ( Hold character count received by expect   )
-variable loaded     0  ( Used by boot block to indicate it has been loaded  )
-constant #vocs      8  ( number of vocabularies in allowed )
-constant b/buf      1024         ( size of a block )
-variable blk        17           ( current blk loaded )
-constant ver        $1984        ( eForth version )
-constant c/l        64    hidden ( characters per line in a block )
-constant l/b        16    hidden ( lines in a block )
-constant sp0        $4400 hidden ( start of variable stack )
-constant rp0        $7fff hidden ( start of return stack )
-
-location .s-string        " <sp"        ( used by .s )
-location see.unknown      "(no-name)"   ( used by 'see' for calls to anonymous words )
-location see.lit          "LIT"         ( decompilation -> literal )
-location see.alu          "ALU"         ( decompilation -> ALU operation )
-location see.call         "CAL"         ( decompilation -> Call )
-location see.branch       "BRN"         ( decompilation -> Branch )
-location see.0branch      "BRZ"         ( decompilation -> 0 Branch )
-location see.immediate    " immediate " ( used by "see", for immediate words )
-location see.inline       " inline "    ( used by "see", for inline words )
-location OK               " ok"         ( used by "prompt" )
-location redefined        " redefined"  ( used by ":" when a word has been redefined )
-location hi-string        "eFORTH V"    ( used by "hi" )
+location .s-string     " <sp"        ( used by .s )
+location see.unknown   "(no-name)"   ( used by 'see' for calls to anonymous words )
+location see.lit       "LIT"         ( decompilation -> literal )
+location see.alu       "ALU"         ( decompilation -> ALU operation )
+location see.call      "CAL"         ( decompilation -> Call )
+location see.branch    "BRN"         ( decompilation -> Branch )
+location see.0branch   "BRZ"         ( decompilation -> 0 Branch )
+location see.immediate " immediate " ( used by "see", for immediate words )
+location see.inline    " inline "    ( used by "see", for inline words )
+location OK            " ok"         ( used by "prompt" )
+location redefined     " redefined"  ( used by ":" when a word has been redefined )
+location hi-string     "eFORTH V"    ( used by "hi" )
 
 ( ======================== System Variables ================= )
 : 2drop drop drop ;       ( n n -- )
@@ -112,16 +104,16 @@ location hi-string        "eFORTH V"    ( used by "hi" )
 
 : [-1] -1 ; hidden         ( -- -1 : space saving measure, push -1 onto stack )
 : 0x8000 $8000 ; hidden    ( -- $8000 : space saving measure, push $8000 onto stack )
-: drop-0 drop 0 ; hidden
-: 2drop-1 2drop [-1] ; hidden
-: dup-@ dup @ ; hidden
-: over- over - ; hidden
-: base@ base @ ; hidden
-: base! base ! ; hidden
-: here cp @ ;
-: state@ state @ ; hidden
-: command? state@ 0= ; hidden
-: swap! swap ! ; hidden
+: drop-0 drop 0 ; hidden   ( n -- 0 )
+: 2drop-1 2drop [-1] ; hidden ( n n -- -1 )
+: dup-@ dup @ ; hidden     ( a -- a u )
+: over- over - ; hidden    ( u1 u2 -- u1 u2 u2-u1 )
+: base@ base @ ; hidden    ( -- u )
+: base! base ! ; hidden    ( u -- )
+: here cp @ ;              ( -- a )
+: state@ state @ ; hidden  ( -- f )
+: command? state@ 0= ; hidden ( -- f )
+: swap! swap ! ; hidden    ( a u -- )
 : cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+ cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;         ( n -- n : convert number of cells to number to increment address by )
@@ -420,7 +412,7 @@ location hi-string        "eFORTH V"    ( used by "hi" )
 : .s ( -- ) cr depth for aft r@ pick . then next .s-string print ;
 : unused $4000 here - ; hidden
 : .free unused u. ; hidden
-: preset ( tib ) tib-start @ #tib cell+ ! 0 >in ! 0 _id ! ; hidden
+: preset ( tib ) tib-start #tib cell+ ! 0 >in ! 0 _id ! ; hidden
 : ] [-1] state ! ;
 : [  0 state ! ; immediate
 
@@ -630,8 +622,8 @@ location hi-string        "eFORTH V"    ( used by "hi" )
 
 : update [-1] block-dirty ! ;          ( -- )
 : +block blk @ + ;                     ( -- )
-: save [-1] (save) throw ;
-: flush block-dirty @ if save exit then ;
+: save ( [-1] ) here (save) throw ;
+: flush block-dirty @ if [-1] (save) throw exit then ;
 
 : block ( k -- a )
 	1depth
@@ -672,9 +664,9 @@ location hi-string        "eFORTH V"    ( used by "hi" )
 
 ( ==================== Booting ======================================= )
 
-\ : cold io! forth 16 block b/buf 0 fill sp0 sp! ; hidden
+: cold 16 block b/buf 0 fill sp0 sp! io! forth ; 
 : hi hex cr hi-string print ver 0 u.r cr here . .free cr [ ;
-: boot ( cold ) io! forth hi quit ;
+: boot cold hi quit ;
 
 ( ==================== Booting ======================================= )
 
@@ -780,14 +772,10 @@ i.end:   5u.r rdrop exit
 : [words] get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ; hidden
 
 .set _forth-wordlist $pwd
-.set context _forth-wordlist
-.set context0 root-voc
-.set _forth-wordlist $pwd
 
 ( ==================== Vocabulary Words ============================== )
 
 ( ==================== Block Editor ================================== )
-
 
 .pwd 0
 : [block] blk @ block ; hidden
@@ -830,11 +818,5 @@ start:
 .set _forth         [forth]
 .set _set-order     [set-order]
 .set _words         [words]
-.set _key           "rx?"       ( execution vector of ?key )
-.set _emit          "tx!"       ( execution vector of emit )
-.set _expect        accept      ( execution vector of expect, default to 'accept'. )
-\ .set _tap           ktap        ( execution vector of tap,    default the ktap. )
-\ .set _echo          "tx!"       ( execution vector of echo )
-.set _prompt        .ok         ( execution vector of prompt, default to '.ok'. )
 .set _boot          boot        ( @execute does nothing if zero )
 \ .set _message       message     ( execution vector of _message, used in ?error )

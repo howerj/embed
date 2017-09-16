@@ -65,7 +65,7 @@ memory into different sections.
 | Block   |  Region          |
 | ------- | ---------------- |
 | 0 - 15  | Program Storage  |
-| 16      | Variable Block   |
+| 16      | User Data        |
 | 17      | Variable Stack   |
 | 18 - 62 | User data        |
 | 63      | Return Stack     |
@@ -73,9 +73,6 @@ memory into different sections.
 Program execution begins at address zero. The variable stack starts at the
 beginning of block 17 and grows upwards, the return stack starts at the end of
 block 63 and grows downward.
-
-The eForth model imposes extra semantics to certain areas of memory and will
-be explained later.
 
 ## Instruction Set Encoding
 
@@ -127,6 +124,23 @@ performed by three instructions.
 
 The interpreter is based on eForth by C. H. Ting, with some modifications
 to the model.
+
+
+## eForth Memory model
+
+The eForth model imposes extra semantics to certain areas of memory.
+
+| Address       | Block  | Meaning                        |
+| ------------- | ------ | ------------------------------ |
+| $0000         |   0    | Start of execution             |
+| $0001-$EOD    |   0    | The dictionary                 |
+| $EOD-$PAD1    |   0    | Compilation and Numeric Output |
+| $PAD1-$PAD2   |   0    | Pad Area                       |
+| $PAD2-$3FFF   |   15   | End of dictionary              |
+| $4000         |   16   | Interpreter variable storage   |
+| $4400         |   17   | Start of variable stack        |
+| $4800-$FBFF   | 18-63  | Empty blocks for user data     |
+| $FC00-$FFFF   |   0    | Return stack block             |
 
 ## Error Codes
 
@@ -211,7 +225,8 @@ or to which vocabulary words are added to
 of 'find' to get the location of a pointer of the previous word in the
 chain and not the found one, this new find could also be used to implement
 a 'hide' function
-
+* It would be nice to have non-blocking input (and the restoration of the
+'key?' word, but it is not strictly necessary.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

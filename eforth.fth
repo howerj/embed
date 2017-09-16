@@ -15,6 +15,7 @@ constant word-length   31    hidden ( maximum length of a word )
 
 entry:             .allocate 2 ( Entry point - not an interrupt )
 
+location cp          0 ( Dictionary Pointer: Set at end of file )
 location root-voc         0 ( root vocabulary )
 location editor-voc       0 ( editor vocabulary )
 location assembler-voc    0 ( assembler vocabulary )
@@ -24,6 +25,33 @@ location _forth           0 ( forth execution vector )
 location _set-order       0 ( set-order execution vector )
 location _do_colon        0 ( execution vector for ':' )
 location _do_semi_colon   0 ( execution vector for ';' )
+location _key        0 ( -- c : new character, blocking input )
+location _emit       0 ( c -- : emit character )
+location _expect     0 ( "accept" vector )
+\ location _tap      0 ( "tap" vector, for terminal handling )
+\ location _echo     0 ( c -- : emit character )
+location _prompt     0 ( -- : display prompt )
+location _boot       0 ( -- : execute program at startup )
+\ location _message  0 ( n -- : display an error message )
+
+location _test       0 ( used in skip/test )
+location last-def    0 ( last, possibly unlinked, word definition )
+location csp         0 ( current data stack pointer - for error checking )
+location _id         0 ( used for source id )
+location seed        0 ( seed used for the PRNG )
+location handler     0 ( current handler for throw/catch )
+location block-dirty 0 ( -1 if loaded block buffer is modified )
+location bcount      0 ( instruction counter used in 'see' )
+location context     0 ( holds current context for vocabulary search order )
+location context0    0 ( holds space for root wordset in vocabulary search order )
+.allocate 14           ( ... space for context )
+location tib-start   0 ( backup tib-buf value )
+location #tib        0 ( Current count of terminal input buffer    )
+location tib-buf     0 ( ... and address )
+.set tib-buf   $pc   ( set tib-buf to current dictionary location )
+.set tib-start $pc   ( set tib-start to initial buffer as well )
+.allocate tib-length ( allocate enough for the terminal input buffer @todo move to the data section )
+.allocate 2          ( plus one extra cell for safety )
 
 .mode 3   ( Turn word header compilation and optimization on )
 : execute-location @ >r ; hidden
@@ -47,43 +75,22 @@ location _do_semi_colon   0 ( execution vector for ';' )
 ( ======================== System Constants ================= )
 
 ( ======================== System Variables ================= )
-location _key       0  ( -- c : new character, blocking input )
-location _emit      0  ( c -- : emit character )
-location _expect    0  ( "accept" vector )
-\ location _tap       0  ( "tap" vector, for terminal handling )
-\ location _echo      0  ( c -- : emit character )
-location _prompt    0  ( -- : display prompt )
-location _boot      0  ( -- : execute program at startup )
-\ location _message   0  ( n -- : display an error message )
-location last-def   0  ( last, possibly unlinked, word definition )
-location cp         0  ( Dictionary Pointer: Set at end of file )
-location csp        0  ( current data stack pointer - for error checking )
-location _id        0  ( used for source id )
-location seed       0  ( seed used for the PRNG )
-location handler    0  ( current handler for throw/catch )
-location block-dirty      0             ( -1 if loaded block buffer is modified )
-location bcount           0             ( instruction counter used in 'see' )
+constant cell       2  ( size of a cell in bytes )
 variable >in        0  ( Hold character pointer when parsing input )
 variable state      0  ( compiler state variable )
 variable hld        0  ( Pointer into hold area for numeric output )
 variable base       10 ( Current output radix )
 variable span       0  ( Hold character count received by expect   )
 variable loaded     0  ( Used by boot block to indicate it has been loaded  )
-constant cell       2  ( size of a cell in bytes )
-constant #vocs            8 ( number of vocabularies in allowed )
-location context          0 ( holds current context for vocabulary search order )
-location context0         0 ( holds space for root wordset in vocabulary search order )
-.allocate 14                ( ... space for context )
-location tib-start        0 ( backup tib-buf value )
-location #tib             0 ( Current count of terminal input buffer    )
-location tib-buf          0 ( ... and address )
-.set tib-buf   $pc          ( set tib-buf to current dictionary location )
-.set tib-start $pc          ( set tib-start to initial buffer as well )
-.allocate tib-length        ( allocate enough for the terminal input buffer @todo move to the data section )
-.allocate cell              ( plus one extra cell for safety )
-constant b/buf 1024          ( size of a block )
-variable blk              17 ( current blk loaded )
-location _test            0             ( used in skip/test )
+constant #vocs      8  ( number of vocabularies in allowed )
+constant b/buf      1024         ( size of a block )
+variable blk        17           ( current blk loaded )
+constant ver        $1984        ( eForth version )
+constant c/l        64    hidden ( characters per line in a block )
+constant l/b        16    hidden ( lines in a block )
+constant sp0        $4400 hidden ( start of variable stack )
+constant rp0        $7fff hidden ( start of return stack )
+
 location .s-string        " <sp"        ( used by .s )
 location see.unknown      "(no-name)"   ( used by 'see' for calls to anonymous words )
 location see.lit          "LIT"         ( decompilation -> literal )
@@ -96,11 +103,6 @@ location see.inline       " inline "    ( used by "see", for inline words )
 location OK               " ok"         ( used by "prompt" )
 location redefined        " redefined"  ( used by ":" when a word has been redefined )
 location hi-string        "eFORTH V"    ( used by "hi" )
-constant ver              $1984
-constant c/l              64    hidden ( characters per line in a block )
-constant l/b              16    hidden ( lines in a block )
-constant sp0              $4000 hidden
-constant rp0              $7fff hidden
 
 ( ======================== System Variables ================= )
 : 2drop drop drop ;       ( n n -- )
@@ -530,8 +532,6 @@ constant rp0              $7fff hidden
 : hand ' .ok  ( ' "drop" <-- was emit )  ( ' ktap ) xio ; hidden
 : console ' "rx?" _key ! ' "tx!" _emit ! hand ; hidden
 : io! console preset ; ( -- : initialize I/O )
-: hi io! hex cr hi-string print ver 0 u.r cr here . .free cr [ ;
-: boot hi quit ;
 
 ( ==================== Advanced I/O Control ========================== )
 
@@ -668,6 +668,15 @@ constant rp0              $7fff hidden
 \	next drop ;
 
 ( ==================== Block Word Set ================================ )
+
+
+( ==================== Booting ======================================= )
+
+\ : cold io! forth 16 block b/buf 0 fill sp0 sp! ; hidden
+: hi hex cr hi-string print ver 0 u.r cr here . .free cr [ ;
+: boot ( cold ) io! forth hi quit ;
+
+( ==================== Booting ======================================= )
 
 ( ==================== See =========================================== )
 

@@ -10,9 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CORE        (65536u)
-#define SP0         (8192u)
-#define RP0         (32767u)
+#define CORE        (65536u)  /* core size in bytes */
+#define SP0         (8704u)   /* 8192 (end of program area) + 512 (block size) */
+#define RP0         (32767u)  /* end of CORE in words */
 
 typedef uint16_t uw_t;
 typedef int16_t  sw_t;

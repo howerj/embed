@@ -54,7 +54,7 @@ goal is to be fairly small whilst still being useful.  It is small enough
 that is should be easily understandable with little explanation, and it
 is hackable and extensible by modification of the source code.
 
-## Memory Map
+## Virtual Machine Memory Map
 
 There is 64KiB of memory available to the Forth virtual machine, of which only
 the first 16KiB can contain program instructions (or more accurately branch
@@ -65,12 +65,17 @@ memory into different sections.
 | Block   |  Region          |
 | ------- | ---------------- |
 | 0 - 15  | Program Storage  |
-| 16      | Variable Stack   |
-| 17 - 62 | User data        |
+| 16      | Variable Block   |
+| 17      | Variable Stack   |
+| 18 - 62 | User data        |
 | 63      | Return Stack     |
 
-Program execution begins at address zero. The return and variable stacks start
-in block 16, but they are not restricted to those blocks.
+Program execution begins at address zero. The variable stack starts at the
+beginning of block 17 and grows upwards, the return stack starts at the end of
+block 63 and grows downward.
+
+The eForth model imposes extra semantics to certain areas of memory and will
+be explained later.
 
 ## Instruction Set Encoding
 
@@ -200,21 +205,12 @@ the memory layout
 interpreter
 * A simple run length compressor would reduce the size of the blocks, as well
 as other simple memory compression techniques
-* Improve the instruction set with a better choice of ALU operation, as well
-as fixing the store instruction.
-* One of the two stacks should grow upwards, the other downwards. One could be
-located starting at the beginning of the data section, just after program
-storage, the other one at the very end of the memory.
-* Use
-  <https://greg.blog/2013/01/26/unix-bi-grams-tri-grams-and-topic-modeling/> to
-find common word sequences, then shrink the program size based on this.
 * Sort out the search order in relation to definitions,
 or to which vocabulary words are added to 
 *  Make a simplified version of 'see', that uses a modified version
 of 'find' to get the location of a pointer of the previous word in the
 chain and not the found one, this new find could also be used to implement
 a 'hide' function
-
 
 
 [H2 CPU]: https://github.com/howerj/forth-cpu

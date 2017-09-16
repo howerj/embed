@@ -3,6 +3,7 @@
  *  @copyright Richard James Howe (2017)
  *  @license   MIT */
 
+#include <assert.h>
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -59,6 +60,7 @@ static int binary_memory_save(FILE *output, uw_t *p, size_t length)
 
 static int load(forth_t *h, const char *name)
 {
+	assert(h && name);
 	FILE *input = fopen_or_die(name, "rb");
 	const int r = binary_memory_load(input, h->core, CORE/sizeof(uw_t));
 	fclose(input);
@@ -67,6 +69,7 @@ static int load(forth_t *h, const char *name)
 
 static int save(forth_t *h, const char *name, size_t length)
 {
+	assert(h);
 	if(!name)
 		return -1;
 	FILE *output = fopen_or_die(name, "wb");
@@ -79,9 +82,12 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
 	static const uw_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
 	register uw_t pc = 0, tos = 0, rp = RP0, sp = SP0;
+	assert(h && in && out);
 	uw_t *core = h->core;
 	for(;;) {
 		uw_t instruction = core[pc];
+
+		assert(!(sp & 0x8000) && !(rp & 0x8000));
 
 		if(0x8000 & instruction) { /* literal */
 			core[++sp] = tos;
@@ -129,10 +135,8 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 
 			if(instruction & 0x20)
 				_tos = nos;
-
 			if(instruction & 0x40)
 				core[rp] = tos;
-
 			if(instruction & 0x80)
 				core[sp] = tos;
 
@@ -154,11 +158,22 @@ int main(int argc, char **argv)
 {
 	static forth_t h;
 	memset(h.core, 0, CORE);
-	if(argc != 2) {
-		fprintf(stderr, "usage: %s forth.blk\n", argv[0]);
+	if(argc < 2) {
+		fprintf(stderr, "usage: %s forth.blk file.fth*\n", argv[0]);
 		return -1;
 	}
 	load(&h, argv[1]);
-	return forth(&h, stdin, stdout, argv[1]);
+	if(argc == 2)
+		return forth(&h, stdin, stdout, argv[1]);
+	for(int i = 2; i < argc; i++) {
+		FILE *in = fopen_or_die(argv[i], "rb");
+		int r = forth(&h, in, stdout, argv[1]);
+		fclose(in);
+		if(r != 0) {
+			fprintf(stderr, "run failed: %d\n", r);
+			return r;
+		}
+	}
+	return 0;
 }
 

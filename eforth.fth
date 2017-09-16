@@ -50,8 +50,8 @@ location _do_semi_colon   0 ( execution vector for ';' )
 location _key       0  ( -- c : new character, blocking input )
 location _emit      0  ( c -- : emit character )
 location _expect    0  ( "accept" vector )
-location _tap       0  ( "tap" vector, for terminal handling )
-location _echo      0  ( c -- : emit character )
+\ location _tap       0  ( "tap" vector, for terminal handling )
+\ location _echo      0  ( c -- : emit character )
 location _prompt    0  ( -- : display prompt )
 location _boot      0  ( -- : execute program at startup )
 \ location _message   0  ( n -- : display an error message )
@@ -59,8 +59,10 @@ location last-def   0  ( last, possibly unlinked, word definition )
 location cp         0  ( Dictionary Pointer: Set at end of file )
 location csp        0  ( current data stack pointer - for error checking )
 location _id        0  ( used for source id )
-location seed       1  ( seed used for the PRNG )
+location seed       0  ( seed used for the PRNG )
 location handler    0  ( current handler for throw/catch )
+location block-dirty      0             ( -1 if loaded block buffer is modified )
+location bcount           0             ( instruction counter used in 'see' )
 variable >in        0  ( Hold character pointer when parsing input )
 variable state      0  ( compiler state variable )
 variable hld        0  ( Pointer into hold area for numeric output )
@@ -68,7 +70,6 @@ variable base       10 ( Current output radix )
 variable span       0  ( Hold character count received by expect   )
 variable loaded     0  ( Used by boot block to indicate it has been loaded  )
 constant cell       2  ( size of a cell in bytes )
-variable border    -1  ( Put border around block begin displayed with 'list' )
 constant #vocs            8 ( number of vocabularies in allowed )
 location context          0 ( holds current context for vocabulary search order )
 location context0         0 ( holds space for root wordset in vocabulary search order )
@@ -82,8 +83,6 @@ location tib-buf          0 ( ... and address )
 .allocate cell              ( plus one extra cell for safety )
 constant b/buf 1024          ( size of a block )
 variable blk              17 ( current blk loaded )
-location block-dirty      0             ( -1 if loaded block buffer is modified )
-location bcount           0             ( instruction counter used in 'see' )
 location _test            0             ( used in skip/test )
 location .s-string        " <sp"        ( used by .s )
 location see.unknown      "(no-name)"   ( used by 'see' for calls to anonymous words )
@@ -117,9 +116,10 @@ constant rp0              $7fff hidden
 : over- over - ; hidden
 : base@ base @ ; hidden
 : base! base ! ; hidden
+: here cp @ ;
 : state@ state @ ; hidden
 : command? state@ 0= ; hidden
-
+: swap! swap ! ; hidden
 : cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+ cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;         ( n -- n : convert number of cells to number to increment address by )
@@ -134,7 +134,7 @@ constant rp0              $7fff hidden
 : 0< 0 < ;                 ( n -- f : less than zero? )
 : 2dup over over ;         ( n1 n2 -- n1 n2 n1 n2 )
 : tuck swap over ;         ( n1 n2 -- n2 n1 n2 )
-: +! tuck @ + swap ! ;     ( n a -- : increment value at address by 'n' )
+: +! tuck @ + swap! ;     ( n a -- : increment value at address by 'n' )
 : 1+!  1 swap +! ;         ( a -- : increment value at address by 1 )
 : 1-! [-1] swap +! ; hidden  ( a -- : decrement value at address by 1 )
 : execute >r ;             ( cfa -- : execute a function )
@@ -143,11 +143,9 @@ constant rp0              $7fff hidden
 	swap $ff and dup 8 lshift or swap
 	swap over dup ( -2 and ) @ swap 1 and 0 = $ff xor
 	>r over xor r> and xor swap ( -2 and ) ! ;
-: c, cp @ c! cp 1+! ;    ( c -- : store 'c' at next available location in the dictionary )
-: doNext r> r> ?dup if 1- >r @ >r exit then cell+ >r ; hidden
+: c, here c! cp 1+! ;    ( c -- : store 'c' at next available location in the dictionary )
 : 2! ( d a -- ) tuck ! cell+ ! ;          ( n n a -- )
 : 2@ ( a -- d ) dup cell+ @ swap @ ;      ( a -- n n )
-: here cp @ ;                             ( -- a )
 : source #tib 2@ ;                        ( -- a u )
 : source-id _id @ ;                       ( -- 0 | -1 )
 : pad here pad-length + ;                 ( -- a )
@@ -159,18 +157,22 @@ constant rp0              $7fff hidden
 : count  dup 1+ swap c@ ;                 ( cs -- b u )
 : rot >r swap r> swap ;                   ( n1 n2 n3 -- n2 n3 n1 )
 : -rot swap >r swap r> ;                  ( n1 n2 n3 -- n3 n1 n2 )
+\ : 2>r r> -rot >r >r >r ; hidden           ( u1 u2 --, R: -- u1 u2 )
+\ : 2r> r> r> r> rot >r ; hidden            ( -- u1 u2, R: u1 u2 -- )
+: doNext r> r> ?dup if 1- >r @ >r exit then cell+ >r ; hidden
 : min 2dup < if drop exit else nip exit then ; ( n n -- n )
 : max 2dup > if drop exit else nip exit then ; ( n n -- n )
 : >char $7f and dup 127 =bl within if drop [char] _ then ; hidden ( c -- c )
 : tib #tib cell+ @ ; hidden               ( -- a )
-: echo _echo @execute ; hidden            ( c -- )
+\ : echo _echo @execute ; hidden            ( c -- )
 : key _key @execute ;                     ( -- c )
 : allot cp +! ;                           ( n -- )
 : /string over min rot over + -rot - ;    ( b u1 u2 -- b u : advance a string u2 characters )
+: +string 1 /string ; hidden
 : address $3fff and ; hidden              ( a -- a : mask off address bits )
 : last context @ @ address ;              ( -- pwd )
 : emit _emit @execute ;                   ( c -- : write out a char )
-: toggle over @ xor swap ! ; hidden       ( a u -- : xor value at addr with u )
+: toggle over @ xor swap! ; hidden       ( a u -- : xor value at addr with u )
 : cr =cr emit =lf emit ;                  ( -- )
 : space =bl emit ;                        ( -- )
 : depth sp@ sp0 - chars ; hidden
@@ -189,7 +191,7 @@ constant rp0              $7fff hidden
 : cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop ; ( b b u -- )
 : fill swap for swap aft 2dup c! 1+ then next 2drop ; ( b u c -- )
 : aligned dup 1 and if 1+ exit then ;          ( b -- a )
-: align cp @ aligned cp ! ;               ( -- )
+: align here aligned cp ! ;               ( -- )
 
 : catch
 	sp@ >r
@@ -239,7 +241,7 @@ constant rp0              $7fff hidden
 : radix base@ dup 2 - 34 u> if hex 40 -throw exit then ; hidden
 : digit  9 over < 7 and + 48 + ; hidden      ( u -- c )
 : extract  0 swap um/mod swap ; hidden       ( n base -- n c )
-: ?hold hld @ cp @ u< if 17 -throw exit then ; hidden ( -- )
+: ?hold hld @ here u< if 17 -throw exit then ; hidden ( -- )
 : hold  hld @ 1- dup hld ! ?hold c! ;        ( c -- )
 \ : holds begin dup while 1- 2dup + c@ hold repeat 2drop ;
 : sign  0< if [char] - hold exit then ;           ( n -- )
@@ -260,31 +262,31 @@ constant rp0              $7fff hidden
 : pack$ ( b u a -- a ) \ null fill
 	aligned dup >r over
 	dup 0 cell um/mod ( use -2 and instead of um/mod? ) drop
-	- over +  0 swap !  2dup c!  1+ swap cmove  r> ;
+	- over +  0 swap!  2dup c!  1+ swap cmove  r> ;
 
-: ^h ( bot eot cur c -- bot eot cur )
-	>r over r@ < dup
-	if
-		=bs dup echo =bl echo echo
-	then r> + ; hidden
+\ : ^h ( bot eot cur c -- bot eot cur )
+\ 	>r over r@ < dup
+\ 	if
+\ 		=bs dup echo =bl echo echo
+\ 	then r> + ; hidden
 
-: tap dup echo over c! 1+ ; hidden ( bot eot cur c -- bot eot cur )
+: tap ( dup echo ) over c! 1+ ; hidden ( bot eot cur c -- bot eot cur )
 
-: ktap ( bot eot cur c -- bot eot cur )
-	dup =lf ( <-- was =cr ) xor
-	if =bs xor
-		if =bl tap else ^h then
-		exit
-	then drop nip dup ; hidden
+\ : ktap ( bot eot cur c -- bot eot cur )
+\ 	dup =lf ( <-- was =cr ) xor
+\ 	if =bs xor
+\ 		if =bl tap else ^h then
+\ 		exit
+\ 	then drop nip dup ; hidden
 
 : accept ( b u -- b u )
 	over + over
 	begin
 		2dup xor
 	while
-		\ key dup =lf xor if tap else drop nip dup then
-		key  dup =bl - 95 u<
-		if tap else _tap @execute then
+		key dup =lf xor if tap else drop nip dup then
+		( key  dup =bl - 95 u<
+		if tap else _tap @execute then )
 	repeat drop over- ;
 
 : expect ( b u -- ) _expect @execute span ! drop ;
@@ -306,6 +308,9 @@ constant rp0              $7fff hidden
 : logical 0= 0= ; hidden ( n -- f )
 : immediate? @ $4000 and logical ; hidden ( pwd -- f : is immediate? )
 : inline?    @ 0x8000 and logical ; hidden ( pwd -- f : is inline? )
+
+\ @todo make a better version of 'search' that returns the PWD as well as the
+\ previous PWD, this should make implementing 'see' easier, as well as 'hide' 
 
 : search ( a a -- pwd 1 | pwd -1 | a 0 : find a word in a vocabulary )
 	swap >r
@@ -351,13 +356,24 @@ constant rp0              $7fff hidden
 			exit
 		then
 		r> r> ( restore string )
-		1 /string dup 0= ( advance string and test for end )
+		+string dup 0= ( advance string and test for end )
 	until ; hidden
+
+: negative? ( b u -- f )
+	over c@ $2D = if +string [-1] else 0 then ; hidden
+
+: base? ( b u -- )
+	over c@ $24 = ( $hex )
+	if 
+		+string hex 
+	else ( #decimal )
+		over c@ [char] # = if +string decimal then 
+	then ; hidden
 
 : >number ( n b u -- n b u : convert string )
 	radix >r
-	over c@ $2D = if 1 /string [-1] >r else 0 >r then ( -negative )
-	over c@ $24 = if 1 /string hex then ( $hex )
+	negative? >r
+	base?
 	do-number
 	r> if rot negate -rot then
 	r> base! ; hidden
@@ -377,7 +393,7 @@ constant rp0              $7fff hidden
 		dup
 	while
 		over c@ r@ - r@ =bl = _test @execute if rdrop exit then
-		1 /string
+		+string
 	repeat rdrop ; hidden
 
 : skipper if 0> exit else 0<> exit then ; hidden    ( n f -- f )
@@ -408,10 +424,10 @@ constant rp0              $7fff hidden
 
 : ?error ( n -- : perform actions on error )
 	?dup if
-		[char] ? emit ( print error message )
-		. cr
-		sp0 sp! 
-		preset        ( reset machine )
+		[char] ? emit ( print '?' )
+		. cr          ( print error number )
+		sp0 sp!       ( empty stack )
+		preset        ( reset I/O streams )
 		[             ( back into interpret mode )
 		exit
 	then ; hidden
@@ -475,7 +491,7 @@ constant rp0              $7fff hidden
 	throw ;
 
 : random ( -- u : 16-bit xorshift PRNG )
-	seed @ dup 0= if 7 seed ! then
+	seed @ ?dup 0= if 7 seed ! random exit then
 	dup 13 lshift xor
 	dup  9 rshift xor
 	dup  7 lshift xor
@@ -496,22 +512,25 @@ constant rp0              $7fff hidden
 		then
 	next drop ;
 
-: CSI $1b emit [char] [ emit ; hidden
-: 10u. base@ >r decimal (u.) type r> base! ; hidden ( u -- )
-: ansi swap CSI 10u. emit ; ( n c -- )
-: at-xy CSI 10u. $3b emit 10u. [char] H emit ; ( x y -- )
-: page 2 [char] J ansi 1 1 at-xy ; ( -- )
-: sgr [char] m ansi ; ( -- )
+\ : CSI $1b emit [char] [ emit ; hidden
+\ : 10u. base@ >r decimal (u.) type r> base! ; hidden ( u -- )
+\ : ansi swap CSI 10u. emit ; ( n c -- )
+\ : at-xy CSI 10u. $3b emit 10u. [char] H emit ; ( x y -- )
+\ : page 2 [char] J ansi 1 1 at-xy ; ( -- )
+\ : sgr [char] m ansi ; ( -- )
+
+: d. base@ >r decimal .  r> base! ;
+: h. base@ >r hex     u. r> base! ;
 
 ( ==================== Advanced I/O Control ========================== )
 
 \ : pace 11 emit ; hidden
-: xio  ' accept _expect ! _tap ! _echo ! _prompt ! ; hidden
+: xio  ' accept _expect ! ( _tap ! ) ( _echo ! ) _prompt ! ; hidden
 \ : file ' pace ' "drop" ' ktap xio ;
-: hand ' .ok  ' "drop" ( <-- was emit )  ' ktap xio ; hidden
+: hand ' .ok  ( ' "drop" <-- was emit )  ( ' ktap ) xio ; hidden
 : console ' "rx?" _key ! ' "tx!" _emit ! hand ; hidden
 : io! console preset ; ( -- : initialize I/O )
-: hi io! hex cr hi-string print ver <# # # 46 hold # # #> type cr here . .free cr [ ;
+: hi io! hex cr hi-string print ver 0 u.r cr here . .free cr [ ;
 : boot hi quit ;
 
 ( ==================== Advanced I/O Control ========================== )
@@ -538,7 +557,7 @@ constant rp0              $7fff hidden
 : "until" ?compile jumpz, +csp ; immediate
 : "again" ?compile jump, +csp ; immediate
 : "if" ?compile here 0 jumpz, -csp ; immediate
-: doThen  here chars over @ or swap ! ; hidden
+: doThen  here chars over @ or swap! ; hidden
 : "then" ?compile doThen +csp ; immediate
 : "else" ?compile here 0 jump, swap doThen ; immediate
 : "while" ?compile call "if" ; immediate
@@ -560,7 +579,7 @@ constant rp0              $7fff hidden
 	if
 		literal literal compile ! exit
 	else
-		swap ! exit
+		swap! exit
 	then ; immediate
 
 : "constant" create ' doConst make-callable here cell- ! , ;
@@ -573,7 +592,7 @@ constant rp0              $7fff hidden
 \     r> r> 1+ r> 2dup <> if >r >r @ >r exit then
 \     >r 1- >r cell+ >r ; hidden
 \ : [unloop] r> rdrop rdrop rdrop >r ; hidden
-\ : loop compile [loop] dup , compile [unloop] cell- here chars swap ! ; immediate
+\ : loop compile [loop] dup , compile [unloop] cell- here chars swap! ; immediate
 \ : [i] r> r> tuck >r >r ; hidden
 \ : i ?compile compile [i] ; immediate
 \ : [?do]
@@ -602,7 +621,7 @@ constant rp0              $7fff hidden
 : $,' 34 word count + aligned cp ! ; hidden        ( -- )
 : $"  ?compile compile $"| $,' ; immediate         ( -- ; <string> )
 : ."  ?compile compile ."| $,' ; immediate         ( -- ; <string> )
-\ : abort 0 rp! quit ;                               ( --, R: ??? --- ??? : Abort! )
+\ : abort 0 rp! quit ;                             ( --, R: ??? --- ??? : Abort! )
 \ : abort" ?compile ." compile abort ; immediate
 
 ( ==================== Strings ======================================= )
@@ -620,28 +639,26 @@ constant rp0              $7fff hidden
 	dup blk !
 	10 lshift ( b/buf * ) ;
 
-: line swap block swap c/l * + c/l ; hidden ( k u -- a u )
+: c/l* ( c/l * ) 6 lshift ; hidden
+: c/l/ ( c/l / ) 6 rshift ; hidden
+: line swap block swap c/l* + c/l ; hidden ( k u -- a u )
 : loadline line evaluate ; hidden ( k u -- )
 : load 0 l/b 1- for 2dup >r >r loadline r> r> 1+ next 2drop ;
 : pipe 124 emit ; hidden
 \ : .line line -trailing $type ; hidden
-: border@ border @ ; hidden
-: .border border@ if 3 spaces c/l 45 nchars cr exit then ; hidden
-: #line border@ if dup 2 u.r exit then ; hidden ( u -- u : print line number )
-: ?pipe border@ if pipe exit then ; hidden
-: ?page border@ if page exit then ; hidden
+: .border 3 spaces c/l 45 nchars cr exit ; hidden
+: #line dup 2 u.r exit ; hidden ( u -- u : print line number )
 : thru over- for dup load 1+ next drop ; ( k1 k2 -- )
 : blank =bl fill ;
 \ : message l/b extract .line cr ; ( u -- )
 : list
 	dup block drop
-	?page
 	cr
 	.border
 	0 begin
 		dup l/b <
 	while
-		2dup #line ?pipe line $type ?pipe cr 1+
+		2dup #line pipe line $type pipe cr 1+
 	repeat .border 2drop ;
 
 \ : index ( k1 k2 -- : show titles for block k1 to k2 )
@@ -666,8 +683,7 @@ constant rp0              $7fff hidden
 
 ( @todo Do this for every vocabulary loaded )
 : name ( cfa -- nfa )
-	abits cells
-	>r
+	abits cells >r
 	last
 	begin
 		dup
@@ -742,7 +758,7 @@ i.end:   5u.r rdrop exit
 : [set-order] ( widn ... wid1 n -- : set the current search order )
 	dup [-1]  = if drop root-voc 1 [set-order] exit then
 	dup #vocs > if 49 -throw exit then
-	context swap for aft tuck ! cell+ then next 0 swap ! ; hidden
+	context swap for aft tuck ! cell+ then next 0 swap! ; hidden
 
 : previous get-order swap drop 1- [set-order] ;
 \ : also get-order over swap 1+ [set-order] ;
@@ -763,10 +779,11 @@ i.end:   5u.r rdrop exit
 
 ( ==================== Block Editor ================================== )
 
+
 .pwd 0
 : [block] blk @ block ; hidden
-: [check] dup b/buf c/l / u>= if 24 -throw exit then ; hidden
-: [line] [check] c/l * [block] + ; hidden
+: [check] dup b/buf c/l/ u>= if 24 -throw exit then ; hidden
+: [line] [check] c/l* [block] + ; hidden
 : b block drop ;
 : l blk @ list ;
 : n  1 +block b l ;
@@ -776,7 +793,7 @@ i.end:   5u.r rdrop exit
 : s update flush ;
 : q forth flush ;
 : e forth blk @ load editor ;
-: ia c/l * + [block] + source drop >in @ +
+: ia c/l* + [block] + source drop >in @ +
   swap source nip >in @ - cmove call "\" ;
 : i 0 swap ia ;
 : u update ;
@@ -807,8 +824,8 @@ start:
 .set _key           "rx?"       ( execution vector of ?key )
 .set _emit          "tx!"       ( execution vector of emit )
 .set _expect        accept      ( execution vector of expect, default to 'accept'. )
-.set _tap           ktap        ( execution vector of tap,    default the ktap. )
-.set _echo          "tx!"       ( execution vector of echo )
+\ .set _tap           ktap        ( execution vector of tap,    default the ktap. )
+\ .set _echo          "tx!"       ( execution vector of echo )
 .set _prompt        .ok         ( execution vector of prompt, default to '.ok'. )
 .set _boot          boot        ( @execute does nothing if zero )
 \ .set _message       message     ( execution vector of _message, used in ?error )

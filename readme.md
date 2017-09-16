@@ -13,9 +13,36 @@ This project was derived from a simulator for a Forth CPU available from here:
 <https://github.com/howerj/forth-cpu>. The simulator and compiler have been
 modified so they can be used as a C like Forth for the PC.
 
-The project is a word in progress, but most of the system is in place. It is
+The project is a work in progress, but most of the system is in place. It is
 currently being code golfed so the Forth program running on the machine is as
 small as possible, Forth is Sudoku for programmers after all.
+
+## Program Operation
+
+To build the project you will need a [C compiler][], and [make][]. The
+system should build under [Linux][] and [Windows][]. After installing
+[make][] and a [C99][] compiler, simply type "make" to build the
+Forth virtual machine (from [forth.c][]), a compiler for the virtual 
+machine (from [compiler.c][]), and an image usable by the Forth Virtual 
+machine (from [eforth.fth][]).
+
+Compiler operation (taking a Forth file [eforth.fth][] and compiling
+the code into a virtual machine image [eforth.blk][]):
+
+	Linux:
+	./compiler   eforth.fth eforth.blk  
+	Windows:
+	compiler.exe eforth.fth eforth.blk   
+
+Virtual machine operation (running the virtual machine image [eforth.blk][]):
+
+	Linux:
+	./forth    eforth.blk
+	Windows:
+	forth.exe  eforth.blk
+
+To exit the virtual machine cleanly either type "bye" and then hit
+return, or press CTRL+D (on Linux) or CTRL+Z and then return (on Windows).
 
 ## The Virtual Machine
 
@@ -44,12 +71,6 @@ memory into different sections.
 
 Program execution begins at address zero. The return and variable stacks start
 in block 16, but they are not restricted to those blocks.
-
-## Interaction
-
-The outside world can be interacted with in two ways, with single character
-input and output, or by saving the current Forth image. The interaction is
-performed by three instructions.
 
 ## Instruction Set Encoding
 
@@ -91,9 +112,16 @@ A quick overview:
 	the stack delta (the amount to increment or decrement the stack
 	by for their respective stacks: return and data)
 
+## Interaction
+
+The outside world can be interacted with in two ways, with single character
+input and output, or by saving the current Forth image. The interaction is
+performed by three instructions.
+
 ## eForth
 
-The interpreter is based on T.
+The interpreter is based on eForth by C. H. Ting, with some modifications
+to the model.
 
 ## Error Codes
 
@@ -192,3 +220,10 @@ a 'hide' function
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html
 [forth.c]: forth.c
+[compiler.c]: compiler.c
+[eforth.fth]: eforth.fth
+[C compiler]: https://gcc.gnu.org/
+[make]: https://www.gnu.org/software/make/
+[Windows]: https://en.wikipedia.org/wiki/Microsoft_Windows
+[Linux]: https://en.wikipedia.org/wiki/Linux
+[C99]: https://en.wikipedia.org/wiki/C99

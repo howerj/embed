@@ -154,18 +154,28 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 	return 0;
 }
 
+#ifdef ALL_IN_ONE
+#include "image.inc"
+#endif
+
 int main(int argc, char **argv)
 {
 	static forth_t h;
+	int count = 2;
 	memset(h.core, 0, CORE);
-	if(argc < 2) {
+#ifndef ALL_IN_ONE
+	if(argc < count) {
 		fprintf(stderr, "usage: %s forth.blk file.fth*\n", argv[0]);
 		return -1;
 	}
 	load(&h, argv[1]);
-	if(argc == 2)
+#else
+	count = 1;
+	memcpy(&h, core, sizeof(core));
+#endif
+	if(argc == count)
 		return forth(&h, stdin, stdout, argv[1]);
-	for(int i = 2; i < argc; i++) {
+	for(int i = count; i < argc; i++) {
 		FILE *in = fopen_or_die(argv[i], "rb");
 		int r = forth(&h, in, stdout, argv[1]);
 		fclose(in);

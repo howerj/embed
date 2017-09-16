@@ -17,6 +17,13 @@ forth: forth.c
 run: forth eforth.blk
 	./$^
 
+image.inc: forth eforth.blk programs/dump.fth
+	./$^ > $@
+
+all-in-one: image.inc
+	${CC} ${CFLAGS} -DALL_IN_ONE forth.c -o $@
+
+
 static: CC=musl-gcc
 static: CFLAGS+=-static
 static: forth 

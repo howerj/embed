@@ -528,6 +528,7 @@ virtual-machine-error: -throw
 \ : file ' pace ' "drop" ' ktap xio ;
 : hand ' .ok  ( ' "drop" <-- was emit )  ( ' ktap ) xio ; hidden
 : console ' "rx?" _key ! ' "tx!" _emit ! hand ; hidden
+: ok! _prompt ! ;
 : io! console preset ; ( -- : initialize I/O )
 
 ( ==================== Advanced I/O Control ========================== )
@@ -669,7 +670,9 @@ virtual-machine-error: -throw
 ( ==================== Booting ======================================= )
 
 : cold 16 block b/buf 0 fill 18 block drop sp0 sp! io! forth ;
-: hi hex cr hi-string print ver 0 u.r cr here . .free cr [ ;
+: forward $2f emit ; hidden
+: 2forward forward forward space ; hidden
+: hi hex cr 2forward hi-string print ver 0 u.r cr 2forward here . .free cr [ ;
 : normal-running hi quit ; hidden
 : boot cold _boot @execute bye ; hidden
 : boot! _boot ! ; ( xt -- )

@@ -7,7 +7,9 @@ embed
 forth
 *.gz
 *.hex
+*.inc
 *.o
 *.rle
 vgcore.*
 *.xz
+all-in-one

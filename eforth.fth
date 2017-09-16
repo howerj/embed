@@ -661,12 +661,13 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 
 ( ==================== Block Word Set ================================ )
 
-
 ( ==================== Booting ======================================= )
 
 : cold 16 block b/buf 0 fill sp0 sp! io! forth ; 
 : hi hex cr hi-string print ver 0 u.r cr here . .free cr [ ;
-: boot cold hi quit ;
+: normal-running hi quit ; hidden
+: boot cold _boot @execute bye ; hidden
+: boot! _boot ! ; ( xt -- )
 
 ( ==================== Booting ======================================= )
 
@@ -805,11 +806,11 @@ i.end:   5u.r rdrop exit
 
 ( ==================== Block Editor ================================== )
 
+( ==================== Startup Code ================================== )
+
 start:
 .set entry start
-	_boot @execute  ( _boot contains zero by default, does nothing )
-
-( ==================== Startup Code ================================== )
+	boot exit
 
 .set cp  $pc
 
@@ -818,5 +819,5 @@ start:
 .set _forth         [forth]
 .set _set-order     [set-order]
 .set _words         [words]
-.set _boot          boot        ( @execute does nothing if zero )
+.set _boot          normal-running
 \ .set _message       message     ( execution vector of _message, used in ?error )

@@ -264,8 +264,7 @@ static void *allocate_or_die(size_t length)
 	errno = 0;
 	r = calloc(1, length);
 	if(!r)
-		fatal("allocation of size %zu failed: %s",
-				length, reason());
+		fatal("allocation of size %zu failed: %s", length, reason());
 	return r;
 }
 
@@ -277,8 +276,7 @@ static FILE *fopen_or_die(const char *file, const char *mode)
 	errno = 0;
 	f = fopen(file, mode);
 	if(!f)
-		fatal("failed to open file '%s' (mode %s): %s",
-				file, mode, reason());
+		fatal("failed to open file '%s' (mode %s): %s", file, mode, reason());
 	return f;
 }
 

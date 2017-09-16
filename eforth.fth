@@ -112,6 +112,8 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : over- over - ; hidden    ( u1 u2 -- u1 u2 u2-u1 )
 : base@ base @ ; hidden    ( -- u )
 : base! base ! ; hidden    ( u -- )
+: blk@ blk @ ; hidden      ( -- u )
+: in! >in ! ; hidden       ( u -- )
 : here cp @ ;              ( -- a )
 : cp! cp ! ; hidden        ( u -- )
 : state@ state @ ; hidden  ( -- f )
@@ -142,7 +144,6 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 	swap $ff and dup 8 lshift or swap
 	swap over dup ( -2 and ) @ swap 1 and 0 = $ff xor
 	>r over xor r> and xor swap ( -2 and ) ! ;
-: c, here c! cp 1+! ;    ( c -- : store 'c' at next available location in the dictionary )
 : 2! ( d a -- ) tuck ! cell+ ! ;          ( n n a -- )
 : 2@ ( a -- d ) dup cell+ @ swap @ ;      ( a -- n n )
 : source #tib 2@ ;                        ( -- a u )
@@ -237,22 +238,22 @@ virtual-machine-error: -throw
 : decimal 10 base! ;                       ( -- )
 : hex     16 base! ;                       ( -- )
 : radix base@ dup 2 - 34 u> if hex 40 -throw exit then ; hidden
-: digit  9 over < 7 and + 48 + ; hidden      ( u -- c )
-: extract u/mod swap ; hidden       ( n base -- n c )
+: digit  9 over < 7 and + 48 + ; hidden    ( u -- c )
+: extract u/mod swap ; hidden              ( n base -- n c )
 : ?hold hld @ here u< if 17 -throw exit then ; hidden ( -- )
-: hold  hld @ 1- dup hld ! ?hold c! ;        ( c -- )
+: hold  hld @ 1- dup hld ! ?hold c! ;      ( c -- )
 \ : holds begin dup while 1- 2dup + c@ hold repeat 2drop ;
-: sign  0< if [char] - hold exit then ;           ( n -- )
-: #>  drop hld @ pad over- ;                ( w -- b u )
-: #  1depth radix extract digit hold ;       ( u -- u )
-: #s begin # dup while repeat ;              ( u -- 0 )
-: <#  pad hld ! ;                            ( -- )
-: str dup >r abs <# #s r> sign #> ;          ( n -- b u : convert a signed integer to a numeric string )
-: adjust over- spaces type ; hidden ( b n n -- ) 
-:  .r >r str r> adjust ;       ( n n : print n, right justified by +n )
-: (u.) <# #s #> ; hidden
-: u.r >r (u.) r> adjust ;    ( u +n -- : print u right justified by +n)
-: u.  (u.) space type ;                  ( u -- : print unsigned number )
+: sign  0< if [char] - hold exit then ;    ( n -- )
+: #>  drop hld @ pad over- ;               ( w -- b u )
+: #  1depth radix extract digit hold ;     ( u -- u )
+: #s begin # dup while repeat ;            ( u -- 0 )
+: <#  pad hld ! ;                          ( -- )
+: str dup >r abs <# #s r> sign #> ; hidden ( n -- b u : convert a signed integer to a numeric string )
+: adjust over- spaces type ; hidden        ( b n n -- )
+:  .r >r str r> adjust ;                   ( n n : print n, right justified by +n )
+: (u.) <# #s #> ; hidden                   ( u -- : )
+: u.r >r (u.) r> adjust ;                  ( u +n -- : print u right justified by +n)
+: u.  (u.) space type ;                    ( u -- : print unsigned number )
 :  .  radix 10 xor if u. exit then str space type ; ( n -- print space, signed number )
 : ? @ . ;                                    ( a -- : display the contents in a memory cell )
 \ : .base base@ dup decimal base! ; ( -- )
@@ -268,7 +269,6 @@ virtual-machine-error: -throw
 \ 		=bs dup echo =bl echo echo
 \ 	then r> + ; hidden
 
-: tap ( dup echo ) over c! 1+ ; hidden ( bot eot cur c -- bot eot cur )
 
 \ : ktap ( bot eot cur c -- bot eot cur )
 \ 	dup =lf ( <-- was =cr ) xor
@@ -277,6 +277,7 @@ virtual-machine-error: -throw
 \ 		exit
 \ 	then drop nip dup ; hidden
 
+: tap ( dup echo ) over c! 1+ ; hidden ( bot eot cur c -- bot eot cur )
 : accept ( b u -- b u )
 	over + over
 	begin
@@ -288,7 +289,7 @@ virtual-machine-error: -throw
 	repeat drop over- ;
 
 : expect ( b u -- ) _expect @execute span ! drop ;
-: query tib tib-length _expect @execute #tib !  drop-0 >in ! ; ( -- )
+: query tib tib-length _expect @execute #tib !  drop-0 in! ; ( -- )
 
 : =string ( a1 u2 a1 u2 -- f : string equality )
 	>r swap r> ( a1 a2 u1 u2 )
@@ -308,7 +309,7 @@ virtual-machine-error: -throw
 : inline?    @ 0x8000 and logical ; hidden ( pwd -- f : is inline? )
 
 \ @todo make a better version of 'search' that returns the PWD as well as the
-\ previous PWD, this should make implementing 'see' easier, as well as 'hide' 
+\ previous PWD, this should make implementing 'see' easier, as well as 'hide'
 
 : search ( a a -- pwd 1 | pwd -1 | a 0 : find a word in a vocabulary )
 	swap >r
@@ -362,10 +363,10 @@ virtual-machine-error: -throw
 
 : base? ( b u -- )
 	over c@ $24 = ( $hex )
-	if 
-		+string hex 
+	if
+		+string hex
 	else ( #decimal )
-		over c@ [char] # = if +string decimal then 
+		over c@ [char] # = if +string decimal then
 	then ; hidden
 
 : >number ( n b u -- n b u : convert string )
@@ -408,7 +409,7 @@ virtual-machine-error: -throw
 : ) ; immediate
 : "(" 41 parse 2drop ; immediate
 : .( 41 parse type ;
-: "\" #tib @ >in ! ; immediate
+: "\" #tib @ in! ; immediate
 : ?length dup word-length u> if 19 -throw exit then ; hidden
 : word 1depth parse ?length here pack$ ;          ( c -- a ; <string> )
 : token =bl word ; hidden
@@ -416,7 +417,7 @@ virtual-machine-error: -throw
 : .s ( -- ) cr depth for aft r@ pick . then next .s-string print ;
 : unused $4000 here - ; hidden
 : .free unused u. ; hidden
-: preset ( tib ) tib-start #tib cell+ ! 0 >in ! 0 _id ! ; hidden
+: preset ( tib ) tib-start #tib cell+ ! 0 in! 0 _id ! ; hidden
 : ] [-1] state ! ;
 : [  0 state ! ; immediate
 
@@ -432,6 +433,7 @@ virtual-machine-error: -throw
 
 : ?dictionary dup $3f00 u> if 8 -throw exit then ; hidden
 : , here dup cell+ ?dictionary cp! ! ; ( u -- )
+: c, here c! cp 1+! ;    ( c -- : store 'c' at next available location in the dictionary )
 : doLit 0x8000 or , ; hidden
 : ?compile command? if 14 -throw exit then ; hidden ( fail if not compiling )
 : literal ( n -- : write a literal into the dictionary )
@@ -477,12 +479,12 @@ virtual-machine-error: -throw
 : evaluate ( a u -- )
 	_prompt @ >r  0 _prompt !
 	_id     @ >r [-1] _id !
-	>in     @ >r  0 >in !
+	>in     @ >r  0 in!
 	source >r >r
 	#tib 2!
 	' eval catch
 	r> r> #tib 2!
-	r> >in !
+	r> in!
 	r> _id !
 	r> _prompt !
 	throw ;
@@ -624,7 +626,7 @@ virtual-machine-error: -throw
 ( ==================== Block Word Set ================================ )
 
 : update [-1] block-dirty ! ;          ( -- )
-: +block blk @ + ;                     ( -- )
+: +block blk@ + ; hidden              ( -- )
 : save ( [-1] ) here (save) throw ;
 : flush block-dirty @ if [-1] (save) throw exit then ;
 
@@ -666,7 +668,7 @@ virtual-machine-error: -throw
 
 ( ==================== Booting ======================================= )
 
-: cold 16 block b/buf 0 fill 18 block drop sp0 sp! io! forth ; 
+: cold 16 block b/buf 0 fill 18 block drop sp0 sp! io! forth ;
 : hi hex cr hi-string print ver 0 u.r cr here . .free cr [ ;
 : normal-running hi quit ; hidden
 : boot cold _boot @execute bye ; hidden
@@ -782,18 +784,18 @@ i.end:   5u.r rdrop exit
 ( ==================== Block Editor ================================== )
 
 .pwd 0
-: [block] blk @ block ; hidden
+: [block] blk@ block ; hidden
 : [check] dup b/buf c/l/ u>= if 24 -throw exit then ; hidden
 : [line] [check] c/l* [block] + ; hidden
 : b block drop ;
-: l blk @ list ;
+: l blk@ list ;
 : n  1 +block b l ;
 : p -1 +block b l ;
 : d [line] c/l blank ;
 : x [block] b/buf blank ;
 : s update flush ;
 : q forth flush ;
-: e forth blk @ load editor ;
+: e forth blk@ load editor ;
 : ia c/l* + [block] + source drop >in @ +
   swap source nip >in @ - cmove call "\" ;
 : i 0 swap ia ;

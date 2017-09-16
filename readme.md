@@ -22,19 +22,19 @@ small as possible, Forth is Sudoku for programmers after all.
 To build the project you will need a [C compiler][], and [make][]. The
 system should build under [Linux][] and [Windows][]. After installing
 [make][] and a [C99][] compiler, simply type "make" to build the
-Forth virtual machine (from [forth.c][]), a compiler for the virtual 
-machine (from [compiler.c][]), and an image usable by the Forth Virtual 
+Forth virtual machine (from [forth.c][]), a compiler for the virtual
+machine (from [compiler.c][]), and an image usable by the Forth Virtual
 machine (from [eforth.fth][]).
 
 Compiler operation (taking a Forth file [eforth.fth][] and compiling
-the code into a virtual machine image [eforth.blk][]):
+the code into a virtual machine image "eforth.blk"):
 
 	Linux:
-	./compiler   eforth.fth eforth.blk  
+	./compiler   eforth.fth eforth.blk
 	Windows:
-	compiler.exe eforth.fth eforth.blk   
+	compiler.exe eforth.fth eforth.blk
 
-Virtual machine operation (running the virtual machine image [eforth.blk][]):
+Virtual machine operation (running the virtual machine image "eforth.blk":
 
 	Linux:
 	./forth    eforth.blk
@@ -220,7 +220,7 @@ interpreter
 * A simple run length compressor would reduce the size of the blocks, as well
 as other simple memory compression techniques
 * Sort out the search order in relation to definitions,
-or to which vocabulary words are added to 
+or to which vocabulary words are added to
 *  Make a simplified version of 'see', that uses a modified version
 of 'find' to get the location of a pointer of the previous word in the
 chain and not the found one, this new find could also be used to implement

@@ -234,7 +234,6 @@ virtual-machine-error: -throw
 \ 	>r dup 0< if r@ + then r> um/mod r>
 \ 	if swap negate swap exit then ;
 
-: mod  /mod drop ;           ( n n -- r )
 : decimal 10 base! ;                       ( -- )
 : hex     16 base! ;                       ( -- )
 : radix base@ dup 2 - 34 u> if hex 40 -throw exit then ; hidden

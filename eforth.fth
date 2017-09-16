@@ -115,10 +115,12 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : blk@ blk @ ; hidden      ( -- u )
 : in! >in ! ; hidden       ( u -- )
 : here cp @ ;              ( -- a )
-: cp! cp ! ; hidden        ( u -- )
-: state@ state @ ; hidden  ( -- f )
+: aligned dup 1 and if 1+ exit then ;          ( b -- a )
+: cp! aligned cp ! ; hidden   ( a -- )
+: state@ state @ ; hidden     ( -- f )
 : command? state@ 0= ; hidden ( -- f )
-: swap! swap ! ; hidden    ( a u -- )
+: swap! swap ! ; hidden       ( a u -- )
+: align here cp! ;            ( -- )
 
 : bye 0 (bye) ;
 : cell- cell - ;           ( a -- a : adjust address to previous cell )
@@ -190,8 +192,6 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : spaces =bl nchars ;                     ( +n -- )
 : cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop ; ( b b u -- )
 : fill swap for swap aft 2dup c! 1+ then next 2drop ; ( b u c -- )
-: aligned dup 1 and if 1+ exit then ;          ( b -- a )
-: align here aligned cp! ;               ( -- )
 
 : catch
 	sp@ >r
@@ -433,7 +433,7 @@ virtual-machine-error: -throw
 
 : ?dictionary dup $3f00 u> if 8 -throw exit then ; hidden
 : , here dup cell+ ?dictionary cp! ! ; ( u -- )
-: c, here c! cp 1+! ;    ( c -- : store 'c' at next available location in the dictionary )
+: c, here ?dictionary c! cp 1+! ;    ( c -- : store 'c' at next available location in the dictionary )
 : doLit 0x8000 or , ; hidden
 : ?compile command? if 14 -throw exit then ; hidden ( fail if not compiling )
 : literal ( n -- : write a literal into the dictionary )
@@ -547,7 +547,7 @@ virtual-machine-error: -throw
 : "[char]" ?compile char literal ; immediate ( --, <string> : )
 : ?quit command? if 56 -throw exit then ; hidden
 : ";" ?quit ( ?compile ) +csp ?csp context @ ! =exit ,  [ ; immediate
-: ":" align !csp here dup last-def ! last ,  token ?nul ?unique count + aligned cp! ] ;
+: ":" align !csp here dup last-def ! last ,  token ?nul ?unique count + cp! ] ;
 : jumpz, chars $2000 or , ; hidden
 : jump, chars ( $0000 or ) , ; hidden
 : "begin" ?compile here -csp ; immediate
@@ -615,7 +615,7 @@ virtual-machine-error: -throw
 : do$ r> r@ r> count + aligned >r swap >r ; hidden ( -- a )
 : $"| do$ nop ; hidden                             ( -- a : do string NB. nop needed to fool optimizer )
 : ."| do$ print ; hidden                           ( -- : print string )
-: $,' 34 word count + aligned cp! ; hidden         ( -- )
+: $,' 34 word count + cp! ; hidden         ( -- )
 : $"  ?compile compile $"| $,' ; immediate         ( -- ; <string> )
 : ."  ?compile compile ."| $,' ; immediate         ( -- ; <string> )
 \ : abort 0 rp! quit ;                             ( --, R: ??? --- ??? : Abort! )

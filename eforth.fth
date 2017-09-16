@@ -82,7 +82,7 @@ variable span       0     ( Hold character count received by expect   )
 variable loaded     0     ( Used by boot block to indicate it has been loaded  )
 constant #vocs      8     ( number of vocabularies in allowed )
 constant b/buf      1024  ( size of a block )
-variable blk        18    ( current blk loaded )
+variable blk        0     ( current blk loaded, set in 'cold' )
 constant ver        $1984 ( eForth version )
 
 location .s-string     " <sp"        ( used by .s )
@@ -235,9 +235,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 \ 	>r dup 0< if r@ + then r> um/mod r>
 \ 	if swap negate swap exit then ;
 
-\ : /mod over 0< swap m/mod ; ( n n -- r q )
 : mod  /mod drop ;           ( n n -- r )
-: /    /mod nip ;            ( n n -- q )
 : decimal 10 base! ;                       ( -- )
 : hex     16 base! ;                       ( -- )
 : radix base@ dup 2 - 34 u> if hex 40 -throw exit then ; hidden
@@ -259,7 +257,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : u.  (u.) space type ;                  ( u -- : print unsigned number )
 :  .  radix 10 xor if u. exit then str space type ; ( n -- print space, signed number )
 : ? @ . ;                                    ( a -- : display the contents in a memory cell )
-: .base base@ dup decimal base! ; ( -- )
+\ : .base base@ dup decimal base! ; ( -- )
 
 : pack$ ( b u a -- a ) \ null fill
 	aligned dup >r over
@@ -670,7 +668,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 
 ( ==================== Booting ======================================= )
 
-: cold 16 block b/buf 0 fill sp0 sp! io! forth ; 
+: cold 16 block b/buf 0 fill 18 block drop sp0 sp! io! forth ; 
 : hi hex cr hi-string print ver 0 u.r cr here . .free cr [ ;
 : normal-running hi quit ; hidden
 : boot cold _boot @execute bye ; hidden

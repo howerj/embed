@@ -126,8 +126,8 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 22: _tos = save(h, block, ((ud_t)_tos + 1u) >> 1); break;
 			case 23: _tos = fputc(tos, out);                        break;
 			case 24: _tos = fgetc(in);                              break;
-			case 25: if(tos) { _tos = nos/tos; tos = nos%tos; } else { pc=1; continue; } break;
-			case 26: if(tos) { _tos = (sw_t)nos/(sw_t)tos; tos = (sw_t)nos % (sw_t)tos; } else { pc=1; continue; } break;
+			case 25: if(tos) { _tos = nos/tos; tos = nos%tos; nos = tos; } else { pc=1; continue; } break;
+			case 26: if(tos) { _tos = (sw_t)nos/(sw_t)tos; tos = (sw_t)nos % (sw_t)tos; nos = tos; } else { pc=1; continue; } break;
 			case 27: return _tos;
 			}
 

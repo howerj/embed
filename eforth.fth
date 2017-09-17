@@ -702,25 +702,24 @@ virtual-machine-error: -throw
 
 : .name name ?dup 0= if see.unknown then print ; hidden
 
-: .instruction
-	dup 0x8000 and         if drop see.lit     print exit then
-	dup $6000  and $6000 = if drop see.alu     print exit then
-	dup $6000  and $4000 = if drop see.call    print exit then
-	    $6000  and $2000 = if      see.0branch print exit then
-	see.branch print ; hidden
+: .instruction ( instruction -- masked )
+	dup 0x8000 and         if drop 0x8000 see.lit     print exit then
+	dup $6000  and $6000 = if drop $6000  see.alu     print exit then
+	dup $6000  and $4000 = if drop $4000  see.call    print exit then
+	    $6000  and $2000 = if      $2000  see.0branch print exit then
+	0 see.branch print ; hidden
 
 : decompiler ( previous current -- : decompile starting at address )
 	>r
  	begin dup r@ u< while
  		dup 5u.r colon 
-		dup-@ dup space .instruction
-		dup $6000 and $4000
- 		= if dup 5u.r space .name else 5u.r then cr cell+
+		dup-@ dup space 
+		.instruction $4000 = if dup 5u.r space .name else 5u.r then cr cell+
  	repeat rdrop drop ; hidden
 
 : see ( --, <string> : decompile a word )
 	token finder 0= if 13 -throw exit then
-	swap ( here max ) >r
+	swap 2dup = if drop here then >r
 	cr colon space dup .id space
 	dup inline?    if see.inline    print then
 	dup immediate? if see.immediate print then

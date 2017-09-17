@@ -42,7 +42,6 @@ constant _id         $4006 hidden ( used for source id )
 constant seed        $4008 hidden ( seed used for the PRNG )
 constant handler     $400A hidden ( current handler for throw/catch )
 constant block-dirty $400C hidden ( -1 if loaded block buffer is modified )
-constant bcount      $400E hidden ( instruction counter used in 'see' )
 constant _key        $4010 hidden ( -- c : new character, blocking input )
 constant _emit       $4012 hidden ( c -- : emit character )
 constant _expect     $4014 hidden ( "accept" vector )
@@ -85,7 +84,7 @@ variable blk        0     ( current blk loaded, set in 'cold' )
 constant ver        $1984 ( eForth version )
 
 location .s-string     " <sp"        ( used by .s )
-location see.unknown   "(no-name)"   ( used by 'see' for calls to anonymous words )
+location see.unknown   "???"         ( used by 'see' for calls to anonymous words )
 location see.lit       "LIT"         ( decompilation -> literal )
 location see.alu       "ALU"         ( decompilation -> ALU operation )
 location see.call      "CAL"         ( decompilation -> Call )
@@ -310,8 +309,8 @@ virtual-machine-error: -throw
 \ @todo make a better version of 'search' that returns the PWD as well as the
 \ previous PWD, this should make implementing 'see' easier, as well as 'hide'
 
-: search ( a a -- pwd 1 | pwd -1 | a 0 : find a word in a vocabulary )
-	swap >r
+: search ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
+	swap >r dup
 	begin
 		dup
 	while
@@ -320,19 +319,24 @@ virtual-machine-error: -throw
 			dup immediate? if 1 else [-1] then
 			rdrop exit
 		then
-		@ address
+		nip dup @ address
 	repeat
-	drop r> 0 ; hidden
+	2drop rdrop 0 ; hidden
 
-: find ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
+: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word in the dictionary )
 	>r
 	context
 	begin
 		dup-@
 	while
-		dup-@ @ r@ swap search ?dup if rot rdrop drop exit else drop then
+		dup-@ @ r@ swap search ?dup 
+		if 
+			>r rot drop r> rdrop exit 
+		then
 		cell+
-	repeat drop r> 0 ;
+	repeat drop-0 r> 0 ; hidden
+
+: find finder rot drop ; ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
 
 : numeric? ( char -- n|-1 : convert character in 0-9 a-z range to number )
 	>lower
@@ -538,7 +542,7 @@ virtual-machine-error: -throw
 : ?csp sp@ csp @ xor if 22 -throw exit then ; hidden
 : +csp    1 cells csp +! ; hidden
 : -csp [-1] cells csp +! ; hidden
-: ?unique dup last search if drop redefined print cr exit else drop exit then ; hidden ( a -- a )
+: ?unique dup last search if 2drop redefined print cr exit then ; hidden ( a -- a )
 : ?nul count 0= if 16 -throw exit then 1- ; hidden ( b -- : check for zero length strings )
 : find-cfa token find if cfa exit else 13 -throw exit then ; hidden
 : "'" find-cfa state@ if literal exit then ; immediate
@@ -680,17 +684,13 @@ virtual-machine-error: -throw
 
 ( @warning This disassembler is experimental, and not liable to work )
 
-: bcount@ bcount @ ; hidden
-: bcounter! bcount@ if drop exit else chars over swap -  bcount ! exit then ; hidden ( u a -- u )
-: -bcount   bcount@ if bcount 1-! exit then ; hidden ( -- )
-: abits $1fff and ; hidden
-
 : validate ( cfa pwd -- nfa | 0 )
 	tuck cfa <> if drop-0 exit else nfa exit then ; hidden
 
+( @todo Name an assembly instruction )
 ( @todo Do this for every vocabulary loaded )
 : name ( cfa -- nfa )
-	abits cells >r
+	address cells >r
 	last
 	begin
 		dup
@@ -701,53 +701,31 @@ virtual-machine-error: -throw
 	repeat rdrop ; hidden
 
 : .name name ?dup 0= if see.unknown then print ; hidden
-: mask-off 2dup and = ; hidden ( u u -- u f )
 
-i.end2t: cells
-i.end:   5u.r rdrop exit
-: i.print print abits ; hidden
+: .instruction
+	dup 0x8000 and         if drop see.lit     print exit then
+	dup $6000  and $6000 = if drop see.alu     print exit then
+	dup $6000  and $4000 = if drop see.call    print exit then
+	    $6000  and $2000 = if      see.0branch print exit then
+	see.branch print ; hidden
 
-: instruction ( decode instruction )
-	over >r
-	0x8000 mask-off if see.lit     print $7fff and      branch i.end then
-	$6000  mask-off if see.alu     i.print              branch i.end then
-	$4000  mask-off if see.call    i.print dup cells    5u.r rdrop space .name exit then
-	$2000  mask-off if see.0branch i.print r@ bcounter! branch i.end2t then
-	                   see.branch  i.print r@ bcounter! branch i.end2t ; hidden
-
-: continue? ( u a -- f : determine whether to continue decompilation  )
-	bcount@ if 2drop-1 exit then
-	over $e000 and if drop else u> exit then
-	dup ' doVar make-callable = if drop-0 exit then ( print next address ? )
-	=exit and =exit <> ; hidden
-
-: decompile ( a -- a : decompile a single instruction )
-	dup 5u.r colon dup-@ 5u.r space
-	dup-@ instruction
-	dup-@ ' doNext make-callable = if cell+ dup ? then
-	cr
-	cell+ ; hidden
-
-: decompiler ( a -- : decompile starting at address )
-	0 bcount !
-	dup chars >r
-	begin dup-@ r@ continue? while decompile -bcount ( nuf? ) repeat decompile rdrop
-	drop ; hidden
+: decompiler ( previous current -- : decompile starting at address )
+	>r
+ 	begin dup r@ u< while
+ 		dup 5u.r colon 
+		dup-@ dup space .instruction
+		dup $6000 and $4000
+ 		= if dup 5u.r space .name else 5u.r then cr cell+
+ 	repeat rdrop drop ; hidden
 
 : see ( --, <string> : decompile a word )
-	token find 0= if 13 -throw exit then
+	token finder 0= if 13 -throw exit then
+	swap ( here max ) >r
 	cr colon space dup .id space
 	dup inline?    if see.inline    print then
 	dup immediate? if see.immediate print then
 	cr
-	cfa decompiler space 59 emit cr ;
-
-\ : see
-\ 	token find 0= if 13 -throw exit then
-\ 	begin nuf? while
-\ 		dup-@ dup $4000 and $4000
-\ 		= if space .name else . then cell+
-\ 	repeat drop ;
+	cfa r> decompiler space 59 emit cr ;
 
 ( ==================== See =========================================== )
 

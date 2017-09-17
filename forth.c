@@ -11,8 +11,8 @@
 #include <string.h>
 
 #define CORE        (65536u)  /* core size in bytes */
-#define SP0         (8704u)   /* 8192 (end of program area) + 512 (block size) */
-#define RP0         (32767u)  /* end of CORE in words */
+#define SP0         (8704u)   /* Variable Stack Start: 8192 (end of program area) + 512 (block size) */
+#define RP0         (32767u)  /* Return Stack Start: end of CORE in words */
 
 typedef uint16_t uw_t;
 typedef int16_t  sw_t;
@@ -120,8 +120,8 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 17: T = n << t;                               break;
 			case 18: T = sp << 1;                              break;
 			case 19: T = rp << 1;                              break;
-			case 20: sp   = t >> 1;                            break;
-			case 21: rp   = t >> 1; T = n;                     break;
+			case 20: sp = t >> 1;                              break;
+			case 21: rp = t >> 1; T = n;                       break;
 			case 22: T = save(h, block, ((ud_t)T + 1u) >> 1);  break;
 			case 23: T = fputc(t, out);                        break;
 			case 24: T = fgetc(in);                            break;

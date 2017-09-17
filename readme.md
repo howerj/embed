@@ -114,6 +114,88 @@ A quick overview:
 	the stack delta (the amount to increment or decrement the stack
 	by for their respective stacks: return and data)
 
+### ALU Operations
+
+|  #  | Mnemonic | Description          |
+| --- | -------- | -------------------- |
+|  0  | T        | Top of Stack         |
+|  1  | N        | Copy T to N          |
+|  2  | R        | Top of return stack  |
+|  3  | T@       | Load from address    |
+|  4  | NtoT     | Store to address     |
+|  5  | T+N      | Double cell addition |
+|  6  | T\*N     | Double cell multiply |
+|  7  | T&N      | Bitwise AND          |
+|  8  | TorN     | Bitwise OR           |
+|  9  | T^N      | Bitwise XOR          |
+| 10  | ~T       | Bitwise Inversion    |
+| 11  | T--      | Decrement            |
+| 12  | T=0      | Equal to zero        |
+| 13  | T=N      | Equality test        |
+| 14  | Nu&lt;T  | Unsigned comparison  |
+| 15  | N&lt;T   | Signed comparison    |
+| 16  | NrshiftT | Logical Right Shift  |
+| 17  | NlshiftT | Logical Left Shift   |
+| 18  | SP@      | Depth of stack       |
+| 19  | RP@      | R Stack Depth        |
+| 20  | SP!      | Set Stack Depth      |
+| 21  | RP!      | Set R Stack Depth    |
+| 22  | SAVE     | Save Image           |
+| 23  | TX       | Get byte             |
+| 24  | RX       | Send byte            |
+| 25  | U/MOD    | u/mod                |
+| 26  | /MOD     | /mod                 |
+| 27  | BYE      | Return               |
+
+### Encoding of Forth Words
+
+Many Forth words can be encoded directly in the instruction set, some of the
+ALU operations have extra stack and register effects as well, which although
+would be difficult to achieve in hardware is easy enough to do in software.
+
+| Word   | Mnemonic | T2N | T2R | N2T | R2P |  RP |  SP |
+| ------ | -------- | --- | --- | --- | --- | --- | --- |
+| dup    | T        | T2N |     |     |     |     | +1  |
+| over   | N        | T2N |     |     |     |     | +1  |
+| invert | ~T       |     |     |     |     |     |     |
+| um+    | T+N      |     |     |     |     |     |     |
+| \+     | T+N      |     |     | N2T |     |     | -1  |
+| um\*   | T\*N     |     |     |     |     |     |     |
+| \*     | T\*N     |     |     | N2T |     |     | -1  |
+| swap   | N        | T2N |     |     |     |     |     |
+| nip    | T        |     |     |     |     |     | -1  |
+| drop   | N        |     |     |     |     |     | -1  |
+| exit   | T        |     |     |     | R2P |  -1 |     |
+| &gt;r  | N        |     | T2R |     |     |   1 | -1  |
+| r&gt;  | R        | T2N |     |     |     |  -1 |  1  |
+| r@     | R        | T2N |     |     |     |     |  1  |
+| @      | T@       |     |     |     |     |     |     |
+| !      | NtoT     |     |     |     |     |     | -1  |
+| rshift | NrshiftT |     |     |     |     |     | -1  |
+| lshift | NlshiftT |     |     |     |     |     | -1  |
+| =      | T=N      |     |     |     |     |     | -1  |
+| u&lt;  | Nu&lt;T  |     |     |     |     |     | -1  |
+| &lt;   | N&lt;T   |     |     |     |     |     | -1  |
+| and    | T&N      |     |     |     |     |     | -1  |
+| xor    | T^N      |     |     |     |     |     | -1  |
+| or     | T|N      |     |     |     |     |     | -1  |
+| sp@    | SP@      | T2N |     |     |     |     |  1  |
+| sp!    | SP!      |     |     |     |     |     |     |
+| 1-     | T--      |     |     |     |     |     |     |
+| rp@    | RP@      | T2N |     |     |     |     |  1  |
+| rp!    | RP!      |     |     |     |     |     | -1  |
+| 0=     | T=0      |     |     |     |     |     |     |
+| nop    | T        |     |     |     |     |     |     |
+| (bye)  | BYE      |     |     |     |     |     |     |
+| rx?    | RX       | T2N |     |     |     |     |  1  |
+| tx!    | TX       |     |     | N2T |     |     | -1  |
+| (save) | SAVE     |     |     |     |     |     |     |
+| u/mod  | U/MOD    | T2N |     |     |     |     |     |
+| /mod   | /MOD     | T2N |     |     |     |     |     |
+| /      | /MOD     |     |     |     |     |     | -1  |
+| mod    | /MOD     |     |     | N2T |     |     | -1  |
+| rdrop  | T        |     |     |     |     |  -1 |     |
+
 ## Interaction
 
 The outside world can be interacted with in two ways, with single character
@@ -210,8 +292,6 @@ This is a list of Error codes, not all of which are used by the application.
 
 ## To Do / Wish List
 
-* Add error messages to generated block, as well as a simple help file
-* Make short example programs
 * Documentation of the project, some words, and the instruction set, as well as
 the memory layout
 * Make prepared images, as C code and as binary files

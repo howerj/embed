@@ -1,6 +1,7 @@
 *~
 *.blk
 block
+bi
 compiler
 core
 embed

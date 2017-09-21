@@ -304,9 +304,25 @@ or to which vocabulary words are added to
 *  Make a simplified version of 'see', that uses a modified version
 of 'find' to get the location of a pointer of the previous word in the
 chain and not the found one, this new find could also be used to implement
-a 'hide' function
+a 'hide' function (alternatively a 'hide' could be made erases the name field
+in a word header, which would be simpler).
 * It would be nice to have non-blocking input (and the restoration of the
 'key?' word, but it is not strictly necessary.
+* A better disassembler, in the form of the 'see' word, would mean the source
+code would not have to be stored - but a word could be disassembled, modified
+and then recompiled.
+* A metacompiler is the next step in this project, that targets the same
+virtual machine as it is running on, this would allow the removal of the C 
+compiler, the task itself would be a large one but would complete it.
+ - <http://www.ultratechnology.com/meta.html>
+ - <http://retroforth.org/pages/?MetaCompiler>
+ - <http://www.ultratechnology.com/meta1.html>
+ - <https://wiki.forth-ev.de/doku.php/projects:building_a_remote_target_compiler>
+* To facilitate porting to microcontrollers the Forth could be made to be
+stored in a ROM, with initial variable values copied to RAM, the virtual
+machine would also have to be modified to map different parts of the address
+space into RAM and ROM. This would allow the system to require very little
+(~2-4KiB) of RAM for a usable system, with a 6KiB ROM.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

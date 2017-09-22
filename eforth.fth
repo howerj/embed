@@ -101,6 +101,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : 1+ 1 + ;                ( n -- n : increment a value  )
 : negate invert 1+ ;      ( n -- n : negate a number )
 : - negate + ;            ( n1 n2 -- n : subtract n1 from n2 )
+: aligned dup 1 and + ;    ( b -- a )
 
 : [-1] -1 ; hidden         ( -- -1 : space saving measure, push -1 onto stack )
 : 0x8000 $8000 ; hidden    ( -- $8000 : space saving measure, push $8000 onto stack )
@@ -114,18 +115,17 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : blk@ blk @ ; hidden      ( -- u )
 : in! >in ! ; hidden       ( u -- )
 : in@ >in @ ; hidden       ( -- u )
-: here cp @ ;              ( -- a )
 : hld@ hld @ ; hidden      ( -- u )
 : handler! handler ! ; hidden ( u -- )
-: aligned dup 1 and + ;    ( b -- a )
 : cp! aligned cp ! ; hidden   ( a -- )
 : state@ state @ ; hidden     ( -- f )
 : command? state@ 0= ; hidden ( -- f )
 : swap! swap ! ; hidden       ( a u -- )
-: align here cp! ;            ( -- )
 : id! _id ! ; hidden          ( u -- )
 : context@ context @ ; hidden ( -- wid )
 
+: here cp @ ;              ( -- a )
+: align here cp! ;            ( -- )
 : bye 0 (bye) ;
 : cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+ cell + ;           ( a -- a : move address forward to next cell )
@@ -143,7 +143,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : tuck swap over ;         ( n1 n2 -- n2 n1 n2 )
 : +! tuck @ + swap! ;     ( n a -- : increment value at address by 'n' )
 : 1+!  1 swap +! ;         ( a -- : increment value at address by 1 )
-: 1-! [-1] swap +! ; hidden  ( a -- : decrement value at address by 1 )
+\ : 1-! [-1] swap +! ; hidden  ( a -- : decrement value at address by 1 )
 : execute >r ;             ( cfa -- : execute a function )
 : c@ dup ( -2 and ) @ swap 1 and if 8 rshift exit else $ff and exit then ; ( b -- c )
 : c!                       ( c b -- )
@@ -534,8 +534,8 @@ virtual-machine-error: -throw
 \ : page 2 [char] J ansi 1 1 at-xy ; ( -- )
 \ : sgr [char] m ansi ; ( -- )
 
-: d. base@ >r decimal  . r> base! ;
-: h. base@ >r hex     u. r> base! ;
+\ : d. base@ >r decimal  . r> base! ;
+\ : h. base@ >r hex     u. r> base! ;
 
 ( ==================== Advanced I/O Control ========================== )
 

@@ -116,6 +116,9 @@ A quick overview:
 
 ### ALU Operations
 
+The ALU can be programmed to do the following operations on an ALU instruction,
+some operations trap on error (U/MOD, /MOD).
+
 |  #  | Mnemonic | Description          |
 | --- | -------- | -------------------- |
 |  0  | T        | Top of Stack         |
@@ -215,7 +218,8 @@ The eForth model imposes extra semantics to certain areas of memory.
 | Address       | Block  | Meaning                        |
 | ------------- | ------ | ------------------------------ |
 | $0000         |   0    | Start of execution             |
-| $0001-$EOD    |   0    | The dictionary                 |
+| $0002         |   0    | Trap Handler                   |
+| $0004-$EOD    |   0    | The dictionary                 |
 | $EOD-$PAD1    |   0    | Compilation and Numeric Output |
 | $PAD1-$PAD2   |   0    | Pad Area                       |
 | $PAD2-$3FFF   |   15   | End of dictionary              |
@@ -311,6 +315,10 @@ in a word header, which would be simpler).
 * A better disassembler, in the form of the 'see' word, would mean the source
 code would not have to be stored - but a word could be disassembled, modified
 and then recompiled.
+* The current Forth is 16-bit only, a 32-bit and a 64-bit Forth would be
+much more useful for hosted platforms, being able to store a pointer in a
+cell, this would require a fair amount of rework in the Forth code to make
+this happen.
 * A metacompiler is the next step in this project, that targets the same
 virtual machine as it is running on, this would allow the removal of the C 
 compiler, the task itself would be a large one but would complete it.

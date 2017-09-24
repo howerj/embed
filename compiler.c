@@ -72,8 +72,6 @@ typedef enum {
 #undef X
 } log_level_e;
 
-extern log_level_e log_level;
-
 #define fatal(FMT, ...)   logger(LOG_FATAL,   __func__, __LINE__, FMT, ##__VA_ARGS__)
 #define error(FMT, ...)   logger(LOG_ERROR,   __func__, __LINE__, FMT, ##__VA_ARGS__)
 #define warning(FMT, ...) logger(LOG_WARNING, __func__, __LINE__, FMT, ##__VA_ARGS__)
@@ -81,8 +79,6 @@ extern log_level_e log_level;
 #define debug(FMT, ...)   logger(LOG_DEBUG,   __func__, __LINE__, FMT, ##__VA_ARGS__)
 
 #define MAX(X, Y)     ((X) > (Y) ? (X) : (Y))
-
-#define NUMBER_OF_INTERRUPTS (8u)
 
 #define OP_BRANCH        (0x0000)
 #define OP_0BRANCH       (0x2000)
@@ -213,7 +209,7 @@ static const char *log_levels[] =
 #undef X
 };
 
-log_level_e log_level = LOG_WARNING;
+static log_level_e log_level = LOG_WARNING;
 
 typedef struct {
 	int error;
@@ -1286,8 +1282,7 @@ again:
 	} else if(accept(l, LEX_BUILT_IN)) {
 		r->o[i++] = defined_by_token(l, SYM_BUILT_IN);
 		goto again;
-	/**@warning This is a token range from the first instruction to the
-	 * last instruction */
+	/**@warning This is a token range from the first instruction to the last instruction */
 	} else if(accept_range(l, LEX_DUP, LEX_RDROP)) {
 		r->o[i++] = defined_by_token(l, SYM_INSTRUCTION);
 		goto again;
@@ -1650,8 +1645,7 @@ static void assemble(h2_t *h, assembler_t *a, node_t *n, symbol_table_t *t, erro
 			hole1 = pack_string(h, a, n->o[0]->token->p.id, e);
 		}
 
-		/**@note The lowest bit of the address for memory loads is
-		 * discarded. */
+		/**@note The lowest bit of the address for memory loads is discarded. */
 		symbol_table_add(t, SYMBOL_TYPE_VARIABLE, n->token->p.id, hole1 << 1, e, n->type == SYM_LOCATION ? true : false);
 		break;
 	case SYM_QUOTE:

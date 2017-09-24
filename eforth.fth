@@ -459,6 +459,9 @@ virtual-machine-error: -throw
 		doLit exit ( turn into literal, write into dictionary )
 	then ; immediate
 
+\ @todo $compile should copy everything until an exit occurs, not just the
+\ first value in a word, if the word has its inline bit set 
+
 : make-callable chars $4000 or ; hidden ( cfa -- instruction )
 : compile, make-callable , ;         ( cfa -- : compile a code field address )
 : $compile dup inline? if cfa @ , exit else cfa compile, exit then ; hidden ( pwd -- )
@@ -734,11 +737,11 @@ virtual-machine-error: -throw
 : see ( --, <string> : decompile a word )
 	token finder 0= if not-found exit then
 	swap 2dup = if drop here then >r
-	cr colon space dup .id space
-	dup inline?    if see.inline    print then
-	dup immediate? if see.immediate print then
+	cr colon space dup .id space dup
 	cr
-	cfa r> decompiler space 59 emit cr ;
+	cfa r> decompiler space 59 emit
+	dup inline?    if see.inline    print then
+	    immediate? if see.immediate print then cr ;
 
 ( ==================== See =========================================== )
 

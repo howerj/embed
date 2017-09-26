@@ -331,6 +331,17 @@ stored in a ROM, with initial variable values copied to RAM, the virtual
 machine would also have to be modified to map different parts of the address
 space into RAM and ROM. This would allow the system to require very little
 (~2-4KiB) of RAM for a usable system, with a 6KiB ROM.
+* The major things that have not been implemented are; the locals wordset, the
+file access wordset and words for performing tests. These words may or may
+not be implemented at a later date.
+* Relative jumps could be used instead of absolute jumps in the code, this
+would make relocation easier.
+* The assembly instruction "(save)" needs improving, allowing saving a range
+and to different files.
+* New word lists and vocabularies should be created (in different files) for
+various things, such as ANSI escape sequences for terminal handling. A word
+should be used to hide and show the vocabulary so as not to clutter the
+dictionary.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

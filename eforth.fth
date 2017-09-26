@@ -437,8 +437,9 @@ virtual-machine-error: -throw
 
 : ?error ( n -- : perform actions on error )
 	?dup if
+		.             ( print error number )
 		[char] ? emit ( print '?' )
-		. cr          ( print error number )
+		cr
 		sp0 sp!       ( empty stack )
 		preset        ( reset I/O streams )
 		[             ( back into interpret mode )
@@ -639,8 +640,8 @@ virtual-machine-error: -throw
 : $,' 34 word count+ cp! ; hidden         ( -- )
 : $"  ?compile compile $"| $,' ; immediate         ( -- ; <string> )
 : ."  ?compile compile ."| $,' ; immediate         ( -- ; <string> )
-\ : abort 0 rp! quit ;                             ( --, R: ??? --- ??? : Abort! )
-\ : abort" ?compile ." compile abort ; immediate
+: abort rp0 rp! sp0 rp! preset quit ;                             ( --, R: ??? --- ??? : Abort! )
+: abort" ?compile ." compile abort ; immediate
 
 ( ==================== Strings ======================================= )
 

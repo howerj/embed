@@ -303,8 +303,14 @@ the memory layout
 interpreter
 * A simple run length compressor would reduce the size of the blocks, as well
 as other simple memory compression techniques
+* More words and short phrases could potentially be encoded as single
+instructions with the right encoding, this should be investigated, particularly
+words that manipulate the return stack - there are many short phrases that
+involve them that could be folded into a single instruction, such as '&lt;r
+swap' or '@ &lt;r'. Also 'r> exit' could be possible merged into one
+instruction. 
 * Sort out the search order in relation to definitions,
-or to which vocabulary words are added to
+or to which vocabulary words are added to.
 *  Make a simplified version of 'see', that uses a modified version
 of 'find' to get the location of a pointer of the previous word in the
 chain and not the found one, this new find could also be used to implement
@@ -342,6 +348,8 @@ and to different files.
 various things, such as ANSI escape sequences for terminal handling. A word
 should be used to hide and show the vocabulary so as not to clutter the
 dictionary.
+* There is some confusion about 'cfa', 'xt', 'pwd' and 'nfa' addresses and what
+words accept which, this should be fixed.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

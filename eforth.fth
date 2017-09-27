@@ -531,13 +531,6 @@ virtual-machine-error: -throw
 		then
 	next drop ;
 
-\ : CSI $1b emit [char] [ emit ; hidden
-\ : 10u. base@ >r decimal (u.) type r> base! ; hidden ( u -- )
-\ : ansi swap CSI 10u. emit ; ( n c -- )
-\ : at-xy CSI 10u. $3b emit 10u. [char] H emit ; ( x y -- )
-\ : page 2 [char] J ansi 1 1 at-xy ; ( -- )
-\ : sgr [char] m ansi ; ( -- )
-
 \ : d. base@ >r decimal  . r> base! ;
 \ : h. base@ >r hex     u. r> base! ;
 
@@ -640,8 +633,8 @@ virtual-machine-error: -throw
 : $,' 34 word count+ cp! ; hidden         ( -- )
 : $"  ?compile compile $"| $,' ; immediate         ( -- ; <string> )
 : ."  ?compile compile ."| $,' ; immediate         ( -- ; <string> )
-: abort rp0 rp! sp0 rp! preset quit ;                             ( --, R: ??? --- ??? : Abort! )
-: abort" ?compile ." compile abort ; immediate
+\ : abort rp0 rp! sp0 rp! preset quit ;                             ( --, R: ??? --- ??? : Abort! )
+\ : abort" ?compile ." compile abort ; immediate
 
 ( ==================== Strings ======================================= )
 
@@ -665,7 +658,7 @@ virtual-machine-error: -throw
 : load 0 l/b 1- for 2dup >r >r loadline r> r> 1+ next 2drop ;
 : pipe 124 emit ; hidden
 \ : .line line -trailing $type ; hidden
-: .border 3 spaces c/l 45 nchars cr exit ; hidden
+\ : .border 3 spaces c/l 45 nchars cr exit ; hidden
 : #line dup 2 u.r exit ; hidden ( u -- u : print line number )
 : thru over- for dup load 1+ next drop ; ( k1 k2 -- )
 : blank =bl fill ;
@@ -674,12 +667,12 @@ virtual-machine-error: -throw
 : list
 	dup retrieve
 	cr
-	.border
+	( .border )
 	0 begin
 		dup l/b <
 	while
 		2dup #line pipe line $type pipe cr 1+
-	repeat .border 2drop ;
+	repeat ( .border ) 2drop ;
 
 \ : index ( k1 k2 -- : show titles for block k1 to k2 )
 \	over- cr

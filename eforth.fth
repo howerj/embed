@@ -657,8 +657,8 @@ virtual-machine-error: -throw
 : loadline line evaluate ; hidden ( k u -- )
 : load 0 l/b 1- for 2dup >r >r loadline r> r> 1+ next 2drop ;
 : pipe 124 emit ; hidden
-\ : .line line -trailing $type ; hidden
-\ : .border 3 spaces c/l 45 nchars cr exit ; hidden
+: .line line -trailing $type ; hidden
+: .border 3 spaces c/l 45 nchars cr exit ; hidden
 : #line dup 2 u.r exit ; hidden ( u -- u : print line number )
 : thru over- for dup load 1+ next drop ; ( k1 k2 -- )
 : blank =bl fill ;
@@ -667,12 +667,12 @@ virtual-machine-error: -throw
 : list
 	dup retrieve
 	cr
-	( .border )
+	.border
 	0 begin
 		dup l/b <
 	while
 		2dup #line pipe line $type pipe cr 1+
-	repeat ( .border ) 2drop ;
+	repeat .border 2drop ;
 
 \ : index ( k1 k2 -- : show titles for block k1 to k2 )
 \	over- cr
@@ -758,9 +758,13 @@ virtual-machine-error: -throw
 : previous get-order swap drop 1- [set-order] ;
 \ : also get-order over swap 1+ [set-order] ;
 : only -1 [set-order] ;
+\ : order get-order for aft . then next cr ;
+\ : anonymous get-order 1+ here 1 cells allot swap set-order ;
 
 : [forth] root-voc forth-wordlist 2 [set-order] ; hidden
 : editor decimal root-voc editor-voc 2 [set-order] ;
+
+
 
 : .words space begin dup while dup .id space @address repeat drop cr ; hidden
 : [words] get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ; hidden

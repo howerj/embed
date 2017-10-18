@@ -10,9 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CORE        (65536u)  /* core size in bytes */
-#define SP0         (8704u)   /* Variable Stack Start: 8192 (end of program area) + 512 (block size) */
-#define RP0         (32767u)  /* Return Stack Start: end of CORE in words */
+#define CORE (65536u)  /* core size in bytes */
+#define SP0  (8704u)   /* Variable Stack Start: 8192 (end of program area) + 512 (block size) */
+#define RP0  (32767u)  /* Return Stack Start: end of CORE in words */
 
 typedef uint16_t uw_t;
 typedef int16_t  sw_t;
@@ -34,7 +34,6 @@ static FILE *fopen_or_die(const char *file, const char *mode)
 static int binary_memory_load(FILE *input, uw_t *p, size_t length)
 {
 	for(size_t i = 0; i < length; i++) {
-		errno = 0;
 		const int r1 = fgetc(input);
 		const int r2 = fgetc(input);
 		if(r1 < 0 || r2 < 0)
@@ -82,6 +81,7 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
 	static const uw_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
 	register uw_t pc = 0, t = 0, rp = RP0, sp = SP0;
+	register ud_t d;
 	assert(h && in && out);
 	uw_t *m = h->core;
 	for(;;) {
@@ -91,10 +91,9 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 
 		if(0x8000 & instruction) { /* literal */
 			m[++sp] = t;
-			t        = instruction & 0x7FFF;
+			t       = instruction & 0x7FFF;
 			pc++;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
-			ud_t d;
 			uw_t n = m[sp], T = t;
 
 			pc = instruction & 0x10 ? m[rp] >> 1 : pc + 1;
@@ -142,7 +141,7 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 
 			t = T;
 		} else if (0x4000 & instruction) { /* call */
-			m[--rp] = (pc + 1 ) << 1;
+			m[--rp] = (pc + 1) << 1;
 			pc = instruction & 0x1FFF;
 		} else if (0x2000 & instruction) { /* 0branch */
 			pc = !t ? instruction & 0x1FFF : pc + 1;

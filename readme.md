@@ -318,6 +318,9 @@ a 'hide' function (alternatively a 'hide' could be made erases the name field
 in a word header, which would be simpler).
 * It would be nice to have non-blocking input (and the restoration of the
 'key?' word, but it is not strictly necessary.
+* Vocabularies need fixing, words should be added to the dictionary only
+when 'definitions' has been called, at the moment the first word list in
+the search order is used regardless.
 * A better disassembler, in the form of the 'see' word, would mean the source
 code would not have to be stored - but a word could be disassembled, modified
 and then recompiled.

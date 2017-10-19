@@ -5,6 +5,9 @@
 \ and get rid of the Forth compiler written in C.
 \ The https://github.com/samawati/j1eforth project should
 \ be used as a template for this metacompiler
+\ 
+\ This is a work in progress, and more of an idea than a
+\ working implementation of anything.
 
 only forth ( definitions )
 
@@ -49,18 +52,60 @@ target-memory #target 0 fill
 : talign there 1 and tcp +! ;
 : tc, there tc! 1 tcp +! ;
 : tallot tcp +! ;
-
+: inline target @ @ $8000 or target @ ! ;
 : t: get-order 1+ target swap set-order : ;
-: t; get-order 1- nip set-order ' ; execute ; immediate
+: t; ' ; execute get-order 1- nip set-order ; immediate
 
 \ t: doVar >r t;
 \ t: doConst >r @ t;
 
 \ here there !
 
-\ code ;code assembler end-code rdrop mod / /mod u/mod (save) tx! rx? (bye)
-\ nop 0= rp! rp@ 1- sp! sp@ or xor and < u< = lshift rshift ! @ r@ r> >r exit
-\ drop nip swap * um* + um+ invert over dup
+\ @todo make a proper assembler, and also locate the new 
+\ dictionary in the correct location of memory 
 
+t: rdrop   rdrop   t;  inline
+t: mod     mod     t;  inline
+t: /       /       t;  inline
+t: /mod    /mod    t;  inline
+t: u/mod   u/mod   t;  inline
+t: (save)  (save)  t;  inline
+t: tx!     tx!     t;  inline
+t: rx?     rx?     t;  inline
+t: (bye)   (bye)   t;  inline
+t: nop     nop     t;  inline
+t: 0=      0=      t;  inline
+t: rp!     rp!     t;  inline
+t: rp@     rp@     t;  inline
+t: 1-      1-      t;  inline
+t: sp!     sp!     t;  inline
+t: sp@     sp@     t;  inline
+t: or      or      t;  inline
+t: xor     xor     t;  inline
+t: and     and     t;  inline
+t: <       <       t;  inline
+t: u<      u<      t;  inline
+t: =       =       t;  inline
+t: lshift  lshift  t;  inline
+t: rshift  rshift  t;  inline
+t: !       !       t;  inline
+t: @       @       t;  inline
+t: r@      r@      t;  inline
+t: r>      r>      t;  inline
+t: >r      >r      t;  inline
+t: exit    exit    t;  inline
+t: drop    drop    t;  inline
+t: nip     nip     t;  inline
+t: swap    swap    t;  inline
+t: *       *       t;  inline
+t: um*     um*     t;  inline
+t: +       +       t;  inline
+t: um+     um+     t;  inline
+t: invert  invert  t;  inline
+t: over    over    t;  inline
+t: dup     dup     t;  inline
 
+\ code ;code assembler end-code
+
+target @ asm !
 

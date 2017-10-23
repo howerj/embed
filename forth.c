@@ -18,7 +18,10 @@ typedef uint16_t uw_t;
 typedef int16_t  sw_t;
 typedef uint32_t ud_t;
 
-typedef struct { uw_t core[CORE/sizeof(uw_t)]; } forth_t;
+typedef struct {
+	uw_t pc, t, rp, sp;
+	uw_t core[CORE/sizeof(uw_t)]; 
+} forth_t;
 
 static FILE *fopen_or_die(const char *file, const char *mode)
 {
@@ -63,6 +66,7 @@ int load(forth_t *h, const char *name)
 	FILE *input = fopen_or_die(name, "rb");
 	const int r = binary_memory_load(input, h->core, CORE/sizeof(uw_t));
 	fclose(input);
+	h->pc = 0; h->t = 0; h->rp = RP0; h->sp = SP0;
 	return r;
 }
 
@@ -80,7 +84,7 @@ int save(forth_t *h, const char *name, size_t length)
 int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
 	static const uw_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
-	register uw_t pc = 0, t = 0, rp = RP0, sp = SP0;
+	register uw_t pc = h->pc, t = h->t, rp = h->rp, sp = h->sp;
 	register ud_t d;
 	assert(h && in && out);
 	uw_t *m = h->core;
@@ -126,7 +130,7 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 24: T = fgetc(in);                            break;
 			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
 			case 26: if(t) { T=(sw_t)n/(sw_t)t; t=(sw_t)n%(sw_t)t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
-			case 27: return T;
+			case 27: goto finished;
 			}
 
 			sp += delta[ instruction       & 0x3];
@@ -150,7 +154,9 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			pc = instruction & 0x1FFF;
 		}
 	}
-	return 0;
+finished:
+	h->pc = pc; h->sp = sp; h->rp = rp; h->t = t;
+	return t;
 }
 
 int main(int argc, char **argv)

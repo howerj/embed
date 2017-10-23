@@ -298,26 +298,14 @@ This is a list of Error codes, not all of which are used by the application.
 
 * Documentation of the project, some words, and the instruction set, as well as
 the memory layout
-* Make prepared images, as C code and as binary files
 * Remove the compiler after a cross compiler has been made within the Forth
-interpreter
-* A simple run length compressor would reduce the size of the blocks, as well
-as other simple memory compression techniques
+interpreter, prepared images and the metacompiler would be provided instead.
 * More words and short phrases could potentially be encoded as single
 instructions with the right encoding, this should be investigated, particularly
 words that manipulate the return stack - there are many short phrases that
 involve them that could be folded into a single instruction, such as '&lt;r
 swap' or '@ &lt;r'. Also 'r> exit' could be possible merged into one
 instruction. 
-* Sort out the search order in relation to definitions,
-or to which vocabulary words are added to.
-*  Make a simplified version of 'see', that uses a modified version
-of 'find' to get the location of a pointer of the previous word in the
-chain and not the found one, this new find could also be used to implement
-a 'hide' function (alternatively a 'hide' could be made erases the name field
-in a word header, which would be simpler).
-* It would be nice to have non-blocking input (and the restoration of the
-'key?' word, but it is not strictly necessary.
 * Vocabularies need fixing, words should be added to the dictionary only
 when 'definitions' has been called, at the moment the first word list in
 the search order is used regardless.
@@ -331,10 +319,6 @@ this happen.
 * A metacompiler is the next step in this project, that targets the same
 virtual machine as it is running on, this would allow the removal of the C 
 compiler, the task itself would be a large one but would complete it.
- - <http://www.ultratechnology.com/meta.html>
- - <http://retroforth.org/pages/?MetaCompiler>
- - <http://www.ultratechnology.com/meta1.html>
- - <https://wiki.forth-ev.de/doku.php/projects:building_a_remote_target_compiler>
 * To facilitate porting to microcontrollers the Forth could be made to be
 stored in a ROM, with initial variable values copied to RAM, the virtual
 machine would also have to be modified to map different parts of the address
@@ -351,8 +335,16 @@ and to different files.
 various things, such as ANSI escape sequences for terminal handling. A word
 should be used to hide and show the vocabulary so as not to clutter the
 dictionary.
-* There is some confusion about 'cfa', 'xt', 'pwd' and 'nfa' addresses and what
-words accept which, this should be fixed.
+* The editor should be moved to a separate file, perhaps, and code added from
+my other projects, <https://github.com/howerj/forth-cpu> and
+<https://github.com/howerj/libforth>
+* Save and load all state to disk, not just the core.
+* Improve the command line argument passing in [forth.c][].
+* Simplify, or make a barebones version of, [forth.c][] designed to be as simple
+as possible. Perhaps fread/fwrite and a swap routine based on the endianess of
+the processor would be smaller than the current solution.
+* On the Windows platform the input and output streams should be reopened in
+binary mode.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

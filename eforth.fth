@@ -270,7 +270,7 @@ virtual-machine-error: -throw
 : pack$ ( b u a -- a ) \ null fill
 	aligned dup >r over
 	dup cell negate and ( align down )
-	- over+ 0 swap! 2dup c! 1+ swap cmove r> ; hidden
+	- over+ 0 swap! 2dup c! 1+ swap cmove r> ; 
 
 \ : ^h ( bot eot cur c -- bot eot cur )
 \ 	>r over r@ < dup
@@ -316,9 +316,6 @@ virtual-machine-error: -throw
 : logical 0= 0= ; hidden ( n -- f )
 : immediate? @ $4000 and logical ; hidden ( pwd -- f : is immediate? )
 : inline?    @ highest-bit logical ; hidden ( pwd -- f : is inline? )
-
-\ @todo make a better version of 'search' that returns the PWD as well as the
-\ previous PWD, this should make implementing 'see' easier, as well as 'hide'
 
 : search ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
 	swap >r dup
@@ -460,9 +457,6 @@ virtual-machine-error: -throw
 		doLit exit ( turn into literal, write into dictionary )
 	then ; immediate
 
-\ @todo $compile should copy everything until an exit occurs, not just the
-\ first value in a word, if the word has its inline bit set 
-
 : make-callable chars $4000 or ; hidden ( cfa -- instruction )
 : compile, make-callable , ;         ( cfa -- : compile a code field address )
 : $compile dup inline? if cfa @ , exit else cfa compile, exit then ; hidden ( pwd -- )
@@ -495,11 +489,10 @@ virtual-machine-error: -throw
 : quit preset [ begin query ' eval catch ?error again ;
 : ok! _prompt ! ;
 
-( @todo implement get and set input records to simplify 'evaluate' )
 : evaluate ( a u -- )
-	_prompt @ >r  0 ok!
+	_prompt @ >r 0    ok!
 	_id     @ >r [-1] id!
-	 in@      >r  0 in!
+	 in@      >r 0    in!
 	source >r >r
 	#tib 2!
 	' eval catch
@@ -698,8 +691,7 @@ virtual-machine-error: -throw
 
 : validate tuck cfa <> if drop-0 exit else nfa exit then ; hidden ( cfa pwd -- nfa | 0 )
 
-( @todo Name an assembly instruction )
-( @todo Do this for every vocabulary loaded )
+( @todo Do this for every vocabulary loaded, and name an assembly instruction )
 : name ( cfa -- nfa )
 	address cells >r
 	last

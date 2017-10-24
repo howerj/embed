@@ -306,9 +306,6 @@ words that manipulate the return stack - there are many short phrases that
 involve them that could be folded into a single instruction, such as '&lt;r
 swap' or '@ &lt;r'. Also 'r> exit' could be possible merged into one
 instruction. 
-* Vocabularies need fixing, words should be added to the dictionary only
-when 'definitions' has been called, at the moment the first word list in
-the search order is used regardless.
 * A better disassembler, in the form of the 'see' word, would mean the source
 code would not have to be stored - but a word could be disassembled, modified
 and then recompiled.

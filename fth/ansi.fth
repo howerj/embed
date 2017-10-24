@@ -4,7 +4,7 @@
 only forth
 variable ansi-voc 0 ansi-voc !
 
-get-order 1+ ansi-voc swap set-order
+ansi-voc +order definitions
 
 
 : CSI $1b emit [char] [ emit ; 
@@ -24,7 +24,7 @@ get-order 1+ ansi-voc swap set-order
 : foreground $1e + sgr ;
 : background $28 + sgr ;
 
-get-order -rot swap rot set-order
+get-order -rot swap rot set-order definitions
 
 : at-xy CSI 10u. $3b emit 10u. [char] H emit ; ( x y -- )
 : page 2 [char] J sequence 1 1 at-xy ; ( -- )

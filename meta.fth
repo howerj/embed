@@ -15,79 +15,68 @@
 \ http://www.ultratechnology.com/meta1.html>
 \ https://wiki.forth-ev.de/doku.php/projects:building_a_remote_target_compiler
 
-
-only forth ( definitions )
+only forth definitions hex
 
 variable meta    ( Metacompilation vocabulary )
 
-: (order) ( w wid*n n -- wid*n w n )
-	dup if 
-		1- swap >r recurse over r@ xor 
-		if
-			1+ r> -rot exit 
-		then r> drop 
-	then ;
-: -order ( wid -- ) get-order (order) nip set-order ;
-: +order ( wid -- ) dup >r -order get-order r> swap 1+ set-order ;
-
-meta +order
+meta +order definitions
 
 variable asm      ( Target assembler vocabulary )
 variable target   ( Target dictionary )
 variable headless ( Target dictionary for words without a header )
 variable tcp      ( Target dictionary pointer )
 
-$601c constant =exit       ( op code for exit )
-$6800 constant =invert     ( op code for invert )
-$6147 constant =>r         ( op code for >r )
-32    constant =bl         ( blank, or space )
-13    constant =cr         ( carriage return )
-10    constant =lf         ( line feed )
-8     constant =bs         ( back space )
-27    constant =escape     ( escape character )
--1    constant eof         ( end of file )
+\ $601c constant =exit       ( op code for exit )
+\ $6800 constant =invert     ( op code for invert )
+\ $6147 constant =>r         ( op code for >r )
+\ 32    constant =bl         ( blank, or space )
+\ 13    constant =cr         ( carriage return )
+\ 10    constant =lf         ( line feed )
+\ 8     constant =bs         ( back space )
+\ 27    constant =escape     ( escape character )
+\ -1    constant eof         ( end of file )
 
-16    constant dump-width  ( number of columns for 'dump' )
-80    constant tib-length  ( size of terminal input buffer )
-80    constant pad-length  ( pad area begins HERE + pad-length )
-31    constant word-length ( maximum length of a word )
+\ 16    constant dump-width  ( number of columns for 'dump' )
+\ 80    constant tib-length  ( size of terminal input buffer )
+\ 80    constant pad-length  ( pad area begins HERE + pad-length )
+\ 31    constant word-length ( maximum length of a word )
 
-64    constant c/l         ( characters per line in a block )
-16    constant l/b         ( lines in a block )
-$4400 constant sp0         ( start of variable stack )
-$7fff constant rp0         ( start of return stack )
+\ 64    constant c/l         ( characters per line in a block )
+\ 16    constant l/b         ( lines in a block )
+\ $4400 constant sp0         ( start of variable stack )
+\ $7fff constant rp0         ( start of return stack )
 
 5000 constant #target 
 
 \ ALU Operations
-\ T
-\ N
-\ R
-\ T_LOAD
-\ N_STORE_AT_T
-\ T_PLUS_N
-\ T_MUL_N
-\ T_AND_N
-\ T_OR_N
-\ T_XOR_N
-\ T_INVERT
-\ T_DECREMENT
-\ T_EQUAL_0
-\ T_EQUAL_N
-\ N_ULESS_T
-\ N_LESS_T
-\ N_RSHIFT_T
-\ N_LSHIFT_T
-\ DEPTH
-\ RDEPTH
-\ SET_DEPTH
-\ SET_RDEPTH
-\ SAVE
-\ TX
-\ RX
-\ U_DMOD
-\ DMOD
-\ BYE
+\ a: #t      0000 ;
+\ a: #n      0100 ;
+\ a: #r      0200 ;
+\ a: #[t]    0300 ;
+\ a: #n->[t] 0400 ;
+\ a: #t+n    0500 ;
+\ a: #t*n    0600 ;
+\ a: #t&n    0700 ;
+\ a: #t|n    0800 ;
+\ a: #t^n    0900 ;
+\ a: #~t     0a00 ;
+\ a: #t-1    0b00 ;
+\ a: #t==0   0c00 ;
+\ a: #t==n   0d00 ;
+\ a: #nu<t   0e00 ;
+\ a: #n<t    0f00 ;
+\ a: #n>>t   1100 ;
+\ a: #n<<t   1200 ;
+\ a: #sp@    1300 ;
+\ a: #rp@    1400 ;
+\ a: #sp!    1500 ;
+\ a: #rp!    1600 ;
+\ a: #save   1700 ;
+\ a: #tx     1800 ;
+\ a: #rx     1900 ;
+\ a: #u/mod  1a00 ;
+\ a: #/mod   1b00 ;
+\ a: #bye    1c00 ;
 
 \ Instructions
 

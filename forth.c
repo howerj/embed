@@ -19,8 +19,7 @@ typedef int16_t  sw_t;
 typedef uint32_t ud_t;
 
 typedef struct {
-	uw_t pc, t, rp, sp;
-	uw_t core[CORE/sizeof(uw_t)]; 
+	uw_t pc, t, rp, sp, core[CORE/sizeof(uw_t)]; 
 } forth_t;
 
 static FILE *fopen_or_die(const char *file, const char *mode)
@@ -90,7 +89,6 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 	uw_t *m = h->core;
 	for(;;) {
 		uw_t instruction = m[pc];
-
 		assert(!(sp & 0x8000) && !(rp & 0x8000));
 
 		if(0x8000 & instruction) { /* literal */

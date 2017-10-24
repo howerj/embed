@@ -1,4 +1,6 @@
+
 0 ok!
+
 \ Conways Game of Life 
 \ https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life
 \ Adapted From: http://wiki.c2.com/?ForthBlocks
@@ -9,9 +11,8 @@
 
 decimal
 
-only forth
+only forth anonymous definitions
 ( Add words to anonymous vocabulary )
-get-order 1+ here 1 cells allot swap set-order
 
 variable stateblk
 variable lifeblk
@@ -50,7 +51,7 @@ variable statep
   b/buf for aft lifeblk @ block r@ + random 1 and 
   if bl else [char] * then swap c! then next ;
 
-get-order -rot swap rot set-order
+get-order -rot swap rot set-order definitions
 
 \ life uses two blocks, k and k+1, k contains the Game of Life,
 \ '*' are alive cells, spaces are dead cells, if 'f' is true
@@ -61,6 +62,6 @@ get-order -rot swap rot set-order
   if initialize then 
   begin view iterate done? until ;
 
-only forth
+only forth definitions
 
 hex

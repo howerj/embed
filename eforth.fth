@@ -33,10 +33,12 @@ location _set-order       0 ( set-order execution vector )
 location _do_colon        0 ( execution vector for ':' )
 location _do_semi_colon   0 ( execution vector for ';' )
 location _boot            0 ( -- : execute program at startup )
+location current          0 ( WID to add definitions to )
 \ location _message       0 ( n -- : display an error message )
 
+( Volatile variables )
 constant _test       $4000 hidden ( used in skip/test )
-constant last-def    $4002 hidden ( last, possibly unlinked, word definition )
+constant last-def    $4002 hidden ( last, possibly unlinked, word definition [should this be non-volatile?] )
 constant csp         $4004 hidden ( current data stack pointer - for error checking )
 constant _id         $4006 hidden ( used for source id )
 constant seed        $4008 hidden ( seed used for the PRNG )
@@ -48,7 +50,6 @@ constant _expect     $4014 hidden ( "accept" vector )
 \ constant _tap      $4016 hidden ( "tap" vector, for terminal handling )
 \ constant _echo     $4018 hidden ( c -- : emit character )
 constant _prompt     $4020 hidden ( -- : display prompt )
-
 constant context     $4110 hidden ( holds current context for vocabulary search order )
 constant #tib        $4122 hidden ( Current count of terminal input buffer    )
 constant tib-buf     $4124 hidden ( ... and address )
@@ -122,7 +123,6 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : command? state@ 0= ; hidden ( -- f )
 : swap! swap ! ; hidden       ( a u -- )
 : id! _id ! ; hidden          ( u -- )
-: context@ context @ ; hidden ( -- wid )
 
 : here cp @ ;              ( -- a )
 : align here cp! ;            ( -- )
@@ -179,7 +179,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : +string 1 /string ; hidden                ( b u -- b u : )
 : address $3fff and ; hidden                ( a -- a : mask off address bits )
 : @address @ address ; hidden               ( a -- a )
-: last context@ @address ; hidden           ( -- pwd )
+: last current @ @address ; hidden           ( -- pwd )
 : emit _emit @execute ;                     ( c -- : write out a char )
 : toggle over @ xor swap! ; hidden          ( a u -- : xor value at addr with u )
 : cr =cr emit =lf emit ;                    ( -- )
@@ -552,7 +552,7 @@ virtual-machine-error: -throw
 : compile  r> dup-@ , cell+ >r ; ( -- : Compile next compiled word NB. Works for words, instructions, and numbers below $8000 )
 : "[char]" ?compile char literal ; immediate ( --, <string> : )
 : ?quit command? if 56 -throw exit then ; hidden
-: ";" ?quit ( ?compile ) +csp ?csp context@ ! =exit ,  [ ; immediate
+: ";" ?quit ( ?compile ) +csp ?csp current @ ! =exit ,  [ ; immediate
 : ":" align !csp here dup last-def ! last ,  token ?nul ?unique count+ cp! ] ;
 : jumpz, chars $2000 or , ; hidden
 : jump, chars ( $0000 or ) , ; hidden
@@ -569,7 +569,7 @@ virtual-machine-error: -throw
 : last-cfa last-def @ cfa ; hidden ( -- u )
 : recurse ?compile last-cfa compile, ; immediate
 : tail ?compile last-cfa jump, ; immediate
-: create call ":" compile doVar context@ ! [ ;
+: create call ":" compile doVar current @ ! [ ;
 : doDoes r> chars here chars last-cfa dup cell+ doLit ! , ; hidden
 : does> ?compile compile doDoes nop ; immediate
 : "variable" create 0 , ;
@@ -694,7 +694,8 @@ virtual-machine-error: -throw
 ( @todo Do this for every vocabulary loaded, and name an assembly instruction )
 : name ( cfa -- nfa )
 	address cells >r
-	last
+	\ last
+	context @ @address
 	begin
 		dup
 	while
@@ -748,20 +749,29 @@ virtual-machine-error: -throw
 	context swap for aft tuck ! cell+ then next 0 swap! ; hidden
 
 : previous get-order swap drop 1- [set-order] ;
-\ : also get-order over swap 1+ [set-order] ;
+: also get-order over swap 1+ [set-order] ;
 : only -1 [set-order] ;
-\ : order get-order for aft . then next cr ;
-\ : anonymous get-order 1+ here 1 cells allot swap set-order ;
+: order get-order for aft . then next cr ;
+: anonymous get-order 1+ here 1 cells allot swap set-order ;
+: definitions context @ current ! ;
+: (order) ( w wid*n n -- wid*n w n )
+	dup if 
+		1- swap >r (order) over r@ xor 
+		if
+			1+ r> -rot exit 
+		then r> drop 
+	then ;
+: -order get-order (order) nip set-order ; ( wid -- )
+: +order dup >r -order get-order r> swap 1+ set-order ; ( wid -- )
 
 : [forth] root-voc forth-wordlist 2 [set-order] ; hidden
 : editor decimal root-voc editor-voc 2 [set-order] ;
-
-
 
 : .words space begin dup while dup .id space @address repeat drop cr ; hidden
 : [words] get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ; hidden
 
 .set _forth-wordlist $pwd
+.set current _forth-wordlist
 
 ( ==================== Vocabulary Words ============================== )
 

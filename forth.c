@@ -13,6 +13,7 @@
 #define CORE (65536u)  /* core size in bytes */
 #define SP0  (8704u)   /* Variable Stack Start: 8192 (end of program area) + 512 (block size) */
 #define RP0  (32767u)  /* Return Stack Start: end of CORE in words */
+#define DEFAULT ("eforth.blk") /* Default memory file */
 
 typedef uint16_t uw_t;
 typedef int16_t  sw_t;
@@ -45,9 +46,9 @@ static int binary_memory_load(FILE *input, uw_t *p, size_t length)
 	return 0;
 }
 
-static int binary_memory_save(FILE *output, uw_t *p, size_t length)
+static int binary_memory_save(FILE *output, uw_t *p, size_t start, size_t length)
 {
-	for(size_t i = 0; i < length; i++) {
+	for(size_t i = start; i < length; i++) {
 		errno = 0;
 		const int r1 = fputc((p[i])       & 0xff, output);
 		const int r2 = fputc((p[i] >> 8u) & 0xff, output);
@@ -69,13 +70,13 @@ int load(forth_t *h, const char *name)
 	return r;
 }
 
-int save(forth_t *h, const char *name, size_t length)
+int save(forth_t *h, const char *name, size_t start, size_t length)
 {
 	assert(h);
 	if(!name)
 		return -1;
 	FILE *output = fopen_or_die(name, "wb");
-	const int r = binary_memory_save(output, h->core, length);
+	const int r = binary_memory_save(output, h->core, start, length);
 	fclose(output);
 	return r;
 }
@@ -123,7 +124,7 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 19: T = rp << 1;                              break;
 			case 20: sp = t >> 1;                              break;
 			case 21: rp = t >> 1; T = n;                       break;
-			case 22: T = save(h, block, ((ud_t)T + 1u) >> 1);  break;
+			case 22: T = save(h, block, n >> 1, ((ud_t)T + 1u) >> 1);  break;
 			case 23: T = fputc(t, out);                        break;
 			case 24: T = fgetc(in);                            break;
 			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
@@ -133,14 +134,12 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 
 			sp += delta[ instruction       & 0x3];
 			rp -= delta[(instruction >> 2) & 0x3];
-
 			if(instruction & 0x20)
 				T = n;
 			if(instruction & 0x40)
 				m[rp] = t;
 			if(instruction & 0x80)
 				m[sp] = t;
-
 			t = T;
 		} else if (0x4000 & instruction) { /* call */
 			m[--rp] = (pc + 1) << 1;
@@ -160,24 +159,40 @@ finished:
 int main(int argc, char **argv)
 {
 	static forth_t h;
-	int count = 2;
+	int i, interactive = 0;
+	char *in = DEFAULT, *out = DEFAULT;
 	memset(h.core, 0, CORE);
-	if(argc < count) {
-		fprintf(stderr, "usage: %s forth.blk file.fth*\n", argv[0]);
-		return -1;
-	}
-	load(&h, argv[1]);
-	if(argc == count)
-		return forth(&h, stdin, stdout, argv[1]);
-	for(int i = count; i < argc; i++) {
+
+	for(i = 1; i < argc && argv[i][0] == '-'; i++)
+		switch(argv[i][1]) {
+		case '\0': goto done;
+		case 'i': case 'o':
+			   if(i >= (argc - 1))
+				   goto fail;
+			   if(argv[i][1] == 'i')
+				   in = argv[++i];
+			   else
+				   out = argv[++i];
+			   break;
+		case 'I': interactive = 1; break;
+		fail: default:
+			   fprintf(stderr, "usage: %s -i file.blk -o file.blk file.fth", argv[0]);
+			   return -1;
+		}
+done:
+	load(&h, in);
+	interactive = interactive || (i == argc);
+	for(;i < argc; i++) {
 		FILE *in = fopen_or_die(argv[i], "rb");
-		int r = forth(&h, in, stdout, argv[1]);
+		int r = forth(&h, in, stdout, out);
 		fclose(in);
 		if(r != 0) {
 			fprintf(stderr, "run failed: %d\n", r);
 			return r;
 		}
 	}
+	if(interactive)
+		return forth(&h, stdin, stdout, out);
 	return 0;
 }
 

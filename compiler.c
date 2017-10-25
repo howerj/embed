@@ -189,7 +189,7 @@ typedef enum {
 	X(BYE,    "(bye)",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_BYE)))\
 	X(RX,     "rx?",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_RX)      | T_TO_N       | MK_DSTACK(DELTA_1)))\
 	X(TX,     "tx!",    true,  (OP_ALU_OP | MK_CODE(ALU_OP_TX)      | N_TO_T       | MK_DSTACK(DELTA_N1)))\
-	X(SAVE,   "(save)", true,  (OP_ALU_OP | MK_CODE(ALU_OP_SAVE)))\
+	X(SAVE,   "(save)", true,  (OP_ALU_OP | MK_CODE(ALU_OP_SAVE))                  | MK_DSTACK(DELTA_N1))\
 	X(UM_MOD, "u/mod",  true,  (OP_ALU_OP | MK_CODE(ALU_OP_U_DMOD) | T_TO_N))\
 	X(DMOD,   "/mod",   true,  (OP_ALU_OP | MK_CODE(ALU_OP_DMOD)   | T_TO_N))\
 	X(DIV,    "/",      true,  (OP_ALU_OP | MK_CODE(ALU_OP_DMOD)   | MK_DSTACK(DELTA_N1)))\

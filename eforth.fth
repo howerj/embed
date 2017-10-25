@@ -123,6 +123,8 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : command? state@ 0= ; hidden ( -- f )
 : swap! swap ! ; hidden       ( a u -- )
 : id! _id ! ; hidden          ( u -- )
+: get-current current @ ;
+: set-current current ! ;
 
 : here cp @ ;              ( -- a )
 : align here cp! ;            ( -- )
@@ -179,7 +181,7 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : +string 1 /string ; hidden                ( b u -- b u : )
 : address $3fff and ; hidden                ( a -- a : mask off address bits )
 : @address @ address ; hidden               ( a -- a )
-: last current @ @address ; hidden           ( -- pwd )
+: last get-current @address ; hidden        ( -- pwd )
 : emit _emit @execute ;                     ( c -- : write out a char )
 : toggle over @ xor swap! ; hidden          ( a u -- : xor value at addr with u )
 : cr =cr emit =lf emit ;                    ( -- )
@@ -551,8 +553,8 @@ virtual-machine-error: -throw
 : [compile] ?compile find-cfa compile, ; immediate ( -- ; <string> )
 : compile  r> dup-@ , cell+ >r ; ( -- : Compile next compiled word NB. Works for words, instructions, and numbers below $8000 )
 : "[char]" ?compile char literal ; immediate ( --, <string> : )
-: ?quit command? if 56 -throw exit then ; hidden
-: ";" ?quit ( ?compile ) +csp ?csp current @ ! =exit ,  [ ; immediate
+\ : ?quit command? if 56 -throw exit then ; hidden
+: ";" ( ?quit ) ( ?compile ) +csp ?csp get-current ! =exit ,  [ ; immediate
 : ":" align !csp here dup last-def ! last ,  token ?nul ?unique count+ cp! ] ;
 : jumpz, chars $2000 or , ; hidden
 : jump, chars ( $0000 or ) , ; hidden
@@ -569,7 +571,7 @@ virtual-machine-error: -throw
 : last-cfa last-def @ cfa ; hidden ( -- u )
 : recurse ?compile last-cfa compile, ; immediate
 : tail ?compile last-cfa jump, ; immediate
-: create call ":" compile doVar current @ ! [ ;
+: create call ":" compile doVar get-current ! [ ;
 : doDoes r> chars here chars last-cfa dup cell+ doLit ! , ; hidden
 : does> ?compile compile doDoes nop ; immediate
 : "variable" create 0 , ;
@@ -635,7 +637,7 @@ virtual-machine-error: -throw
 
 : update [-1] block-dirty ! ;          ( -- )
 : +block blk@ + ; hidden              ( -- )
-: save ( [-1] ) here (save) throw ;
+: save ( [-1] ) 0 here (save) throw ;
 : flush block-dirty @ if [-1] (save) throw exit then ;
 
 : block ( k -- a )
@@ -753,7 +755,7 @@ virtual-machine-error: -throw
 : only -1 [set-order] ;
 : order get-order for aft . then next cr ;
 : anonymous get-order 1+ here 1 cells allot swap set-order ;
-: definitions context @ current ! ;
+: definitions context @ set-current ;
 : (order) ( w wid*n n -- wid*n w n )
 	dup if 
 		1- swap >r (order) over r@ xor 

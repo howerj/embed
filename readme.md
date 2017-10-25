@@ -192,7 +192,7 @@ would be difficult to achieve in hardware is easy enough to do in software.
 | (bye)  | BYE      |     |     |     |     |     |     |
 | rx?    | RX       | T2N |     |     |     |     |  1  |
 | tx!    | TX       |     |     | N2T |     |     | -1  |
-| (save) | SAVE     |     |     |     |     |     |     |
+| (save) | SAVE     |     |     |     |     |     | -1  |
 | u/mod  | U/MOD    | T2N |     |     |     |     |     |
 | /mod   | /MOD     | T2N |     |     |     |     |     |
 | /      | /MOD     |     |     |     |     |     | -1  |
@@ -335,13 +335,20 @@ dictionary.
 * The editor should be moved to a separate file, perhaps, and code added from
 my other projects, <https://github.com/howerj/forth-cpu> and
 <https://github.com/howerj/libforth>
-* Save and load all state to disk, not just the core.
+* Save and load all state to disk, not just the core. The current system also
+does not embed format information into the binary files, which means the
+generated object files is indistinguishable from other binary formats.
+Magic numbers to identify the format, and Endianess information could be
+included in the file format, the metacompiler could insert this information
+into the generated object.
 * Improve the command line argument passing in [forth.c][].
 * Simplify, or make a barebones version of, [forth.c][] designed to be as simple
 as possible. Perhaps fread/fwrite and a swap routine based on the endianess of
 the processor would be smaller than the current solution.
 * On the Windows platform the input and output streams should be reopened in
 binary mode.
+* More assertions and range checks should be added to the interpreter, for
+example the **save** function needs checks for bounds.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

@@ -17,14 +17,14 @@
 
 only forth definitions hex
 
-variable meta    ( Metacompilation vocabulary )
+variable meta.1      ( Metacompilation vocabulary )
 
-meta +order definitions
+meta.1 +order definitions
 
-variable asm      ( Target assembler vocabulary )
-variable target   ( Target dictionary )
-variable headless ( Target dictionary for words without a header )
-variable tcp      ( Target dictionary pointer )
+variable assembler.1 ( Target assembler vocabulary )
+variable target.1    ( Target dictionary )
+variable tcp         ( Target dictionary pointer )
+5000 constant #target 
 
 \ $601c constant =exit       ( op code for exit )
 \ $6800 constant =invert     ( op code for invert )
@@ -46,37 +46,52 @@ variable tcp      ( Target dictionary pointer )
 \ $4400 constant sp0         ( start of variable stack )
 \ $7fff constant rp0         ( start of return stack )
 
-5000 constant #target 
+: ]asm ( -- ) assembler.1 +order ; immediate
+
+\ : [a] 
+\	parse-word assembler.1 search-wordlist 
+\	0= abort" [a]?" compile, ; immediate ( "name" -- )
+
+: a: get-current assembler.1 set-current : ; ( "name" -- wid link )
+: a; [compile] ; set-current ; immediate ( wid link -- )
+
+target.1 +order meta.1 +order
+
+\  @bug immediate cannot be placed after 'a;' because of the way linking
+\ vocabularies into the dictionary works, in fact the word 'a;' should not be
+\ necessary but it is a work around for another hack 
+a: asm[ assembler.1 -order ( [ immediate ] ) a; ( -- )
+
 
 \ ALU Operations
-\ a: #t      0000 ;
-\ a: #n      0100 ;
-\ a: #r      0200 ;
-\ a: #[t]    0300 ;
-\ a: #n->[t] 0400 ;
-\ a: #t+n    0500 ;
-\ a: #t*n    0600 ;
-\ a: #t&n    0700 ;
-\ a: #t|n    0800 ;
-\ a: #t^n    0900 ;
-\ a: #~t     0a00 ;
-\ a: #t-1    0b00 ;
-\ a: #t==0   0c00 ;
-\ a: #t==n   0d00 ;
-\ a: #nu<t   0e00 ;
-\ a: #n<t    0f00 ;
-\ a: #n>>t   1100 ;
-\ a: #n<<t   1200 ;
-\ a: #sp@    1300 ;
-\ a: #rp@    1400 ;
-\ a: #sp!    1500 ;
-\ a: #rp!    1600 ;
-\ a: #save   1700 ;
-\ a: #tx     1800 ;
-\ a: #rx     1900 ;
-\ a: #u/mod  1a00 ;
-\ a: #/mod   1b00 ;
-\ a: #bye    1c00 ;
+a: #t      0000 a;
+a: #n      0100 a;
+a: #r      0200 a;
+a: #[t]    0300 a;
+a: #n->[t] 0400 a;
+a: #t+n    0500 a;
+a: #t*n    0600 a;
+a: #t&n    0700 a;
+a: #t|n    0800 a;
+a: #t^n    0900 a;
+a: #~t     0a00 a;
+a: #t-1    0b00 a;
+a: #t==0   0c00 a;
+a: #t==n   0d00 a;
+a: #nu<t   0e00 a;
+a: #n<t    0f00 a;
+a: #n>>t   1100 a;
+a: #n<<t   1200 a;
+a: #sp@    1300 a;
+a: #rp@    1400 a;
+a: #sp!    1500 a;
+a: #rp!    1600 a;
+a: #save   1700 a;
+a: #tx     1800 a;
+a: #rx     1900 a;
+a: #u/mod  1a00 a;
+a: #/mod   1b00 a;
+a: #bye    1c00 a;
 
 \ Instructions
 
@@ -114,13 +129,12 @@ variable tcp      ( Target dictionary pointer )
 \ +bye  BYE
 \ rx?    RX       T_TO_N        d+1
 \ tx!    TX       N_TO_T        d-1
-\ (save) SAVE
+\ (save) SAVE                   d-1
 \ u/mod  U_DMOD  T_TO_N
 \ /mod   DMOD    T_TO_N
 \ /      DMOD    d-1
 \ mod    DMOD    N_TO_T  d-1
 \ rdrop  T  r-1
- 
 
 
 : there tcp @ ;
@@ -129,7 +143,7 @@ variable tcp      ( Target dictionary pointer )
 : talign there 1 and tcp +! ;
 : tc, there tc! 1 tcp +! ;
 : tallot tcp +! ;
-: inline target @ @ $8000 or target @ ! ;
+: inline target.1 @ @ $8000 or target.1 @ ! ;
 \ : t: parse there pack$ get-order 1+ target swap set-order ;
 \ : t; $601c tc, get-order 1- nip set-order ; immediate
 
@@ -183,5 +197,7 @@ variable tcp      ( Target dictionary pointer )
 \ t: dup     dup     t;  inline
 \ 
 \ code ;code assembler end-code
+
+\ 5000 2000 (save)
 
 

@@ -340,7 +340,9 @@ does not embed format information into the binary files, which means the
 generated object files is indistinguishable from other binary formats.
 Magic numbers to identify the format, and Endianess information could be
 included in the file format, the metacompiler could insert this information
-into the generated object.
+into the generated object. Other information to include would be a CRC and
+length information. See <http://www.fadden.com/tech/file-formats.html>,
+and <https://stackoverflow.com/questions/323604>.
 * Improve the command line argument passing in [forth.c][].
 * Simplify, or make a barebones version of, [forth.c][] designed to be as simple
 as possible. Perhaps fread/fwrite and a swap routine based on the endianess of

@@ -15,7 +15,7 @@ forth: forth.c
 	./$^ $@
 
 run: forth eforth.blk
-	./forth -i eforth.blk -o new.blk
+	./forth i eforth.blk new.blk
 
 static: CC=musl-gcc
 static: CFLAGS+=-static

@@ -312,14 +312,14 @@ virtual-machine-error: -throw
 		then
 	next 2drop-1 ;
 
-: nfa address cell+ ; hidden ( pwd -- nfa : move to name field address)
-: cfa nfa dup count nip + cell+ $fffe and ; hidden ( pwd -- cfa : move to code field address )
+: nfa address cell+ ; ( pwd -- nfa : move to name field address)
+: cfa nfa dup count nip + cell+ $fffe and ; ( pwd -- cfa : move to code field address )
 : .id nfa print ; hidden ( pwd -- : print out a word )
 : logical 0= 0= ; hidden ( n -- f )
 : immediate? @ $4000 and logical ; hidden ( pwd -- f : is immediate? )
 : inline?    @ highest-bit logical ; hidden ( pwd -- f : is inline? )
 
-: search ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
+: seacher ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
 	swap >r dup
 	begin
 		dup
@@ -339,13 +339,14 @@ virtual-machine-error: -throw
 	begin
 		dup-@
 	while
-		dup-@ @ r@ swap search ?dup 
+		dup-@ @ r@ swap seacher ?dup 
 		if 
 			>r rot drop r> rdrop exit 
 		then
 		cell+
 	repeat drop-0 r> 0 ; hidden
 
+: search-wordlist seacher rot drop ; ( a wid -- pwd 1 | pwd -1 | a 0 )
 : find finder rot drop ; ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
 
 : numeric? ( char -- n|-1 : convert character in 0-9 a-z range to number )
@@ -425,7 +426,7 @@ virtual-machine-error: -throw
 : "\" #tib @ in! ; immediate
 : ?length dup word-length u> if 19 -throw exit then ; hidden
 : word 1depth parse ?length here pack$ ;          ( c -- a ; <string> )
-: token =bl word ; hidden
+: token =bl word ; 
 : char token count drop c@ ;               ( -- c; <string> )
 : .s ( -- ) cr depth for aft r@ pick . then next .s-string print ;
 : unused $4000 here - ; hidden
@@ -546,7 +547,7 @@ virtual-machine-error: -throw
 : ?csp sp@ csp @ xor if 22 -throw exit then ; hidden
 : +csp    1 cells csp +! ; hidden
 : -csp [-1] cells csp +! ; hidden
-: ?unique dup last search if 2drop redefined print cr exit then ; hidden ( a -- a )
+: ?unique dup last seacher if 2drop redefined print cr exit then ; hidden ( a -- a )
 : ?nul count 0= if 16 -throw exit then 1- ; hidden ( b -- : check for zero length strings )
 : find-cfa token find if cfa exit else not-found exit then ; hidden
 : "'" find-cfa state@ if literal exit then ; immediate
@@ -617,6 +618,10 @@ virtual-machine-error: -throw
 \ : compile-exit call? if tail-call else merge? if merge then then =exit , ; hidden
 \ : "exit" compile-exit ; immediate
 \ : "exit" =exit , ; immediate
+
+\ Evaluate instruction, this would work in a normal Forth, but
+\ not with this cross compiler:
+\   : ex [ here 2 cells + ] literal ! [ 0 , ] ;
 
 ( ==================== Control Structures ============================ )
 

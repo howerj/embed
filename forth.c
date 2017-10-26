@@ -13,7 +13,6 @@
 #define CORE (65536u)  /* core size in bytes */
 #define SP0  (8704u)   /* Variable Stack Start: 8192 (end of program area) + 512 (block size) */
 #define RP0  (32767u)  /* Return Stack Start: end of CORE in words */
-#define DEFAULT ("eforth.blk") /* Default memory file */
 
 typedef uint16_t uw_t;
 typedef int16_t  sw_t;
@@ -159,32 +158,18 @@ finished:
 int main(int argc, char **argv)
 {
 	static forth_t h;
-	int i, interactive = 0;
-	char *in = DEFAULT, *out = DEFAULT;
+	int interactive = 0;
 	memset(h.core, 0, CORE);
-
-	for(i = 1; i < argc && argv[i][0] == '-'; i++)
-		switch(argv[i][1]) {
-		case '\0': goto done;
-		case 'i': case 'o':
-			   if(i >= (argc - 1))
-				   goto fail;
-			   if(argv[i][1] == 'i')
-				   in = argv[++i];
-			   else
-				   out = argv[++i];
-			   break;
-		case 'I': interactive = 1; break;
-		fail: default:
-			   fprintf(stderr, "usage: %s -i file.blk -o file.blk file.fth", argv[0]);
-			   return -1;
-		}
-done:
-	load(&h, in);
-	interactive = interactive || (i == argc);
-	for(;i < argc; i++) {
+	if(argc < 4)
+		goto fail;
+	if(!strcmp(argv[1], "i"))
+		interactive = 1;
+	else if(strcmp(argv[1], "f"))
+		goto fail;
+	load(&h, argv[2]);
+	for(int i = 4; i < argc; i++) {
 		FILE *in = fopen_or_die(argv[i], "rb");
-		int r = forth(&h, in, stdout, out);
+		int r = forth(&h, in, stdout, argv[3]);
 		fclose(in);
 		if(r != 0) {
 			fprintf(stderr, "run failed: %d\n", r);
@@ -192,7 +177,10 @@ done:
 		}
 	}
 	if(interactive)
-		return forth(&h, stdin, stdout, out);
+		return forth(&h, stdin, stdout, argv[3]);
 	return 0;
+fail:
+	fprintf(stderr, "usage: %s f|i input.blk output.blk file.fth\n", argv[0]);
+	return -1;
 }
 

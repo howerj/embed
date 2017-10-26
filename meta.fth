@@ -57,11 +57,26 @@ variable tcp         ( Target dictionary pointer )
 
 target.1 +order meta.1 +order
 
+
+: there tcp @ ;
+: t! #target + ! ;
+: t@ #target + @ ;
+: tc! #target + c! ;
+: tc@ #target + c@ ;
+: talign there 1 and tcp +! ;
+: tc, there tc! 1 tcp +! ;
+: t,  there t!  2 tcp +! ;
+: tallot tcp +! ;
+: inline target.1 @ @ $8000 or target.1 @ ! ;
+
+: [a] ( "name" -- )
+  token assembler.1 search-wordlist 0= if -1 throw then
+  cfa compile, ; immediate
+
 \  @bug immediate cannot be placed after 'a;' because of the way linking
 \ vocabularies into the dictionary works, in fact the word 'a;' should not be
 \ necessary but it is a work around for another hack 
 a: asm[ assembler.1 -order ( [ immediate ] ) a; ( -- )
-
 
 \ ALU Operations
 a: #t      0000 a;
@@ -93,57 +108,76 @@ a: #u/mod  1a00 a;
 a: #/mod   1b00 a;
 a: #bye    1c00 a;
 
+a: r->pc   0010 or a;
+a: n->t    0020 or a;
+a: t->r    0040 or a;
+a: t->n    0080 or a;
+
+a: d+1     0001 or a;
+a: d-1     0003 or a;
+a: d-2     0002 or a;
+a: r-1     000c or a;
+a: r-2     0008 or a;
+a: r+1     0004 or a;
+
+a: alu     6000 or t, a;
+
+a: return [a] #t 1000 or [a] r-1 [a] alu a;
+a: branch 1 rshift 0000 or t, a;
+a: ?branch 1 rshift 2000 or t, a;
+a: call 1 rshift 4000 or t, a;
+
+a: literal
+  dup 8000 and if
+    ffff xor recurse
+    [a] #~t [a] alu
+  else
+    8000 or t,
+  then a;
+
 \ Instructions
 
-\ dup    T         T_TO_N   d+1
-\ over   N         T_TO_N   d+1
-\ invert T_INVERT
-\ um+    T_PLUS_N
-\ +      T_PLUS_N  N_TO_T  d-1
-\ um*    T_MUL_N
-\ *      T_MUL_N  N_TO_T  d-1
-\ swap   N         T_TO_N
-\ nip    T                       d-1
-\ drop   N                       d-1
-\ exit   T         R_TO_PC  r-1
-\ >r     N         T_TO_R   d-1  r+1
-\ r>     R         T_TO_N   d+1   r-1
-\ r@     R         T_TO_N   d+1
-\ @      T_LOAD
-\ !      N_STORE_AT_T            d-1
-\ rshift N_RSHIFT_T              d-1
-\ lshift N_LSHIFT_T              d-1
-\ =      T_EQUAL_N               d-1
-\ u<     N_ULESS_T               d-1
-\ <      N_LESS_T                d-1
-\ and    T_AND_N                 d-1
-\ xor    T_XOR_N                 d-1
-\ or     T_OR_N                  d-1
-\ sp@    DEPTH    T_TO_N        d+1
-\ sp!    SET_DEPTH
-\ 1-     T_DECREMENT
-\ rp@    RDEPTH   T_TO_N        d+1
-\ rp!    SET_RDEPTH             d-1
-\ 0=     T_EQUAL_0
-\ nop    T
-\ +bye  BYE
-\ rx?    RX       T_TO_N        d+1
-\ tx!    TX       N_TO_T        d-1
-\ (save) SAVE                   d-1
-\ u/mod  U_DMOD  T_TO_N
-\ /mod   DMOD    T_TO_N
-\ /      DMOD    d-1
-\ mod    DMOD    N_TO_T  d-1
-\ rdrop  T  r-1
+: dup     ]asm  #t       t->n   d+1   asm[  ;
+: over    ]asm  #n       t->n   d+1   asm[  ;
+: invert  ]asm  #~t      asm[   ;
+: um+     ]asm  #t+n     asm[   ;
+: +       ]asm  #t+n     n->t   d-1   asm[  ;
+: um*     ]asm  #t*n     asm[   ;
+: *       ]asm  #t*n     n->t   d-1   asm[  ;
+: swap    ]asm  #n       t->n   asm[  ;
+: nip     ]asm  #t       d-1    asm[  ;
+: drop    ]asm  #n       d-1    asm[  ;
+: exit    ]asm  #t       r->pc  r-1   asm[  ;
+: >r      ]asm  #n       t->r   d-1   r+1   asm[  ;
+: r>      ]asm  #r       t->n   d+1   r-1   asm[  ;
+: r@      ]asm  #r       t->n   d+1   asm[  ;
+: @       ]asm  #[t]     asm[   ;
+: !       ]asm  #n->[t]  d-1    asm[  ;
+: rshift  ]asm  #n>>t    d-1    asm[  ;
+: lshift  ]asm  #n<<t    d-1    asm[  ;
+: =       ]asm  #t==n    d-1    asm[  ;
+: u<      ]asm  #nu<t    d-1    asm[  ;
+: <       ]asm  #n<t     d-1    asm[  ;
+: and     ]asm  #t&n     d-1    asm[  ;
+: xor     ]asm  #t^n     d-1    asm[  ;
+: or      ]asm  #t|n     d-1    asm[  ;
+: sp@     ]asm  #sp@     t->n   d+1   asm[  ;
+: sp!     ]asm  #sp!     asm[   ;
+: 1-      ]asm  #t-1     asm[   ;
+: rp@     ]asm  #rp@     t->n   d+1   asm[  ;
+: rp!     ]asm  #rp!     d-1    asm[  ;
+: 0=      ]asm  #t==0    asm[   ;
+: nop     ]asm  #t       asm[   ;
+: bye     ]asm  #bye     asm[   ;
+: rx?     ]asm  #rx      t->n   d+1   asm[  ;
+: tx!     ]asm  #tx      n->t   d-1   asm[  ;
+: (save)  ]asm  #save    d-1    asm[  ;
+: u/mod   ]asm  #u/mod   t->n   asm[  ;
+: /mod    ]asm  #u/mod   t->n   asm[  ;
+: /       ]asm  #u/mod   d-1    asm[  ;
+: mod     ]asm  #u/mod   n->t   d-1   asm[  ;
+: rdrop   ]asm  #t       r-1    asm[  ;
 
-
-: there tcp @ ;
-: tc! #target + c! ;
-: tc@ #target + c@ ;
-: talign there 1 and tcp +! ;
-: tc, there tc! 1 tcp +! ;
-: tallot tcp +! ;
-: inline target.1 @ @ $8000 or target.1 @ ! ;
 \ : t: parse there pack$ get-order 1+ target swap set-order ;
 \ : t; $601c tc, get-order 1- nip set-order ; immediate
 
@@ -155,49 +189,11 @@ a: #bye    1c00 a;
 \ @todo make a proper assembler, and also locate the new 
 \ dictionary in the correct location of memory 
 
-\ t: rdrop   rdrop   t;  inline
-\ t: mod     mod     t;  inline
-\ t: /       /       t;  inline
-\ t: /mod    /mod    t;  inline
-\ t: u/mod   u/mod   t;  inline
-\ t: (save)  (save)  t;  inline
-\ t: tx!     tx!     t;  inline
-\ t: rx?     rx?     t;  inline
-\ t: (bye)   (bye)   t;  inline
-\ t: nop     nop     t;  inline
-\ t: 0=      0=      t;  inline
-\ t: rp!     rp!     t;  inline
-\ t: rp@     rp@     t;  inline
-\ t: 1-      1-      t;  inline
-\ t: sp!     sp!     t;  inline
-\ t: sp@     sp@     t;  inline
-\ t: or      or      t;  inline
-\ t: xor     xor     t;  inline
-\ t: and     and     t;  inline
-\ t: <       <       t;  inline
-\ t: u<      u<      t;  inline
-\ t: =       =       t;  inline
-\ t: lshift  lshift  t;  inline
-\ t: rshift  rshift  t;  inline
-\ t: !       !       t;  inline
-\ t: @       @       t;  inline
-\ t: r@      r@      t;  inline
-\ t: r>      r>      t;  inline
-\ t: >r      >r      t;  inline
-\ t: exit    exit    t;  inline
-\ t: drop    drop    t;  inline
-\ t: nip     nip     t;  inline
-\ t: swap    swap    t;  inline
-\ t: *       *       t;  inline
-\ t: um*     um*     t;  inline
-\ t: +       +       t;  inline
-\ t: um+     um+     t;  inline
-\ t: invert  invert  t;  inline
-\ t: over    over    t;  inline
-\ t: dup     dup     t;  inline
-\ 
+ 
 \ code ;code assembler end-code
 
-\ 5000 2000 (save)
+
+\ only forth definitions hex
+5000 7000 (save)
 
 

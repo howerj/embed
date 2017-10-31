@@ -24,6 +24,7 @@ meta.1 +order definitions
 variable assembler.1 ( Target assembler vocabulary )
 variable target.1    ( Target dictionary )
 variable tcp         ( Target dictionary pointer )
+variable tlast       ( Last defined word in target )
 5000 constant #target 
 
 \ $601c constant =exit       ( op code for exit )
@@ -57,7 +58,7 @@ variable tcp         ( Target dictionary pointer )
 
 target.1 +order meta.1 +order
 
-
+#target tcp !
 : there tcp @ ;
 : t! #target + ! ;
 : t@ #target + @ ;
@@ -67,7 +68,7 @@ target.1 +order meta.1 +order
 : tc, there tc! 1 tcp +! ;
 : t,  there t!  2 tcp +! ;
 : tallot tcp +! ;
-: inline target.1 @ @ $8000 or target.1 @ ! ;
+: inline target.1 @ @ 8000 or target.1 @ ! ;
 
 : [a] ( "name" -- )
   token assembler.1 search-wordlist 0= if -1 throw then
@@ -135,6 +136,16 @@ a: literal
     8000 or t,
   then a;
 
+( @todo refactor and get this working! )
+: t: 
+	>in @ >r bl parse r> >in ! 
+	there pack$ count nip aligned tcp +!
+	tlast @ t, there tlast ! 
+	get-current >r target.1 set-current create r> set-current
+	there , does> @ [a] call ;
+
+: t; [a] return ; ( @todo optimizations )
+
 \ Instructions
 
 : dup     ]asm  #t       t->n   d+1   asm[  ;
@@ -178,22 +189,17 @@ a: literal
 : mod     ]asm  #u/mod   n->t   d-1   asm[  ;
 : rdrop   ]asm  #t       r-1    asm[  ;
 
-\ : t: parse there pack$ get-order 1+ target swap set-order ;
-\ : t; $601c tc, get-order 1- nip set-order ; immediate
-
 \ t: doVar >r t;
 \ t: doConst >r @ t;
 
-\ here there !
-
-\ @todo make a proper assembler, and also locate the new 
-\ dictionary in the correct location of memory 
-
+t: xx 6a literal tx! 0 [a] branch t;
+t: yy xx xx t;
  
 \ code ;code assembler end-code
 
 
 \ only forth definitions hex
+meta.1 -order
 5000 7000 (save)
 
-
+cr

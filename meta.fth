@@ -15,6 +15,10 @@
 \ http://www.ultratechnology.com/meta1.html>
 \ https://wiki.forth-ev.de/doku.php/projects:building_a_remote_target_compiler
 
+\ This file should be turned into a literate file that describes
+\ how to make a metacompiler (aka a cross compiler), and how
+\ the Forth implementation works.
+
 only forth definitions hex
 
 variable meta.1      ( Metacompilation vocabulary )

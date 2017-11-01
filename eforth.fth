@@ -1,6 +1,6 @@
 ( ======================== System Variables ================= )
 constant =exit         $601c hidden ( op code for exit )
-constant =invert       $6800 hidden ( op code for invert )
+constant =invert       $6a00 hidden ( op code for invert )
 constant =>r           $6147 hidden ( op code for >r )
 constant =bl           32    hidden ( blank, or space )
 constant =cr           13    hidden ( carriage return )

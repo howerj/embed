@@ -17,6 +17,10 @@ forth: forth.c
 run: forth eforth.blk
 	./forth i eforth.blk new.blk
 
+cross: forth eforth.blk
+	./forth f eforth.blk new.blk meta.fth
+	hexdump -C new.blk
+
 static: CC=musl-gcc
 static: CFLAGS+=-static
 static: forth 

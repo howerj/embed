@@ -33,7 +33,7 @@ static FILE *fopen_or_die(const char *file, const char *mode)
 	return f;
 }
 
-static int binary_memory_load(FILE *input, uw_t *p, size_t length)
+static int binary_memory_load(FILE *input, uw_t *p, const size_t length)
 {
 	for(size_t i = 0; i < length; i++) {
 		const int r1 = fgetc(input);
@@ -45,7 +45,7 @@ static int binary_memory_load(FILE *input, uw_t *p, size_t length)
 	return 0;
 }
 
-static int binary_memory_save(FILE *output, uw_t *p, size_t start, size_t length)
+static int binary_memory_save(FILE *output, uw_t *p, const size_t start, const size_t length)
 {
 	for(size_t i = start; i < length; i++) {
 		errno = 0;
@@ -169,7 +169,7 @@ int main(int argc, char **argv)
 	load(&h, argv[2]);
 	for(int i = 4; i < argc; i++) {
 		FILE *in = fopen_or_die(argv[i], "rb");
-		int r = forth(&h, in, stdout, argv[3]);
+		const int r = forth(&h, in, stdout, argv[3]);
 		fclose(in);
 		if(r != 0) {
 			fprintf(stderr, "run failed: %d\n", r);

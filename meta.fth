@@ -302,6 +302,9 @@ target.1 +order
 
 \ === ASSEMBLY INSTRUCTIONS ===
 \ @todo make inlineable and add to an assembly vocabulary
+
+meta.1 -order meta.1 +order 
+
 t: nop      nop      t;
 t: dup      dup      t;
 t: over     over     t;

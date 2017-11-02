@@ -547,7 +547,7 @@ virtual-machine-error: -throw
 : ?csp sp@ csp @ xor if 22 -throw exit then ; hidden
 : +csp    1 cells csp +! ; hidden
 : -csp [-1] cells csp +! ; hidden
-: ?unique dup last seacher if 2drop redefined print cr exit then ; hidden ( a -- a )
+: ?unique dup last seacher if 2drop ( last @ nfa print ) redefined print cr exit then ; hidden ( a -- a )
 : ?nul count 0= if 16 -throw exit then 1- ; hidden ( b -- : check for zero length strings )
 : find-cfa token find if cfa exit else not-found exit then ; hidden
 : "'" find-cfa state@ if literal exit then ; immediate

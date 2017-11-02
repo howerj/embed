@@ -298,6 +298,59 @@ target.1 +order
 
 4 tallot 
 
+\ @todo Add variables and constants to the target
+
+\ === ASSEMBLY INSTRUCTIONS ===
+\ @todo make inlineable and add to an assembly vocabulary
+t: nop      nop      t;
+t: dup      dup      t;
+t: over     over     t;
+t: invert   invert   t;
+t: um+      um+      t;
+t: +        +        t;
+t: um*      um*      t;
+t: *        *        t;
+t: swap     swap     t;
+t: nip      nip      t;
+t: drop     drop     t;
+\ t: exit     exit     t;
+t: >r       >r       t; ( compile-only )
+t: r>       r>       t; ( compile-only )
+t: r@       r@       t; ( compile-only )
+t: @        @        t;
+t: !        !        t;
+t: rshift   rshift   t;
+t: lshift   lshift   t;
+t: =        =        t;
+t: u<       u<       t;
+t: <        <        t;
+t: and      and      t;
+t: xor      xor      t;
+t: or       or       t;
+t: sp@      sp@      t;
+t: sp!      sp!      t;
+t: 1-       1-       t;
+t: rp@      rp@      t;
+t: rp!      rp!      t;
+t: 0=       0=       t;
+t: nop      nop      t;
+t: bye      bye      t;
+t: rx?      rx?      t;
+t: tx!      tx!      t;
+t: (save)   (save)   t;
+t: u/mod    u/mod    t;
+t: /mod     /mod     t;
+t: /        /        t;
+t: mod      mod      t;
+t: rdrop    rdrop    t;
+\ === ASSEMBLY INSTRUCTIONS ===
+
+t: 2drop drop drop t;       ( n n -- )
+t: 1+ 1 literal + t;        ( n -- n : increment a value  )
+t: negate invert 1+ t;      ( n -- n : negate a number )
+t: - negate + t;            ( n1 n2 -- n : subtract n1 from n2 )
+t: aligned dup 1 literal and + t;   ( b -- a )
+
 t: xx begin there 2/ 0 t! 6a literal tx! again t;
 t: yy xx xx t;
 

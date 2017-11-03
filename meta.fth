@@ -68,8 +68,8 @@ only forth definitions hex
 \ to be defined before it can be completed so the metacompiler and
 \ assembler are not completely separate modules
 
-variable meta.1       ( Metacompilation vocabulary )
-meta.1 +order definitions
+variable meta       ( Metacompilation vocabulary )
+meta +order definitions
 
 variable assembler.1  ( Target assembler vocabulary )
 variable target.1     ( Target dictionary )
@@ -303,7 +303,7 @@ target.1 +order
 \ === ASSEMBLY INSTRUCTIONS ===
 \ @todo make inlineable and add to an assembly vocabulary
 
-meta.1 -order meta.1 +order 
+meta -order meta +order 
 
 t: nop      nop      t;
 t: dup      dup      t;
@@ -370,7 +370,7 @@ t: yy xx xx t;
 .( META COMPILER WORDS: ) cr
 .( TARGET:    ) target.1 .hex
 .( ASSEMBLER: ) assembler.1 .hex
-.( META:      ) meta.1 .hex
+.( META:      ) meta .hex
 assembler.1 +order
 words
 target.1 -order assembler.1 -order

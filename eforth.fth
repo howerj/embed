@@ -104,11 +104,6 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : - negate + ;            ( n1 n2 -- n : subtract n1 from n2 )
 : aligned dup 1 and + ;    ( b -- a )
 
-: command? state @ 0= ; hidden ( -- f )
-: get-current current @ ;
-: set-current current ! ;
-: here cp @ ;              ( -- a )
-: align here aligned cp ! ;            ( -- )
 : bye 0 (bye) ;
 : cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+ cell + ;           ( a -- a : move address forward to next cell )
@@ -135,6 +130,12 @@ location hi-string     "eFORTH V"    ( used by "hi" )
   >r over xor r> and xor swap ( -2 and ) ! ;
 : 2! ( d a -- ) tuck ! cell+ ! ;          ( n n a -- )
 : 2@ ( a -- d ) dup cell+ @ swap @ ;      ( a -- n n )
+: command? state @ 0= ; hidden ( -- f )
+: get-current current @ ;
+: set-current current ! ;
+: here cp @ ;              ( -- a )
+: align here aligned cp ! ;            ( -- )
+
 : source #tib 2@ ;                        ( -- a u )
 : source-id id @ ;                       ( -- 0 | -1 )
 : pad here pad-length + ;                 ( -- a )

@@ -48,6 +48,8 @@ only forth definitions hex
 \    - Document the Forth virtual machine, moving diagrams
 \    from the 'readme.md' file to here.
 \    - Add meta-compile time checking (eg. balanced 't:' and ';t')
+\    - Hide normal word definitions between ':t' and ';t' that are not
+\    in the meta, assembler or target dictionaries 
 
 \ Document plan
 \ This program and document are a work in progress, it has been written
@@ -258,7 +260,7 @@ a: literal
 : rp!     ]asm  #rp!     d-1    alu asm[ ;
 : 0=      ]asm  #t==0    alu asm[ ;
 : nop     ]asm  #t       alu asm[ ;
-: bye     ]asm  #bye     alu asm[ ;
+: (bye)   ]asm  #bye     alu asm[ ;
 : rx?     ]asm  #rx      t->n   d+1   alu asm[ ;
 : tx!     ]asm  #tx      n->t   d-1   alu asm[ ;
 : (save)  ]asm  #save    d-1    alu asm[ ;
@@ -305,6 +307,7 @@ target.1 +order
 
 meta -order meta +order 
 
+
 t: nop      nop      t;
 t: dup      dup      t;
 t: over     over     t;
@@ -337,7 +340,7 @@ t: rp@      rp@      t;
 t: rp!      rp!      t;
 t: 0=       0=       t;
 t: nop      nop      t;
-t: bye      bye      t;
+t: (bye)    (bye)    t;
 t: rx?      rx?      t;
 t: tx!      tx!      t;
 t: (save)   (save)   t;
@@ -354,7 +357,48 @@ t: negate invert 1+ t;      ( n -- n : negate a number )
 t: - negate + t;            ( n1 n2 -- n : subtract n1 from n2 )
 t: aligned dup 1 literal and + t;   ( b -- a )
 
-t: xx begin there 2/ 0 t! 6a literal tx! again t;
+t: bye 0 literal (bye) t;
+t: cell- cell - t;           ( a -- a : adjust address to previous cell )
+t: cell+ cell + t;           ( a -- a : move address forward to next cell )
+t: cells 1 lshift t;         ( n -- n : convert cells count to address count )
+t: chars 1 rshift t;         ( n -- n : convert bytes to number of cells )
+t: ?dup dup if dup exit then t;   ( n -- 0 | n n : duplicate value if non zero )
+t: >  swap < t;              ( n1 n2 -- f : signed greater than, n1 > n2 )
+t: u> swap u< t;             ( u1 u2 -- f : unsigned greater than, u1 > u2 )
+t: u>= u< invert t;          ( u1 u2 -- f : )
+t: <> = invert t;            ( n n -- f : not equal )
+t: 0<> 0= invert t;          ( n n -- f : not equal  to zero )
+t: 0> 0 literal > t;         ( n -- f : greater than zero? )
+t: 0< 0 literal < t;         ( n -- f : less than zero? )
+t: 2dup over over t;         ( n1 n2 -- n1 n2 n1 n2 )
+t: tuck swap over t;         ( n1 n2 -- n2 n1 n2 )
+t: +! tuck @ + swap ! t;     ( n a -- : increment value at address by 'n' )
+t: 1+! 1 literal swap +! t;  ( a -- : increment value at address by 1 )
+\ t: 1-! -1 swap +! t; hidden  ( a -- : decrement value at address by 1 )
+t: execute >r t;             ( cfa -- : execute a function )
+t: c@ dup  @ swap 1 literal and 
+   if 
+      8 literal rshift exit 
+   else $ff literal and exit 
+   then t; ( b -- c )
+t: c!                       ( c b -- )
+  swap $ff literal and dup 8 literal lshift or swap
+  swap over dup ( -2 and ) @ swap 1 literal and 0 literal = $ff literal xor
+  >r over xor r> and xor swap ( -2 and ) ! t;
+t: 2! ( d a -- ) tuck ! cell+ ! t;          ( n n a -- )
+t: 2@ ( a -- d ) dup cell+ @ swap @ t;      ( a -- n n )
+\ t: command? state @ 0= t; hidden ( -- f )
+\ t: get-current current @ t;
+\ t: set-current current ! t;
+\ t: here cp @ t;              ( -- a )
+\ t: align here aligned cp ! t;            ( -- )
+
+t: xx 
+  there 2/ 0 t!
+   begin 6a literal tx! again t;
+\  0 literal if 6a literal tx! else 6b literal tx! then bye t;
+  
+
 t: yy xx xx t;
 
 ( ===                        Target Words                           === )

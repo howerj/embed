@@ -21,7 +21,6 @@ new.blk: forth eforth.fth meta.fth
 	./forth f eforth.blk new.blk meta.fth
 
 cross: new.blk
-	xxd new.blk
 
 cross-run: cross
 	./forth i new.blk new.blk

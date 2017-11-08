@@ -47,8 +47,8 @@ only forth definitions hex
 \    'readme.md' file to this one.
 \    - Document the Forth virtual machine, moving diagrams
 \    from the 'readme.md' file to here.
-\    - Add meta-compile time checking (eg. balanced 't:' and ';t')
-\    - Hide normal word definitions between ':t' and ';t' that are not
+\    - Add meta-compile time checking (eg. balanced 't:' and 't;')
+\    - Hide normal word definitions between 't:' and 't;' that are not
 \    in the meta, assembler or target dictionaries 
 
 \ Document plan
@@ -73,15 +73,19 @@ only forth definitions hex
 variable meta       ( Metacompilation vocabulary )
 meta +order definitions
 
-variable assembler.1  ( Target assembler vocabulary )
-variable target.1     ( Target dictionary )
-variable tcp          ( Target dictionary pointer )
-variable tlast        ( Last defined word in target )
-5000 constant #target ( Memory location where the target image will be built )
+variable assembler.1   ( Target assembler vocabulary )
+variable target.1      ( Target dictionary )
+variable tcp           ( Target dictionary pointer )
+variable tlast         ( Last defined word in target )
+variable tdoVar        ( Location of doVar in target )
+variable tdoConst      ( Location of doConst in target )
+5000 constant #target  ( Memory location where the target image will be built )
 2000 constant #max     ( Max number of cells in generated image )
 2    constant =cell    ( Target cell size )
 0    constant optimize ( Turn optimizations on [-1] or off [0] )
-#target #max 0 fill   ( Erase the target memory location )
+-1   constant header   ( If true Headers in the target will be generated )
+-1   constant verbose  ( )
+#target #max 0 fill    ( Erase the target memory location )
 
 \ $601c constant =exit       ( op code for exit )
 \ $6a00 constant =invert     ( op code for invert )
@@ -107,6 +111,7 @@ variable tlast        ( Last defined word in target )
 : a: get-current assembler.1 set-current : ; ( "name" -- wid link )
 : a; [compile] ; set-current ; immediate ( wid link -- )
 
+\ : ?exit if rdrop exit then ;
 : there tcp @ ; ( -- a : target dictionary pointer value )
 : tc! #target + c! ;
 : tc@ #target + c@ ;
@@ -119,7 +124,20 @@ variable tlast        ( Last defined word in target )
 : tc, there tc! 1 tcp +! ;
 : t,  there t!  =cell tcp +! ;
 : tallot tcp +! ;
-: finished only forth definitions hex #target #target there + (save) ;
+: s! ! ;
+: display
+  verbose 0= if exit then
+  hex
+  ." META COMPILATION COMPLETE" cr
+  #target there 16 + dump
+  ." META: " meta . cr
+  ." TARGET: " target.1 . cr
+  ." ASSEMBLER: " assembler.1 . cr
+  ." TARGET DICTIONARY: " cr
+  words
+  ." HOST: " here . cr
+  ." TARGET: " there . cr ;
+: finished display only forth definitions hex #target #target there + (save) ;
 
 \ @todo Replace ." and throw with abort"
 : [a] ( "name" -- : find word and compile an assembler word )
@@ -161,11 +179,9 @@ a: #u/mod  1900 a;
 a: #/mod   1a00 a;
 a: #bye    1b00 a;
 
-a: r->pc   0010 or a;
-a: n->t    0020 or a;
-a: t->r    0040 or a;
-a: t->n    0080 or a;
-
+\ The Stack Delta Operations occur after the ALU operations have been executed.
+\ They affect either the Return or the Variable Stack. An ALU instruction
+\ without one of these operations (generally) do not affect the stacks.
 a: d+1     0001 or a;
 a: d-1     0003 or a;
 a: d-2     0002 or a;
@@ -173,12 +189,22 @@ a: r-1     000c or a;
 a: r-2     0008 or a;
 a: r+1     0004 or a;
 
+\ All of these instructions execute after the ALU and stack delta operations
+\ have been performed except r->pc, which occurs before. They form part of
+\ an ALU operation.
+a: r->pc   0010 or a; ( Set Program Counter to Top of Return Stack )
+a: n->t    0020 or a; ( Set Top of Variable Stack to Next on Variable Stack )
+a: t->r    0040 or a; ( Set Top of Return Stack to Top on Variable Stack )
+a: t->n    0080 or a; ( Set Next on Variable Stack to Top on Variable Stack )
+
+\ There are five types of instructions; ALU operations, branches, 
+\ conditional branches, function calls and literals. ALU instructions
+\ comprise of an ALU operation, stack effects and register move bits. Function
+\ returns are part of the ALU operation instruction set.
 a: alu     6000 or t, a;
-a: return [a] #t 1000 or [a] r-1 [a] alu a;
 a: branch 2/ 0000 or t, a;
 a: ?branch 2/ 2000 or t, a;
 a: call 2/ 4000 or t, a;
-
 a: literal
   dup 8000 and if
     invert
@@ -186,6 +212,7 @@ a: literal
   then
     8000 or t,
   a;
+a: return [a] #t 1000 or [a] r-1 [a] alu a;
 
 \ @todo Improve with fence variable set by control structures
 \ @todo Use optimizer from "eforth.fth"
@@ -202,17 +229,30 @@ a: literal
    then
   then ;
 
-( @todo refactor into multiple words )
-( @todo allow the creation of words with no header )
+: tcreate get-current >r target.1 set-current create r> set-current ;
+
+: thead ( b -- : compile word header into target dictionary )
+  header 0= if drop exit then
+  talign
+  there #target + pack$ count nip 1+ aligned tcp +! talign
+  tlast @ t, there tlast !  ;
+
 : t: 
-	>in @ >r bl parse r> >in ! 
-	talign
-	there #target + pack$ count nip 1+ aligned tcp +! talign
-	tlast @ t, there tlast ! 
-	get-current >r target.1 set-current create r> set-current
-	there , does> @ [a] call ;
+  >in @ >r bl parse r> >in ! 
+  thead tcreate
+  there , does> @ [a] call ;
 
 : t; optimize if exit, else [a] return then ; 
+
+( @todo Increase efficiency of these variable and constant )
+ 
+: tconstant 
+  >r
+  >in @ >r bl parse r> >in ! 
+  thead 
+  there tdoConst @ [a] call r> t, >r
+  tcreate r> ,
+  does> @ [a] call ; 
 
 : literal [a] literal ;
 : begin  there ;
@@ -285,8 +325,7 @@ a: literal
 \ to run.
 
 target.1 +order
-\ t: doVar r> t;
-\ t: doConst r> @ t;
+
 \ t: r1- r> r> 1- >r >r t;
 
 \ @todo add data to the beginning of the image that would allow the binary 
@@ -298,16 +337,13 @@ target.1 +order
 \ The first two 16-bit cells contain the start vector and the trap
 \ handler
 
+meta -order meta +order 
 4 tallot 
-
+t: doVar there tdoVar s! r> t;
+t: doConst there tdoConst s! r> @ t;
 \ @todo Add variables and constants to the target
 
 \ === ASSEMBLY INSTRUCTIONS ===
-\ @todo make inlineable and add to an assembly vocabulary
-
-meta -order meta +order 
-
-
 t: nop      nop      t;
 t: dup      dup      t;
 t: over     over     t;
@@ -350,7 +386,6 @@ t: /        /        t;
 t: mod      mod      t;
 t: rdrop    rdrop    t;
 \ === ASSEMBLY INSTRUCTIONS ===
-
 t: 2drop drop drop t;       ( n n -- )
 t: 1+ 1 literal + t;        ( n -- n : increment a value  )
 t: negate invert 1+ t;      ( n -- n : negate a number )
@@ -362,7 +397,7 @@ t: cell- cell - t;           ( a -- a : adjust address to previous cell )
 t: cell+ cell + t;           ( a -- a : move address forward to next cell )
 t: cells 1 lshift t;         ( n -- n : convert cells count to address count )
 t: chars 1 rshift t;         ( n -- n : convert bytes to number of cells )
-t: ?dup dup if dup exit then t;   ( n -- 0 | n n : duplicate value if non zero )
+t: ?dup dup if dup exit then t; ( n -- 0 | n n : duplicate non zero value )
 t: >  swap < t;              ( n1 n2 -- f : signed greater than, n1 > n2 )
 t: u> swap u< t;             ( u1 u2 -- f : unsigned greater than, u1 > u2 )
 t: u>= u< invert t;          ( u1 u2 -- f : )
@@ -393,33 +428,18 @@ t: 2@ ( a -- d ) dup cell+ @ swap @ t;      ( a -- n n )
 \ t: here cp @ t;              ( -- a )
 \ t: align here aligned cp ! t;            ( -- )
 
+6a tconstant test-constant
+
 t: xx 
   there 2/ 0 t!
-   begin 6a literal tx! again t;
-\  0 literal if 6a literal tx! else 6b literal tx! then bye t;
+    begin 6b literal tx! again t;
+  \ begin rx? tx! again t;
+  \ begin test-constant tx! again t;
   
 
 t: yy xx xx t;
 
 ( ===                        Target Words                           === )
 
+finished
 
-( ===                           Finishing                           === )
-
-\ @warning This section will need rewriting or the search order priority
-\ will need changing once words in the target dictionary are defined which
-\ conflict with the ones used here. Perhaps 't:' could add 'target.1' to
-\ the search order and 't;' could remove it.
- 
-.( META COMPILER WORDS: ) cr
-.( TARGET:    ) target.1 .hex
-.( ASSEMBLER: ) assembler.1 .hex
-.( META:      ) meta .hex
-assembler.1 +order
-words
-target.1 -order assembler.1 -order
-.( META COMPILATION COMPLETE ) cr
-.( SPACE USED: ) here .hex
-\ .( TARGET SPACE USED: ) tcp @ .hex
-finished ( restore system )
-( ===                           Finishing                           === )

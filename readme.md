@@ -351,6 +351,8 @@ the processor would be smaller than the current solution.
 binary mode.
 * More assertions and range checks should be added to the interpreter, for
 example the **save** function needs checks for bounds.
+* The forth virtual machine in [forth.c][] should be made to be crash proof,
+with checks to make sure indices never go out of bounds.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

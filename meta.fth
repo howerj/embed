@@ -212,7 +212,7 @@ a: literal
   then
     8000 or t,
   a;
-a: return [a] #t 1000 or [a] r-1 [a] alu a;
+a: return [a] #t [a] r->pc [a] r-1 [a] alu a;
 
 \ @todo Improve with fence variable set by control structures
 \ @todo Use optimizer from "eforth.fth"
@@ -409,7 +409,7 @@ t: 2dup over over t;         ( n1 n2 -- n1 n2 n1 n2 )
 t: tuck swap over t;         ( n1 n2 -- n2 n1 n2 )
 t: +! tuck @ + swap ! t;     ( n a -- : increment value at address by 'n' )
 t: 1+! 1 literal swap +! t;  ( a -- : increment value at address by 1 )
-\ t: 1-! -1 swap +! t; hidden  ( a -- : decrement value at address by 1 )
+t: 1-! -1 swap +! t; hidden  ( a -- : decrement value at address by 1 )
 t: execute >r t;             ( cfa -- : execute a function )
 t: c@ dup  @ swap 1 literal and 
    if 
@@ -428,11 +428,16 @@ t: 2@ ( a -- d ) dup cell+ @ swap @ t;      ( a -- n n )
 \ t: here cp @ t;              ( -- a )
 \ t: align here aligned cp ! t;            ( -- )
 
+t: cr $d literal tx! $a literal tx! t; ( t: cr =cr emit =lf emit t; )
+
 6a tconstant test-constant
 
 t: xx 
   there 2/ 0 t!
-    begin 6b literal tx! again t;
+    test-constant tx! 
+    6b literal tx! 
+    6b literal tx! 
+    6b literal tx! cr bye t;
   \ begin rx? tx! again t;
   \ begin test-constant tx! again t;
   

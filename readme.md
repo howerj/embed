@@ -353,6 +353,9 @@ binary mode.
 example the **save** function needs checks for bounds.
 * The forth virtual machine in [forth.c][] should be made to be crash proof,
 with checks to make sure indices never go out of bounds.
+* Documentation could be extracted from the [meta.fth][] file, which should
+describe the entire system: The metacompiler, the target virtual machine,
+and how Forth works.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html
@@ -364,3 +367,4 @@ with checks to make sure indices never go out of bounds.
 [Windows]: https://en.wikipedia.org/wiki/Microsoft_Windows
 [Linux]: https://en.wikipedia.org/wiki/Linux
 [C99]: https://en.wikipedia.org/wiki/C99
+[meta.fth]: meta.fth

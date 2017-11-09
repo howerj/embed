@@ -1,34 +1,51 @@
 CFLAGS=-O2 -std=c99 -Wall -Wextra
 CC=gcc
-
+EXE=
+DF=
 .PHONY: all clean run cross cross-run static
 
-all: forth eforth.blk
+default: all
 
-compiler: compiler.c
+ifeq ($(OS),Windows_NT)
+DF=
+EXE=.exe
+.PHONY: forth compiler
+forth:  ${FORTH}
+compiler: ${COMPILER}
+else # assume unixen
+DF=./
+EXE=
+endif
+
+FORTH=forth${EXE}
+COMPILER=compiler${EXE}
+
+all: ${FORTH} eforth.blk
+
+${COMPILER}: compiler.c
 	${CC} ${CFLAGS} $< -o $@
 
-forth: forth.c
+${FORTH}: forth.c
 	${CC} ${CFLAGS} $< -o $@
 
-%.blk: compiler %.fth
-	./$^ $@
+%.blk: ${COMPILER} %.fth
+	${DF}$^ $@
 
-run: forth eforth.blk
-	./forth i eforth.blk new.blk
+run: ${FORTH} eforth.blk
+	${DF}${FORTH} i eforth.blk meta.blk
 
-new.blk: forth eforth.fth meta.fth
-	./forth f eforth.blk new.blk meta.fth
+meta.blk: ${FORTH} eforth.blk meta.fth
+	${DF}${FORTH} f eforth.blk meta.blk meta.fth
 
-cross: new.blk
+cross: meta.blk
 
 cross-run: cross
-	./forth i new.blk new.blk
+	${DF}${FORTH} i meta.blk meta.blk
 
 static: CC=musl-gcc
 static: CFLAGS+=-static
-static: forth 
-	strip forth
+static: ${FORTH}
+	strip ${FORTH}
 
 clean:
-	rm -fv compiler forth
+	rm -fv ${COMPILER} ${FORTH} *.blk

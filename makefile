@@ -2,7 +2,7 @@ CFLAGS=-O2 -std=c99 -Wall -Wextra
 CC=gcc
 EXE=
 DF=
-.PHONY: all clean run cross cross-run static
+.PHONY: all clean run cross cross-run default static
 
 default: all
 

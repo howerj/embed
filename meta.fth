@@ -137,7 +137,10 @@ variable tdoConst      ( Location of doConst in target )
   words
   ." HOST: " here . cr
   ." TARGET: " there . cr ;
-: finished display only forth definitions hex #target #target there + (save) ;
+: finished display 
+   only forth definitions hex 
+   #target #target there + (save)
+   drop ;
 
 \ @todo Replace ." and throw with abort"
 : [a] ( "name" -- : find word and compile an assembler word )
@@ -244,15 +247,31 @@ a: return [a] #t [a] r->pc [a] r-1 [a] alu a;
 
 : t; optimize if exit, else [a] return then ; 
 
-( @todo Increase efficiency of these variable and constant )
- 
-: tconstant 
+\ @todo Increase efficiency of these variable and constant, when metacompiling
+\ constants, the constant itself should be compiled as a literal if and only
+\ if the number can be stored in a single cell (is less than $7fff)
+\ @todo Come up with methods for setting a variable, as well as getting a
+\ word compiled on the targets location, by using introspection.
+
+: tconstant ( "name", n -- , Run Time: -- n )
   >r
   >in @ >r bl parse r> >in ! 
   thead 
   there tdoConst @ [a] call r> t, >r
   tcreate r> ,
   does> @ [a] call ; 
+
+: tvariable ( "name", -- , Run Time: -- a )
+  >in @ >r bl parse r> >in ! 
+  thead 
+  there tdoVar @ [a] call r> t, >r
+  tcreate 0 ,
+  does> @ [a] call ; 
+
+: >body cell+ ;
+: [t] 
+  token target.1 search-wordlist 0= if ." [t]?" cr -1 throw then 
+  cfa >body @ ; 
 
 : literal [a] literal ;
 : begin  there ;
@@ -339,9 +358,10 @@ target.1 +order
 
 meta -order meta +order 
 4 tallot 
+\ @todo Replace "there tdoVar s!" with a better construct
+
 t: doVar there tdoVar s! r> t;
 t: doConst there tdoConst s! r> @ t;
-\ @todo Add variables and constants to the target
 
 \ === ASSEMBLY INSTRUCTIONS ===
 t: nop      nop      t;
@@ -386,17 +406,17 @@ t: /        /        t;
 t: mod      mod      t;
 t: rdrop    rdrop    t;
 \ === ASSEMBLY INSTRUCTIONS ===
+2 tconstant cell
 t: 2drop drop drop t;       ( n n -- )
 t: 1+ 1 literal + t;        ( n -- n : increment a value  )
 t: negate invert 1+ t;      ( n -- n : negate a number )
 t: - negate + t;            ( n1 n2 -- n : subtract n1 from n2 )
 t: aligned dup 1 literal and + t;   ( b -- a )
-
 t: bye 0 literal (bye) t;
 t: cell- cell - t;           ( a -- a : adjust address to previous cell )
 t: cell+ cell + t;           ( a -- a : move address forward to next cell )
-t: cells 1 lshift t;         ( n -- n : convert cells count to address count )
-t: chars 1 rshift t;         ( n -- n : convert bytes to number of cells )
+t: cells 1 literal lshift t; ( n -- n : convert cells count to address count )
+t: chars 1 literal rshift t; ( n -- n : convert bytes to number of cells )
 t: ?dup dup if dup exit then t; ( n -- 0 | n n : duplicate non zero value )
 t: >  swap < t;              ( n1 n2 -- f : signed greater than, n1 > n2 )
 t: u> swap u< t;             ( u1 u2 -- f : unsigned greater than, u1 > u2 )
@@ -408,8 +428,8 @@ t: 0< 0 literal < t;         ( n -- f : less than zero? )
 t: 2dup over over t;         ( n1 n2 -- n1 n2 n1 n2 )
 t: tuck swap over t;         ( n1 n2 -- n2 n1 n2 )
 t: +! tuck @ + swap ! t;     ( n a -- : increment value at address by 'n' )
-t: 1+! 1 literal swap +! t;  ( a -- : increment value at address by 1 )
-t: 1-! -1 swap +! t; hidden  ( a -- : decrement value at address by 1 )
+t: 1+!  1 literal swap +! t; ( a -- : increment value at address by 1 )
+t: 1-! -1 literal swap +! t; ( a -- : decrement value at address by 1 )
 t: execute >r t;             ( cfa -- : execute a function )
 t: c@ dup  @ swap 1 literal and 
    if 
@@ -420,9 +440,9 @@ t: c!                       ( c b -- )
   swap $ff literal and dup 8 literal lshift or swap
   swap over dup ( -2 and ) @ swap 1 literal and 0 literal = $ff literal xor
   >r over xor r> and xor swap ( -2 and ) ! t;
-t: 2! ( d a -- ) tuck ! cell+ ! t;          ( n n a -- )
-t: 2@ ( a -- d ) dup cell+ @ swap @ t;      ( a -- n n )
-\ t: command? state @ 0= t; hidden ( -- f )
+t: 2! ( d a -- ) tuck ! cell+ ! t;     ( n n a -- )
+t: 2@ ( a -- d ) dup cell+ @ swap @ t; ( a -- n n )
+\ t: command? state @ 0= t;        ( -- f )
 \ t: get-current current @ t;
 \ t: set-current current ! t;
 \ t: here cp @ t;              ( -- a )
@@ -441,10 +461,10 @@ t: xx
   \ begin rx? tx! again t;
   \ begin test-constant tx! again t;
   
-
 t: yy xx xx t;
 
 ( ===                        Target Words                           === )
 
-finished
+finished 
+.s cr
 

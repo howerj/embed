@@ -581,6 +581,7 @@ virtual-machine-error: -throw
 : recurse ?compile last-cfa compile, ; immediate
 : tail ?compile last-cfa jump, ; immediate
 : create call ":" compile doVar get-current ! [ ;
+: >body cell+ ;
 : doDoes r> chars here chars last-cfa dup cell+ doLit ! , ; hidden
 : does> ?compile compile doDoes nop ; immediate
 : "variable" create 0 , ;
@@ -661,8 +662,9 @@ virtual-machine-error: -throw
 : $,' 34 word count + aligned cp ! ; hidden         ( -- )
 : $"  ?compile compile $"| $,' ; immediate         ( -- ; <string> )
 : ."  ?compile compile ."| $,' ; immediate         ( -- ; <string> )
-\ : abort rp0 rp! sp0 rp! preset quit ;    ( --, R: ??? --- ??? : Abort! )
-\ : abort" ?compile ." compile abort ; immediate
+: abort -1 (bye) ;
+: {abort} do$ print cr abort ; hidden
+: abort" ?compile compile {abort} $,' ; immediate
 
 ( ==================== Strings ======================================= )
 

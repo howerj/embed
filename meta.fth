@@ -83,7 +83,8 @@ variable tdoConst      ( Location of doConst in target )
 2000 constant #max     ( Max number of cells in generated image )
 2    constant =cell    ( Target cell size )
 0    constant optimize ( Turn optimizations on [-1] or off [0] )
--1   constant header   ( If true Headers in the target will be generated )
+variable header -1 header ! ( If true Headers in the target will be generated )
+
 -1   constant verbose  ( )
 #target #max 0 fill    ( Erase the target memory location )
 
@@ -125,7 +126,7 @@ variable tdoConst      ( Location of doConst in target )
 : t,  there t!  =cell tcp +! ;
 : tallot tcp +! ;
 : s! ! ;
-: display
+: display ( -- : display metacompilation and target information )
   verbose 0= if exit then
   hex
   ." META COMPILATION COMPLETE" cr
@@ -137,14 +138,18 @@ variable tdoConst      ( Location of doConst in target )
   words
   ." HOST: " here . cr
   ." TARGET: " there . cr ;
-: finished display 
+: save-hex ( -- : save target binary to file )
+   #target #target there + (save) throw ;
+
+: finished ( -- : save target image and display statistics )
+   display 
    only forth definitions hex 
-   #target #target there + (save)
-   drop ;
+   ." SAVING... " save-hex ." DONE! " cr 
+   ." STACK> " .s cr ;
 
 \ @todo Replace ." and throw with abort"
 : [a] ( "name" -- : find word and compile an assembler word )
-  token assembler.1 search-wordlist 0= if ." [a]?" cr -1 throw then
+  token assembler.1 search-wordlist 0= if abort" [a]? " then
   cfa compile, ; immediate
 
 \  @bug immediate cannot be placed after 'a;' because of the way linking
@@ -185,12 +190,12 @@ a: #bye    1b00 a;
 \ The Stack Delta Operations occur after the ALU operations have been executed.
 \ They affect either the Return or the Variable Stack. An ALU instruction
 \ without one of these operations (generally) do not affect the stacks.
-a: d+1     0001 or a;
-a: d-1     0003 or a;
-a: d-2     0002 or a;
-a: r-1     000c or a;
-a: r-2     0008 or a;
-a: r+1     0004 or a;
+a: d+1     0001 or a; ( increment variable stack by one )
+a: d-1     0003 or a; ( decrement variable stack by one )
+a: d-2     0002 or a; ( decrement variable stack by two )
+a: r+1     0004 or a; ( increment variable stack by one )
+a: r-1     000c or a; ( decrement variable stack by one )
+a: r-2     0008 or a; ( decrement variable stack by two )
 
 \ All of these instructions execute after the ALU and stack delta operations
 \ have been performed except r->pc, which occurs before. They form part of
@@ -204,18 +209,19 @@ a: t->n    0080 or a; ( Set Next on Variable Stack to Top on Variable Stack )
 \ conditional branches, function calls and literals. ALU instructions
 \ comprise of an ALU operation, stack effects and register move bits. Function
 \ returns are part of the ALU operation instruction set.
-a: alu     6000 or t, a;
-a: branch 2/ 0000 or t, a;
-a: ?branch 2/ 2000 or t, a;
-a: call 2/ 4000 or t, a;
-a: literal
-  dup 8000 and if
-    invert
-    [a] #~t [a] alu
-  then
-    8000 or t,
-  a;
-a: return [a] #t [a] r->pc [a] r-1 [a] alu a;
+a: alu        6000 or t, a; ( u -- : Compile an ALU operation )
+a: branch  2/ 0000 or t, a; ( a -- : Compile an Unconditional branch )
+a: ?branch 2/ 2000 or t, a; ( a -- : Compile a  Conditional branch )
+a: call    2/ 4000 or t, a; ( a -- : Compile a  Function call )
+a: literal ( n -- : compile a number into target )
+  dup 8000 and if   ( numbers above $7fff take up two instructions )
+    invert recurse  ( the number is inverted, an literal is called again )
+    [a] #~t [a] alu ( then an invert instruction is compiled into the target )
+  else
+    8000 or t, ( numbers below $8000 can be stored in a single instruction )
+  then a;
+a: return ( -- : Compile a return into the target )
+   [a] #t [a] r->pc [a] r-1 [a] alu a;
 
 \ @todo Improve with fence variable set by control structures
 \ @todo Use optimizer from "eforth.fth"
@@ -232,20 +238,31 @@ a: return [a] #t [a] r->pc [a] r-1 [a] alu a;
    then
   then ;
 
+\ create a word in the metacompilers dictionary, not the targets 
 : tcreate get-current >r target.1 set-current create r> set-current ;
 
-: thead ( b -- : compile word header into target dictionary )
-  header 0= if drop exit then
+: thead ( b u -- : compile word header into target dictionary )
+  header @ 0= if 2drop exit then
   talign
   there #target + pack$ count nip 1+ aligned tcp +! talign
   tlast @ t, there tlast !  ;
 
+: lookahead ( -- b u : parse a word, but leave it in the input stream )
+  >in @ >r bl parse r> >in ! ;
+
 : t: 
-  >in @ >r bl parse r> >in ! 
+  $f00d
+  lookahead
   thead tcreate
   there , does> @ [a] call ;
 
-: t; optimize if exit, else [a] return then ; 
+: tnoname: ( -- : create a word with no name in the target dictionary )
+  $f00d
+  tcreate there , does> @ [a] call ;
+
+: t; 
+   $f00d <> if abort" unstructured! " then
+   optimize if exit, else [a] return then ; 
 
 \ @todo Increase efficiency of these variable and constant, when metacompiling
 \ constants, the constant itself should be compiled as a literal if and only
@@ -255,22 +272,25 @@ a: return [a] #t [a] r->pc [a] r-1 [a] alu a;
 
 : tconstant ( "name", n -- , Run Time: -- n )
   >r
-  >in @ >r bl parse r> >in ! 
+  lookahead
   thead 
   there tdoConst @ [a] call r> t, >r
   tcreate r> ,
   does> @ [a] call ; 
 
-: tvariable ( "name", -- , Run Time: -- a )
-  >in @ >r bl parse r> >in ! 
+: tvariable ( "name", n -- , Run Time: -- a )
+  >r 
+  lookahead
   thead 
   there tdoVar @ [a] call r> t, >r
-  tcreate 0 ,
+  tcreate r> ,
   does> @ [a] call ; 
 
-: >body cell+ ;
+: tlocation
+  header @ >r 0 header ! tvariable r> header !  ;
+
 : [t] 
-  token target.1 search-wordlist 0= if ." [t]?" cr -1 throw then 
+  token target.1 search-wordlist 0= if abort" [t]? " then 
   cfa >body @ ; 
 
 : literal [a] literal ;
@@ -359,9 +379,23 @@ target.1 +order
 meta -order meta +order 
 4 tallot 
 \ @todo Replace "there tdoVar s!" with a better construct
+tnoname: doVar there tdoVar s! r> t;
+tnoname: doConst there tdoConst s! r> @ t;
 
-t: doVar there tdoVar s! r> t;
-t: doConst there tdoConst s! r> @ t;
+0 tlocation cp                ( Dictionary Pointer: Set at end of file )
+0 tlocation root-voc          ( root vocabulary )
+0 tlocation editor-voc        ( editor vocabulary )
+0 tlocation assembler-voc     ( assembler vocabulary )
+0 tlocation _forth-wordlist   ( set at the end near the end of the file )
+0 tlocation _words            ( words execution vector )
+0 tlocation _forth            ( forth execution vector )
+0 tlocation _set-order        ( set-order execution vector )
+0 tlocation _do_colon         ( execution vector for ':' )
+0 tlocation _do_semi_colon    ( execution vector for ';' )
+0 tlocation _boot             ( -- : execute program at startup )
+0 tlocation current           ( WID to add definitions to )
+\ 0 tlocation _message        ( n -- : display an error message )
+ 
 
 \ === ASSEMBLY INSTRUCTIONS ===
 t: nop      nop      t;
@@ -412,7 +446,7 @@ t: 1+ 1 literal + t;        ( n -- n : increment a value  )
 t: negate invert 1+ t;      ( n -- n : negate a number )
 t: - negate + t;            ( n1 n2 -- n : subtract n1 from n2 )
 t: aligned dup 1 literal and + t;   ( b -- a )
-t: bye 0 literal (bye) t;
+t: bye 0 literal (bye) t;    ( -- : leave the interpreter )
 t: cell- cell - t;           ( a -- a : adjust address to previous cell )
 t: cell+ cell + t;           ( a -- a : move address forward to next cell )
 t: cells 1 literal lshift t; ( n -- n : convert cells count to address count )
@@ -452,19 +486,17 @@ t: cr $d literal tx! $a literal tx! t; ( t: cr =cr emit =lf emit t; )
 
 6a tconstant test-constant
 
-t: xx 
-  there 2/ 0 t!
+t: test-word
     test-constant tx! 
     6b literal tx! 
     6b literal tx! 
     6b literal tx! cr bye t;
   \ begin rx? tx! again t;
   \ begin test-constant tx! again t;
-  
-t: yy xx xx t;
+
+[t] test-word 2/ 0 t! ( set starting word )
 
 ( ===                        Target Words                           === )
 
 finished 
-.s cr
 

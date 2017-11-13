@@ -492,10 +492,11 @@ virtual-machine-error: -throw
 : quit preset [ begin query ' eval catch ?error again ;
 : ok! _prompt ! ;
 
+\ @todo factor into get input and set input
 : evaluate ( a u -- )
   _prompt @ >r 0    ok!
   id      @ >r -1   id !
-  >in @       >r 0    >in !
+  >in @     >r 0    >in !
   source >r >r
   #tib 2!
   ' eval catch

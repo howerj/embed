@@ -26,7 +26,7 @@ only forth definitions hex
 \ system but not much else, a more practical Forth virtual machine would
 \ concentrate on efficiency and functionality (providing a Foreign Function
 \ Interface, and file access words, for example). It is meant to be as
-\ simple as possible and no simpler. It will be refered to as the 'Embed
+\ simple as possible and no simpler. It will be referred to as the 'Embed
 \ virtual machine', or as 'the virtual machine'.
 
 \ The metacompiler is based upon one targeting the J1 CPU, available
@@ -120,7 +120,7 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 : t! over ff and over tc! swap 8 rshift swap 1+ tc! ;
 : t@ dup tc@ swap 1+ tc@ 8 lshift or ;
 : 2/ 1 rshift ; 
-: .hex base @ >r hex . cr r> base ! ;
+\ : .hex base @ >r hex . cr r> base ! ;
 : talign there 1 and tcp +! ;
 : tc, there tc! 1 tcp +! ;
 : t,  there t!  =cell tcp +! ;
@@ -286,7 +286,7 @@ a: return ( -- : Compile a return into the target )
   tcreate r> ,
   does> @ [a] call ; 
 
-: tlocation
+: tlocation ( "name", n -- : Reserve space in target for a memory location )
   header @ >r 0 header ! tvariable r> header !  ;
 
 : [t] 
@@ -304,6 +304,8 @@ a: return ( -- : Compile a return into the target )
 : repeat [a] branch then ;
 : again  [a] branch ;
 : aft    drop skip begin swap ;
+: constant tcreate , does> @ literal ;
+: [char] char literal ;
 
 \ Instructions
 
@@ -357,6 +359,42 @@ a: return ( -- : Compile a return into the target )
 \ : inline target.1 @ @ 8000 or target.1 @ ! ;
 \ : immediate target.1 @ @ 4000 or target.1 @ ! ;
 
+$20   constant =bl         ( blank, or space )
+$d    constant =cr         ( carriage return )
+$a    constant =lf         ( line feed )
+$8    constant =bs         ( back space )
+$1b   constant =escape     ( escape character )
+$ffff constant eof         ( end of file )
+
+$10   constant dump-width  ( number of columns for 'dump' )
+$50   constant tib-length  ( size of terminal input buffer )
+$50   constant pad-length  ( pad area begins HERE + pad-length )
+$1f   constant word-length ( maximum length of a word )
+
+$40   constant c/l ( characters per line in a block )
+$10   constant l/b ( lines in a block )
+$4400 constant sp0 ( start of variable stack )
+$7fff constant rp0 ( start of return stack )
+
+( Volatile variables )
+$4000 constant _test       ( used in skip/test )
+$4002 constant last-def    ( last, possibly unlinked, word definition )
+$4004 constant csp         ( stack pointer for error checking )
+$4006 constant id          ( used for source id )
+$4008 constant seed        ( seed used for the PRNG )
+$400A constant handler     ( current handler for throw/catch )
+$400C constant block-dirty ( -1 if loaded block buffer is modified )
+$4010 constant _key        ( -- c : new character, blocking input )
+$4012 constant _emit       ( c -- : emit character )
+$4014 constant _expect     ( "accept" vector )
+\ $4016 constant _tap      ( "tap" vector, for terminal handling )
+\ $4018 constant _echo     ( c -- : emit character )
+$4020 constant _prompt     ( -- : display prompt )
+$4110 constant context     ( holds current context for search order )
+$4122 constant #tib        ( Current count of terminal input buffer )
+$4124 constant tib-buf     ( ... and address )
+$4126 constant tib-start   ( backup tib-buf value )
+
 ( ===                        Target Words                           === )
 \ With the assembler and meta compiler complete, we can now make our target
 \ application, a Forth interpreter which will be able to read in this file
@@ -382,6 +420,8 @@ meta -order meta +order
 tnoname: doVar there tdoVar s! r> t;
 tnoname: doConst there tdoConst s! r> @ t;
 
+\ @todo There's something wrong with the definition of tlocation...
+\ look at the hexdump
 0 tlocation cp                ( Dictionary Pointer: Set at end of file )
 0 tlocation root-voc          ( root vocabulary )
 0 tlocation editor-voc        ( editor vocabulary )
@@ -396,6 +436,15 @@ tnoname: doConst there tdoConst s! r> @ t;
 0 tlocation current           ( WID to add definitions to )
 \ 0 tlocation _message        ( n -- : display an error message )
  
+\ @todo Use correct versions of @ and >r
+tnoname: execute-location ( @ >r ) t; 
+t: forth-wordlist _forth-wordlist t;
+t: words _words execute-location t;
+t: set-order _set-order execute-location t;
+t: forth _forth execute-location t;
+\ @todo Add this to the root-voc
+\ .set root-voc $pwd
+\ .pwd 0
 
 \ === ASSEMBLY INSTRUCTIONS ===
 t: nop      nop      t;
@@ -439,8 +488,41 @@ t: /mod     /mod     t;
 t: /        /        t;
 t: mod      mod      t;
 t: rdrop    rdrop    t;
+
+\ @todo make immediate
+t: end-code forth _do_semi_colon execute-location t; ( immediate )
+\ @todo add this to the assembly-voc
+\ .set assembler-voc $pwd
+
+t: assembler root-voc assembler-voc 2 literal set-order t;
+t: ;code assembler t; ( immediate )
+t: code _do_colon execute-location assembler t;
+
+$2    tconstant cell  ( size of a cell in bytes )
+$0    tvariable >in   ( Hold character pointer when parsing input )
+$0    tvariable state ( compiler state variable )
+$0    tvariable hld   ( Pointer into hold area for numeric output )
+$10   tvariable base  ( Current output radix )
+$0    tvariable span  ( Hold character count received by expect   )
+$8    tconstant #vocs ( number of vocabularies in allowed )
+$400  tconstant b/buf ( size of a block )
+0     tvariable blk   ( current blk loaded, set in 'cold' )
+$1984 tconstant ver   ( eForth version )
+
+\ location .s-string     " <sp"        ( used by .s )
+\ location see.unknown   "???"         ( used by 'see' for unknown words )
+\ location see.lit       "LIT"         ( decompilation -> literal )
+\ location see.alu       "ALU"         ( decompilation -> ALU operation )
+\ location see.call      "CAL"         ( decompilation -> Call )
+\ location see.branch    "BRN"         ( decompilation -> Branch )
+\ location see.0branch   "BRZ"         ( decompilation -> 0 Branch )
+\ location see.immediate " immediate " ( used by "see", for immediate words )
+\ location see.inline    " inline "    ( used by "see", for inline words )
+\ location OK            " ok"         ( used by "prompt" )
+\ location redefined     " redefined"  ( used by ":" when a word is redefined )
+\ location hi-string     "eFORTH V"    ( used by "hi" )
+
 \ === ASSEMBLY INSTRUCTIONS ===
-2 tconstant cell
 t: 2drop drop drop t;       ( n n -- )
 t: 1+ 1 literal + t;        ( n -- n : increment a value  )
 t: negate invert 1+ t;      ( n -- n : negate a number )
@@ -469,22 +551,151 @@ t: c@ dup  @ swap 1 literal and
    if 
       8 literal rshift exit 
    else $ff literal and exit 
-   then t; ( b -- c )
+   then t; ( b -- c ) 
 t: c!                       ( c b -- )
   swap $ff literal and dup 8 literal lshift or swap
   swap over dup ( -2 and ) @ swap 1 literal and 0 literal = $ff literal xor
   >r over xor r> and xor swap ( -2 and ) ! t;
 t: 2! ( d a -- ) tuck ! cell+ ! t;     ( n n a -- )
 t: 2@ ( a -- d ) dup cell+ @ swap @ t; ( a -- n n )
-\ t: command? state @ 0= t;        ( -- f )
-\ t: get-current current @ t;
-\ t: set-current current ! t;
-\ t: here cp @ t;              ( -- a )
-\ t: align here aligned cp ! t;            ( -- )
+t: command? state @ 0= t;     ( -- f )
+t: get-current current @ t;
+t: set-current current ! t;
+t: here cp @ t;               ( -- a )
+t: align here aligned cp ! t; ( -- )
 
-t: cr $d literal tx! $a literal tx! t; ( t: cr =cr emit =lf emit t; )
+t: source #tib 2@ t;                        ( -- a u )
+t: source-id id @ t;                       ( -- 0 | -1 )
+t: pad here pad-length + t;                 ( -- a )
+tnoname: @execute @ ?dup if >r then t;      ( cfa -- )
+t: bl =bl t;                                ( -- c )
+t: within over - >r - r> u< t;               ( u lo hi -- f )
+\ t: dnegate invert >r invert 1 literal um+ r> + t; ( d -- d )
+t: abs dup 0< if negate exit then t;        ( n -- u )
+t: count dup 1+ swap c@ t;                  ( cs -- b u )
+t: rot >r swap r> swap t;                   ( n1 n2 n3 -- n2 n3 n1 )
+t: -rot swap >r swap r> t;                  ( n1 n2 n3 -- n3 n1 n2 )
+\ tnoname: 2>r r> -rot >r >r >r t;          ( u1 u2 --, R: -- u1 u2 )
+\ tnoname: 2r> r> r> r> rot >r t;           ( -- u1 u2, R: u1 u2 -- )
+tnoname: doNext r> r> ?dup if 1- >r @ >r exit then cell+ >r t; 
+t: min 2dup < if drop exit else nip exit then t; ( n n -- n )
+t: max 2dup > if drop exit else nip exit then t; ( n n -- n )
+tnoname: >char $7f literal and dup $7f literal =bl within 
+         if drop [char] _ then t;  ( c -- c ) 
+tnoname: tib #tib cell+ @ t;                  ( -- a )
+\ tnoname: echo _echo @execute t;             ( c -- )
+t: key _key @execute dup eof = if bye then t; ( -- c )
+t: allot cp +! t;                             ( n -- )
+tnoname: over+ over + t;                      ( u1 u2 -- u1 u1+2 )
+t: /string over min rot over+ -rot - t; ( b u1 u2 -- b u : advance string u2 )
+tnoname: +string 1 literal /string t;           ( b u -- b u : )
+tnoname: address $3fff literal and t;   ( a -- a : mask off address bits )
+tnoname: @address @ address t;          ( a -- a )
+tnoname: last get-current @address t;   ( -- pwd )
+t: emit _emit @execute t;               ( c -- : write out a char )
+tnoname: toggle over @ xor swap ! t;    ( a u -- : xor value at addr with u )
+t: cr =cr emit =lf emit t;              ( -- )
+t: space =bl emit t;                    ( -- )
+tnoname: depth sp@ sp0 - chars t;       ( -- u )
+tnoname: vrelative cells sp@ swap - t;  ( -- u )
+t: pick  vrelative @ t;                 ( vn...v0 u -- vn...v0 vu )
+tnoname: typist ( b u f -- : print a string )
+  >r begin dup while 
+    swap count r@ 
+    if 
+      >char 
+    then 
+    emit 
+    swap 1- 
+  repeat 
+  rdrop 2drop t;  
+t: type 0 literal typist t;                           ( b u -- )
+tnoname: $type -1 literal typist t; 
+tnoname: print count type t;                ( b -- )
+tnoname: decimal? $30 literal $3a literal within t; ( c -- f : decimal char? )
+tnoname: lowercase? [char] a [char] { within t;   ( c -- f )
+tnoname: uppercase? [char] A [char] [ within t;   ( c -- f )
+tnoname: >lower ( c -- c : convert to lower case )
+  dup uppercase? if =bl xor exit then t;  
+tnoname: nchars ( +n c -- : emit c n times ) 
+  swap 0 literal max for aft dup emit then next drop t;  
+t: spaces =bl nchars t;                     ( +n -- )
+t: cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop t; ( b b u -- )
+t: fill swap for swap aft 2dup c! 1+ then next 2drop t; ( b u c -- )
 
-6a tconstant test-constant
+t: catch
+  sp@ >r
+  handler @ >r
+  rp@ handler !
+  execute
+  r> handler !
+  r> drop 0 literal t;
+
+t: throw
+  ?dup if
+    handler @ rp!
+    r> handler !
+    r> swap >r
+    sp! drop r>
+  then t;
+
+tnoname: -throw negate throw t;  ( space saving measure )
+\ @todo set VM exception handler
+\ virtual-machine-errort: -throw
+\ .set 2 virtual-machine-error
+
+tnoname: ?ndepth depth 1- u> if 4 literal -throw exit then t; 
+tnoname: 1depth 1 literal ?ndepth t; 
+
+\ constant #bits $f 
+\ constant #high $e ( number of bits - 1, highest bit )
+\ t: um/mod ( ud u -- ur uq )
+\   ?dup 0= if $a literal -throw exit then
+\   2dup u<
+\   if negate #high
+\     for >r dup um+ >r >r dup um+ r> + dup
+\       r> r@ swap >r um+ r> or
+\       if >r drop 1+ r> else drop then r>
+\     next
+\     drop swap exit
+\   then drop 2drop -1 literal dup t;
+
+\ t: m/mod ( d n -- r q ) \ floored division
+\   dup 0< dup >r
+\   if
+\     negate >r dnegate r>
+\   then
+\   >r dup 0< if r@ + then r> um/mod r>
+\   if swap negate swap exit then t;
+
+t: decimal $a literal base ! t;                       ( -- )
+t: hex     $10 literal base ! t;                       ( -- )
+tnoname: radix base @ dup 2 literal - $22 literal u> 
+  if hex $28 literal -throw exit then t; 
+tnoname: digit  9 literal over < 7 literal and + $30 literal + t; ( u -- c )
+tnoname: extract u/mod swap t;               ( n base -- n c )
+tnoname: ?hold hld @ here u< if $11 literal -throw exit then t;  ( -- )
+t: hold  hld @ 1- dup hld ! ?hold c! t;      ( c -- )
+\ t: holds begin dup while 1- 2dup + c@ hold repeat 2drop t;
+t: sign  0< if [char] - hold exit then t;    ( n -- )
+t: #>  drop hld @ pad over - t;               ( w -- b u )
+t: #  1depth radix extract digit hold t;     ( u -- u )
+t: #s begin # dup while repeat t;            ( u -- 0 )
+t: <#  pad hld ! t;                          ( -- )
+tnoname: str ( n -- b u : convert a signed integer to a numeric string ) 
+  dup >r abs <# #s r> sign #> t;  
+tnoname: adjust over - spaces type t;   ( b n n -- )
+t:  .r >r str r> adjust t;  ( n n : print n, right justified by +n )
+tnoname: (u.) <# #s #> t;   ( u -- : )
+t: u.r >r (u.) r> adjust t; ( u +n -- : print u right justified by +n)
+t: u.  (u.) space type t;   ( u -- : print unsigned number )
+t:  . ( n -- print space, signed number )  
+   radix 10 literal xor if u. exit then str space type t; 
+t: ? @ . t; ( a -- : display the contents in a memory cell )
+\ t: .base base @ dup decimal base ! t; ( -- )
+
+\ 6a tconstant test-constant
+6a constant test-constant
 
 t: test-word
     test-constant tx! 
@@ -494,7 +705,23 @@ t: test-word
   \ begin rx? tx! again t;
   \ begin test-constant tx! again t;
 
+\ @todo Many variables need setting before things will work, like
+\ _emit, cp, etcetera. 
 [t] test-word 2/ 0 t! ( set starting word )
+\ start:
+\ .set entry start
+\   boot exit
+  
+\ .set cp  $pc
+  
+\ .set _do_colon      ":"
+\ .set _do_semi_colon ";"
+\ .set _forth         [forth]
+\ .set _set-order     [set-order]
+\ .set _words         [words]
+\ .set _boot          normal-running
+\ \ .set _message message  ( execution vector of _message, used in ?error )
+
 
 ( ===                        Target Words                           === )
 

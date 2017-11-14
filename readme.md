@@ -344,9 +344,9 @@ into the generated object. Other information to include would be a CRC and
 length information. See <http://www.fadden.com/tech/file-formats.html>,
 and <https://stackoverflow.com/questions/323604>.
 * Improve the command line argument passing in [forth.c][].
-* Simplify, or make a barebones version of, [forth.c][] designed to be as simple
-as possible. Perhaps fread/fwrite and a swap routine based on the endianess of
-the processor would be smaller than the current solution.
+* Simplify, or make a barebones version of, [forth.c][] designed to be as 
+simple as possible. Perhaps fread/fwrite and a swap routine based on the 
+endianess of the processor would be smaller than the current solution.
 * On the Windows platform the input and output streams should be reopened in
 binary mode.
 * More assertions and range checks should be added to the interpreter, for
@@ -356,6 +356,9 @@ with checks to make sure indices never go out of bounds.
 * Documentation could be extracted from the [meta.fth][] file, which should
 describe the entire system: The metacompiler, the target virtual machine,
 and how Forth works.
+* A cross assembler capable of producing 16-bit applications on [DOS][] for
+the [8086][] would be an interesting future application. 
+<https://github.com/benhoyt/third> could be used as a starting point.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html
@@ -368,3 +371,5 @@ and how Forth works.
 [Linux]: https://en.wikipedia.org/wiki/Linux
 [C99]: https://en.wikipedia.org/wiki/C99
 [meta.fth]: meta.fth
+[DOS]: https://en.wikipedia.org/wiki/DOS
+[8086]: https://en.wikipedia.org/wiki/Intel_8086

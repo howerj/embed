@@ -88,7 +88,7 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 	assert(h && in && out);
 	uw_t *m = h->core;
 	for(;;) {
-		uw_t instruction = m[pc];
+		const uw_t instruction = m[pc];
 		assert(!(sp & 0x8000) && !(rp & 0x8000));
 
 		if(0x8000 & instruction) { /* literal */

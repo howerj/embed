@@ -299,6 +299,7 @@ a: return ( -- : Compile a return into the target )
 : aft    drop skip begin swap ;
 : constant tcreate , does> @ literal ;
 : [char] char literal ;
+: tcompile, [a] call ;
 
 \ Instructions
 
@@ -348,6 +349,8 @@ a: return ( -- : Compile a return into the target )
 \ @todo make a more compact 'next' construct
 : next r@ while r> 1- >r repeat r> drop ; 
 
+\ @todo construct =invert with the assembler 
+$6a00 constant =invert     ( invert instruction )
 $20   constant =bl         ( blank, or space )
 $d    constant =cr         ( carriage return )
 $a    constant =lf         ( line feed )
@@ -875,42 +878,43 @@ t: , here dup cell+ ?dictionary aligned cp ! ! t; ( u -- )
 t: c, here ?dictionary c! cp 1+! t; ( c -- : store 'c' in the dictionary )
 h: doLit $8000 literal or , t; 
 h: ?compile command? if $e literal -throw exit then t; 
-\ t: literal ( n -- : write a literal into the dictionary )
-\   ?compile
-\   dup $8000 literal and ( n > $7fff ? )
-\   if
-\     invert doLit =invert , exit ( store inversion of n the invert it )
-\   else
-\     doLit exit ( turn into literal, write into dictionary )
-\   then t; immediate
-\ 
-\ h: make-callable chars $4000 literal or t; ( cfa -- instruction )
-\ t: compile, make-callable , t; ( cfa -- : compile a code field address )
-\ h: $compile ( pwd -- )
-\   dup inline? if cfa @ , exit else cfa compile, exit then t; 
-\ h: not-found $d literal -throw t; 
-\ h: interpret ( ??? a -- ??? : The command/compiler loop )
-\   find ?dup if
-\     state @
-\     if
-\       0> if \ immediate
-\         cfa execute exit
-\       else
-\         $compile exit
-\       then
-\     else
-\       drop cfa execute exit
-\     then
-\   else \ not a word
-\     dup count number? if
-\       nip
-\       state @ if literal ( !!! Call to literal !!! ) exit then
-\     else
-\       drop space print not-found exit
-\     then
-\   then t; 
+t: literal ( n -- : write a literal into the dictionary )
+  ?compile
+  dup $8000 literal and ( n > $7fff ? )
+  if
+    invert doLit =invert , exit ( store inversion of n the invert it )
+  else
+    doLit exit ( turn into literal, write into dictionary )
+  then t; immediate
+
+h: make-callable chars $4000 literal or t; ( cfa -- instruction )
+t: compile, make-callable , t; ( cfa -- : compile a code field address )
+h: $compile ( pwd -- )
+  dup inline? if cfa @ , exit else cfa compile, exit then t; 
+h: not-found $d literal -throw t; 
+
+h: interpret ( ??? a -- ??? : The command/compiler loop )
+  find ?dup if
+    state @
+    if
+      0> if \ immediate
+        cfa execute exit
+      else
+        $compile exit
+      then
+    else
+      drop cfa execute exit
+    then
+  else \ not a word
+    dup count number? if
+      nip
+      state @ if [t] literal tcompile, exit then
+    else
+      drop space print not-found exit
+    then
+  then t; 
  
-\ t: "immediate" last $4000 toggle t;
+t: immediate last $4000 literal toggle t;
 \ @todo Implement target string literals 
 h: .ok command? if ( OK print space ) then cr t; 
 h: ?depth sp@ sp0 u< if 4 literal -throw exit then t; 
@@ -919,16 +923,16 @@ h: eval
   begin 
     token dup count nip 
   while 
-    ( interpret ) ?depth 
+    interpret ?depth 
   repeat drop _prompt @execute t; 
 t: quit preset [ begin query [t] eval literal catch ?error again t;
 t: ok! _prompt ! t;
 
 \ @todo factor into get input and set input
 t: evaluate ( a u -- )
-  _prompt @ >r 0  literal   ok!
+  _prompt @ >r  0 literal  ok!
   id      @ >r -1 literal  id !
-  >in @     >r 0  literal  >in !
+  >in     @ >r  0 literal  >in !
   source >r >r
   #tib 2!
   [t] eval literal catch

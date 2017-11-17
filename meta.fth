@@ -70,6 +70,10 @@ only forth definitions hex
 \ to be defined before it can be completed so the metacompiler and
 \ assembler are not completely separate modules
 
+\ @todo Fix the order of the vocabularies, the order should be meta, then
+\ target.1, with meta taking priority, as words like "for" will be defined
+\ in the target as well as in the meta-compiler itself.
+
 variable meta       ( Metacompilation vocabulary )
 meta +order definitions
 
@@ -959,6 +963,328 @@ t: dump ( a u -- )
 \ t: d. base @ >r decimal  . r> base ! t;
 \ t: h. base @ >r hex     u. r> base ! t;
 
+\ ( ==================== Advanced I/O Control ========================== )
+\ 
+\ \ : pace 11 emit ; hidden
+\ : xio  ' accept _expect ! ( _tap ! ) ( _echo ! ) ok! ; hidden
+\ \ : file ' pace ' "drop" ' ktap xio ;
+\ : hand ' .ok  ( ' "drop" <-- was emit )  ( ' ktap ) xio ; hidden
+\ : console ' "rx?" _key ! ' "tx!" _emit ! hand ; hidden
+\ : io! console preset ; ( -- : initialize I/O )
+ 
+
+\ h: pace 11 emit t; 
+h: xio  [t] accept literal _expect ! ( _tap ! ) ( _echo ! ) ok! t; 
+\ t: file [t] pace literal [t] drop literal [t] ktap literal xio t;
+h: hand [t] .ok  literal ( ' "drop" <-- was emit )  ( ' ktap ) xio t; 
+h: console [t] rx? literal _key ! [t] tx! literal _emit ! hand t; 
+t: io! console preset t; ( -- : initialize I/O )
+
+\ ( ==================== Advanced I/O Control ========================== )
+\ 
+\ ( ==================== Control Structures ============================ )
+\ 
+\ : !csp sp@ csp ! ; hidden
+\ : ?csp sp@ csp @ xor if 22 -throw exit then ; hidden
+\ : +csp    1 cells csp +! ; hidden
+\ : -csp -1 cells csp +! ; hidden
+\ : ?unique ( a -- a : print a message if a word definition is not unique )
+\   dup last seacher 
+\   if 
+\     2drop ( last @ nfa print ) redefined print cr exit 
+\   then ; hidden 
+\ : ?nul ( b -- : check for zero length strings )
+\   count 0= if 16 -throw exit then 1- ; hidden 
+\ : find-cfa token find if cfa exit else not-found exit then ; hidden
+\ : "'" find-cfa state @ if literal exit then ; immediate
+\ : [compile] ?compile find-cfa compile, ; immediate ( -- ; <string> )
+\ \ NB. 'compile' only works for words, instructions, and numbers below $8000 )
+\ : compile  r> dup @ , cell+ >r ; ( -- : Compile next compiled word )  
+\ : "[char]" ?compile char literal ; immediate ( --, <string> : )
+\ \ : ?quit command? if 56 -throw exit then ; hidden
+\ : ";" ( ?quit ) ( ?compile ) +csp ?csp get-current ! =exit ,  [ ; immediate
+\ : ":" 
+\    align !csp here dup last-def ! 
+\    last , token ?nul ?unique count + aligned cp ! ] ;
+\ : jumpz, chars $2000 or , ; hidden
+\ : jump, chars ( $0000 or ) , ; hidden
+\ : "begin" ?compile here -csp ; immediate
+\ : "until" ?compile jumpz, +csp ; immediate
+\ : "again" ?compile jump, +csp ; immediate
+\ : here-0 here 0 ; hidden
+\ : "if" ?compile here-0 jumpz, -csp ; immediate
+\ : doThen  here chars over @ or swap ! ; hidden
+\ : "then" ?compile doThen +csp ; immediate
+\ : "else" ?compile here-0 jump, swap doThen ; immediate
+\ : "while" ?compile call "if" ; immediate
+\ : "repeat" ?compile swap call "again" call "then" ; immediate
+\ : last-cfa last-def @ cfa ; hidden ( -- u )
+\ : recurse ?compile last-cfa compile, ; immediate
+\ : tail ?compile last-cfa jump, ; immediate
+\ : create call ":" compile doVar get-current ! [ ;
+\ : >body cell+ ;
+\ : doDoes r> chars here chars last-cfa dup cell+ doLit ! , ; hidden
+\ : does> ?compile compile doDoes nop ; immediate
+\ : "variable" create 0 , ;
+\ : "constant" create ' doConst make-callable here cell- ! , ;
+\ : ":noname" here ] !csp ;
+\ : "for" ?compile =>r , here -csp ; immediate
+\ : "next" ?compile compile doNext , +csp ; immediate
+\ : "aft" ?compile drop here-0 jump, call "begin" swap ; immediate
+\ : doer create =exit last-cfa ! =exit ,  ;
+\ : make
+\   find-cfa find-cfa make-callable
+\   state @
+\   if
+\     literal literal compile ! exit
+\   else
+\     swap ! exit
+\   then ; immediate
+\ 
+\ 
+\ \ : [leave] rdrop rdrop rdrop ; hidden
+\ \ : leave ?compile compile [leave] ; immediate
+\ \ : [do] r> dup >r swap rot >r >r cell+ >r ; hidden
+\ \ : do ?compile compile [do] 0 , here ; immediate
+\ \ : [loop]
+\ \     r> r> 1+ r> 2dup <> if >r >r @ >r exit then
+\ \     >r 1- >r cell+ >r ; hidden
+\ \ : [unloop] r> rdrop rdrop rdrop >r ; hidden
+\ \ : loop compile [loop] dup , 
+\ \    compile [unloop] cell- here chars swap ! ; immediate
+\ \ : [i] r> r> tuck >r >r ; hidden
+\ \ : i ?compile compile [i] ; immediate
+\ \ : [?do]
+\ \    2dup <> if 
+\ \      r> dup >r swap rot >r >r cell+ >r exit
+\ \   then 2drop exit ; hidden
+\ \ : ?do  ?compile compile [?do] 0 , here ; immediate
+\ 
+\ \ : back here cell- @ ; hidden ( a -- : get previous cell )
+\ \ : call? back $e000 and $4000 = ; hidden ( -- f : is call )
+\ \ : merge? ( -- f : safe to merge exit )
+\ \   back dup $e000 and $6000 = swap $1c and 0= and ; hidden 
+\ \ : redo here cell- ! ; hidden
+\ \ : merge back $1c or redo ; hidden
+\ \ : tail-call ( -- : turn previously compiled call into tail call )
+\ \   back $1fff and redo ; hidden 
+\ \ : compile-exit 
+\ \     call? if 
+\ \       tail-call 
+\ \     else 
+\ \       merge? if 
+\ \         merge 
+\ \       else 
+\ \         =exit , 
+\ \       then 
+\ \   then ; hidden
+\ \ : compile-exit 
+\ \    call? if 
+\ \      tail-call 
+\ \    else 
+\ \      merge? 
+\ \      if merge 
+\ \    then 
+\ \  then =exit , ; hidden
+\ \ : "exit" compile-exit ; immediate
+\ \ : "exit" =exit , ; immediate
+\ 
+\ \ Evaluate instruction, this would work in a normal Forth, but
+\ \ not with this cross compiler:
+\ \   : ex [ here 2 cells + ] literal ! [ 0 , ] ;
+\ 
+\ ( ==================== Control Structures ============================ )
+\ 
+\ ( ==================== Strings ======================================= )
+\ 
+\ : do$ r> r@ r> count + aligned >r swap >r ; hidden ( -- a )
+\ : $"| do$ nop ; hidden   ( -- a : do string NB. nop to fool optimizer )
+\ : ."| do$ print ; hidden                           ( -- : print string )
+\ : $,' 34 word count + aligned cp ! ; hidden         ( -- )
+\ : $"  ?compile compile $"| $,' ; immediate         ( -- ; <string> )
+\ : ."  ?compile compile ."| $,' ; immediate         ( -- ; <string> )
+\ : abort -1 (bye) ;
+\ : {abort} do$ print cr abort ; hidden
+\ : abort" ?compile compile {abort} $,' ; immediate
+\ 
+\ ( ==================== Strings ======================================= )
+\ 
+\ ( ==================== Block Word Set ================================ )
+\ 
+\ : update -1 block-dirty ! ;          ( -- )
+\ : +block blk @ + ; hidden              ( -- )
+\ : save ( -1 ) 0 here (save) throw ;
+\ : flush block-dirty @ if -1 (save) throw exit then ;
+\ 
+\ : block ( k -- a )
+\   1depth
+\   dup 63 u> if 35 -throw exit then
+\   dup blk !
+\   10 lshift ( b/buf * ) ;
+\ 
+\ : c/l* ( c/l * ) 6 lshift ; hidden
+\ : c/l/ ( c/l / ) 6 rshift ; hidden
+\ : line swap block swap c/l* + c/l ; hidden ( k u -- a u )
+\ : loadline line evaluate ; hidden ( k u -- )
+\ : load 0 l/b 1- for 2dup >r >r loadline r> r> 1+ next 2drop ;
+\ : pipe 124 emit ; hidden
+\ : .line line -trailing $type ; hidden
+\ : .border 3 spaces c/l 45 nchars cr exit ; hidden
+\ : #line dup 2 u.r exit ; hidden ( u -- u : print line number )
+\ : thru over - for dup load 1+ next drop ; ( k1 k2 -- )
+\ : blank =bl fill ;
+\ \ : message l/b extract .line cr ; ( u -- )
+\ : retrieve block drop ; hidden
+\ : list
+\   dup retrieve
+\   cr
+\   .border
+\   0 begin
+\     dup l/b <
+\   while
+\     2dup #line pipe line $type pipe cr 1+
+\   repeat .border 2drop ;
+\ 
+\ \ : index ( k1 k2 -- : show titles for block k1 to k2 )
+\ \  over - cr
+\ \  for
+\ \    dup 5u.r space pipe space dup  0 .line cr 1+
+\ \  next drop ;
+\ 
+\ ( ==================== Block Word Set ================================ )
+\ 
+\ ( ==================== Booting ======================================= )
+\ 
+\ : cold 16 block b/buf 0 fill 18 retrieve sp0 sp! io! forth ;
+\ : hi hex cr hi-string print ver 0 u.r cr here . .free cr [ ;
+\ : normal-running hi quit ; hidden
+\ : boot cold _boot @execute bye ; hidden
+\ : boot! _boot ! ; ( xt -- )
+\ 
+\ ( ==================== Booting ======================================= )
+\ 
+\ ( ==================== See =========================================== )
+\ 
+\ ( @warning This disassembler is experimental, and not liable to work )
+\ 
+\ : validate ( cfa pwd -- nfa | 0 )
+\   tuck cfa <> if drop 0 exit else nfa exit then ; hidden 
+\ 
+\ ( @todo Do this for every vocabulary loaded, and name assembly instruction )
+\ : name ( cfa -- nfa )
+\   address cells >r
+\   \ last
+\   context @ @address
+\   begin
+\     dup
+\   while
+\     address dup r@ swap dup @ address swap within ( simplify? )
+\     if @address r> swap validate exit then
+\     address @
+\   repeat rdrop ; hidden
+\ 
+\ : .name name ?dup 0= if see.unknown then print ; hidden
+\ 
+\ : .instruction ( instruction -- masked )
+\   dup $8000 and          if drop $8000 see.lit     print exit then
+\   dup $6000  and $6000 = if drop $6000 see.alu     print exit then
+\   dup $6000  and $4000 = if drop $4000 see.call    print exit then
+\       $6000  and $2000 = if      $2000 see.0branch print exit then
+\   0 see.branch print ; hidden
+\ 
+\ : decompiler ( previous current -- : decompile starting at address )
+\   >r
+\    begin dup r@ u< while
+\      dup 5u.r colon 
+\     dup @ dup space 
+\     .instruction $4000 = if dup 5u.r space .name else 5u.r then cr cell+
+\    repeat rdrop drop ; hidden
+\ 
+\ : see ( --, <string> : decompile a word )
+\   token finder 0= if not-found exit then
+\   swap 2dup = if drop here then >r
+\   cr colon space dup .id space dup
+\   cr
+\   cfa r> decompiler space 59 emit
+\   dup inline?    if see.inline    print then
+\       immediate? if see.immediate print then cr ;
+\ 
+\ ( ==================== See =========================================== )
+\ 
+\ ( ==================== Vocabulary Words ============================== )
+\ 
+\ : find-empty-cell begin dup @ while cell+ repeat ; hidden ( a -- a )
+\ 
+\ : get-order ( -- widn ... wid1 n : get the current search order )
+\   context
+\   find-empty-cell
+\   dup cell- swap
+\   context - chars dup >r 1- dup 0< if 50 -throw exit then
+\   for aft dup @ swap cell- then next @ r> ;
+\ 
+\ : [set-order] ( widn ... wid1 n -- : set the current search order )
+\   dup -1  = if drop root-voc 1 [set-order] exit then
+\   dup #vocs > if 49 -throw exit then
+\   context swap for aft tuck ! cell+ then next 0 swap ! ; hidden
+\ 
+\ : previous get-order swap drop 1- [set-order] ;
+\ : also get-order over swap 1+ [set-order] ;
+\ : only -1 [set-order] ;
+\ : order get-order for aft . then next cr ;
+\ : anonymous get-order 1+ here 1 cells allot swap set-order ;
+\ : definitions context @ set-current ;
+\ : (order) ( w wid*n n -- wid*n w n )
+\   dup if 
+\     1- swap >r (order) over r@ xor 
+\     if
+\       1+ r> -rot exit 
+\     then r> drop 
+\   then ;
+\ : -order get-order (order) nip set-order ; ( wid -- )
+\ : +order dup >r -order get-order r> swap 1+ set-order ; ( wid -- )
+\ 
+\ : [forth] root-voc forth-wordlist 2 [set-order] ; hidden
+\ : editor decimal root-voc editor-voc 2 [set-order] ;
+\ 
+\ : .words space begin dup while dup .id space @address repeat drop cr ; hidden
+\ : [words] 
+\   get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ; hidden
+\ 
+\ .set _forth-wordlist $pwd
+\ .set current _forth-wordlist
+\ 
+\ ( ==================== Vocabulary Words ============================== )
+\ 
+\ ( ==================== Block Editor ================================== )
+\ 
+\ .pwd 0
+\ : [block] blk @ block ; hidden
+\ : [check] dup b/buf c/l/ u>= if 24 -throw exit then ; hidden
+\ : [line] [check] c/l* [block] + ; hidden
+\ : b retrieve ;
+\ : l blk @ list ;
+\ : n  1 +block b l ;
+\ : p -1 +block b l ;
+\ : d [line] c/l blank ;
+\ : x [block] b/buf blank ;
+\ : s update flush ;
+\ : q forth flush ;
+\ : e forth blk @ load editor ;
+\ : ia c/l* + [block] + source drop >in @ +
+\   swap source nip >in @ - cmove call "\" ;
+\ : i 0 swap ia ;
+\ : u update ;
+\ \ : w words ;
+\ \ : yank pad c/l ; hidden
+\ \ : c [line] yank >r swap r> cmove ;
+\ \ : y [line] yank cmove ;
+\ \ : ct swap y c ;
+\ \ : ea [line] c/l evaluate ;
+\ \ : sw 2dup y [line] swap [line] swap c/l cmove c ;
+\ .set editor-voc $pwd
+\ 
+\ ( ==================== Block Editor ================================== )
+ 
 
 \ 6a tconstant test-constant
 6a constant test-constant
@@ -966,7 +1292,7 @@ t: dump ( a u -- )
 6b [u] test-variable t!
 
 t: test-word
-    [t] tx! literal _emit !
+    io!
     \ 0 literal here dump
     999 literal . cr
     test-constant tx! 

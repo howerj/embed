@@ -32,7 +32,7 @@ ${FORTH}: forth.c
 	${DF}$^ $@
 
 run: ${FORTH} eforth.blk
-	${DF}${FORTH} i eforth.blk meta.blk
+	${DF}${FORTH} i eforth.blk new.blk
 
 meta.blk: ${FORTH} eforth.blk meta.fth
 	${DF}${FORTH} f eforth.blk meta.blk meta.fth

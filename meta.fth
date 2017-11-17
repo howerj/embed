@@ -964,14 +964,6 @@ t: dump ( a u -- )
 \ t: h. base @ >r hex     u. r> base ! t;
 
 \ ( ==================== Advanced I/O Control ========================== )
-\ 
-\ \ : pace 11 emit ; hidden
-\ : xio  ' accept _expect ! ( _tap ! ) ( _echo ! ) ok! ; hidden
-\ \ : file ' pace ' "drop" ' ktap xio ;
-\ : hand ' .ok  ( ' "drop" <-- was emit )  ( ' ktap ) xio ; hidden
-\ : console ' "rx?" _key ! ' "tx!" _emit ! hand ; hidden
-\ : io! console preset ; ( -- : initialize I/O )
- 
 
 \ h: pace 11 emit t; 
 h: xio  [t] accept literal _expect ! ( _tap ! ) ( _echo ! ) ok! t; 
@@ -1111,55 +1103,60 @@ t: io! console preset t; ( -- : initialize I/O )
 \ 
 \ ( ==================== Block Word Set ================================ )
 \ 
-\ : update -1 block-dirty ! ;          ( -- )
-\ : +block blk @ + ; hidden              ( -- )
-\ : save ( -1 ) 0 here (save) throw ;
-\ : flush block-dirty @ if -1 (save) throw exit then ;
-\ 
-\ : block ( k -- a )
-\   1depth
-\   dup 63 u> if 35 -throw exit then
-\   dup blk !
-\   10 lshift ( b/buf * ) ;
-\ 
-\ : c/l* ( c/l * ) 6 lshift ; hidden
-\ : c/l/ ( c/l / ) 6 rshift ; hidden
-\ : line swap block swap c/l* + c/l ; hidden ( k u -- a u )
-\ : loadline line evaluate ; hidden ( k u -- )
-\ : load 0 l/b 1- for 2dup >r >r loadline r> r> 1+ next 2drop ;
-\ : pipe 124 emit ; hidden
-\ : .line line -trailing $type ; hidden
-\ : .border 3 spaces c/l 45 nchars cr exit ; hidden
-\ : #line dup 2 u.r exit ; hidden ( u -- u : print line number )
-\ : thru over - for dup load 1+ next drop ; ( k1 k2 -- )
-\ : blank =bl fill ;
-\ \ : message l/b extract .line cr ; ( u -- )
-\ : retrieve block drop ; hidden
-\ : list
-\   dup retrieve
-\   cr
-\   .border
-\   0 begin
-\     dup l/b <
-\   while
-\     2dup #line pipe line $type pipe cr 1+
-\   repeat .border 2drop ;
-\ 
-\ \ : index ( k1 k2 -- : show titles for block k1 to k2 )
-\ \  over - cr
-\ \  for
-\ \    dup 5u.r space pipe space dup  0 .line cr 1+
-\ \  next drop ;
-\ 
+t: update -1 literal block-dirty ! t;          ( -- )
+h: +block blk @ + t;               ( -- )
+t: save ( -1 ) 0 literal here (save) throw t;
+t: flush block-dirty @ if -1 literal (save) throw exit then t;
+
+t: block ( k -- a )
+  1depth
+  dup $3f literal u> if $23 literal -throw exit then
+  dup blk !
+  $a literal lshift ( b/buf * ) t;
+
+h: c/l* ( c/l * ) 6 literal lshift t; 
+h: c/l/ ( c/l / ) 6 literal rshift t; 
+h: line swap block swap c/l* + c/l t;  ( k u -- a u )
+h: loadline line evaluate t;  ( k u -- )
+t: load 0 literal l/b 1- for 2dup >r >r loadline r> r> 1+ next 2drop t;
+h: pipe $7c literal emit t; 
+h: .line line -trailing $type t; 
+h: .border 3 literal spaces c/l $2d literal nchars cr t; 
+h: #line dup 2 literal u.r exit t;  ( u -- u : print line number )
+t: thru over - for dup load 1+ next drop t; ( k1 k2 -- )
+t: blank =bl fill t;
+\ t: message l/b extract .line cr t; ( u -- )
+h: retrieve block drop t; 
+t: list
+  dup retrieve
+  cr
+  .border
+  0 literal begin
+    dup l/b <
+  while
+    2dup #line pipe line $type pipe cr 1+
+  repeat .border 2drop t;
+
+\ t: index ( k1 k2 -- : show titles for block k1 to k2 )
+\  over - cr
+\  for
+\    dup 5u.r space pipe space dup 0 literal .line cr 1+
+\  next drop t;
+
 \ ( ==================== Block Word Set ================================ )
 \ 
 \ ( ==================== Booting ======================================= )
 \ 
-\ : cold 16 block b/buf 0 fill 18 retrieve sp0 sp! io! forth ;
-\ : hi hex cr hi-string print ver 0 u.r cr here . .free cr [ ;
-\ : normal-running hi quit ; hidden
-\ : boot cold _boot @execute bye ; hidden
-\ : boot! _boot ! ; ( xt -- )
+
+\ @todo add 'forth' back into 'cold'
+t: cold 
+   $10 literal block b/buf 0 literal fill 
+   $12 literal retrieve sp0 sp! io! ( forth ) t;
+\ @todo fix print string
+t: hi hex cr ( hi-string print ) ver 0 literal u.r cr here . .free cr [ t;
+h: normal-running hi quit t; 
+h: boot cold _boot @execute bye t; 
+t: boot! _boot ! t; ( xt -- )
 \ 
 \ ( ==================== Booting ======================================= )
 \ 
@@ -1304,8 +1301,9 @@ t: test-word
 
 \ @todo Many variables need setting before things will work, like
 \ _emit, cp, etcetera. 
-[t] test-word 2/ 0 t! ( set starting word )
-  
+[t] boot 2/ 0 t! ( set starting word )
+[t] test-word [u] _boot t!
+
 \ .set cp  $pc
 there [u] cp t!
 

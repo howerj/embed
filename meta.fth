@@ -237,8 +237,8 @@ a: return ( -- : Compile a return into the target )
 : thead ( b u -- : compile word header into target dictionary )
   header @ 0= if 2drop exit then
   talign
-  there #target + pack$ count nip 1+ aligned tcp +! talign
-  [last] t, there tlast !  ;
+  there [last] t, tlast ! 
+  there #target + pack$ count nip 1+ aligned tcp +! talign ;
 
 : lookahead ( -- b u : parse a word, but leave it in the input stream )
   >in @ >r bl parse r> >in ! ;
@@ -1149,7 +1149,7 @@ t: cold
 t: hi hex cr ."| $literal eFORTH V " ver 0 literal
 u.r cr here . .free cr [ t;
 h: normal-running hi quit t;
-h: boot cold _boot @execute bye t;
+h: boot cold words _boot @execute bye t;
 t: boot! _boot ! t; ( xt -- )
 \
 \ ( ==================== Booting ======================================= )
@@ -1247,7 +1247,7 @@ t: (order) ( w wid*n n -- wid*n w n )
 t: -order get-order (order) nip set-order t; ( wid -- )
 t: +order dup >r -order get-order r> swap 1+ set-order t; ( wid -- )
 
-h: [forth] root-voc forth-wordlist 2 literal [set-order] t;
+h: [forth] root-voc forth-wordlist  2 literal [set-order] t;
 t: editor decimal root-voc editor-voc 2 literal [set-order] t;
 
 h: .words space begin dup while dup .id space @address repeat drop cr t;
@@ -1289,26 +1289,27 @@ t: u update t;
 \ t: ea [line] c/l evaluate t;
 \ t: sw 2dup y [line] swap [line] swap c/l cmove c t;
 \ .set editor-voc $pwd
-[last] [u] editor-voc t!
-\
+[last] [u] editor-voc t! 0 tlast s!
+
+
 \ ( ==================== Block Editor ================================== )
 
 
-\ 6a tconstant test-constant
-6a constant test-constant
-6a tvariable test-variable
-6b [u] test-variable t!
-
-t: test-word
-    io!
-    \ 0 literal here dump
-    999 literal . cr
-    test-constant tx!
-    test-variable @ tx!
-    6b literal emit
-    6b literal tx! cr bye t;
-  \ begin rx? tx! again t;
-  \ begin test-constant tx! again t;
+\ \ 6a tconstant test-constant
+\ 6a constant test-constant
+\ 6a tvariable test-variable
+\ 6b [u] test-variable t!
+\ 
+\ t: test-word
+\     io!
+\     \ 0 literal here dump
+\     999 literal . cr
+\     test-constant tx!
+\     test-variable @ tx!
+\     6b literal emit
+\     6b literal tx! cr bye t;
+\   \ begin rx? tx! again t;
+\   \ begin test-constant tx! again t;
 
 there           [u] cp t!
 [t] :           [u] _do_colon t!

@@ -19,7 +19,7 @@ typedef int16_t  sw_t;
 typedef uint32_t ud_t;
 
 typedef struct {
-	uw_t pc, t, rp, sp, core[CORE/sizeof(uw_t)]; 
+	uw_t pc, t, rp, sp, core[CORE/sizeof(uw_t)];
 } forth_t;
 
 static FILE *fopen_or_die(const char *file, const char *mode)

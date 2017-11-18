@@ -171,15 +171,15 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : vrelative cells sp@ swap - ; hidden       ( -- u )
 : pick  vrelative @ ;                       ( vn...v0 u -- vn...v0 vu )
 : typist ( b u f -- : print a string )
-  >r begin dup while 
-    swap count r@ 
-    if 
-      >char 
-    then 
-    emit 
-    swap 1- 
-  repeat 
-  rdrop 2drop ; hidden 
+  >r begin dup while
+    swap count r@
+    if
+      >char
+    then
+    emit
+    swap 1-
+  repeat
+  rdrop 2drop ; hidden
 : type 0 typist ;                           ( b u -- )
 : $type -1 typist ; hidden
 : print count type ; hidden               ( b -- )
@@ -187,9 +187,9 @@ location hi-string     "eFORTH V"    ( used by "hi" )
 : lowercase? [char] a [char] { within ; hidden  ( c -- f )
 : uppercase? [char] A [char] [ within ; hidden  ( c -- f )
 : >lower ( c -- c : convert to lower case )
-  dup uppercase? if =bl xor exit then ; hidden 
-: nchars ( +n c -- : emit c n times ) 
-  swap 0 max for aft dup emit then next drop ; hidden 
+  dup uppercase? if =bl xor exit then ; hidden
+: nchars ( +n c -- : emit c n times )
+  swap 0 max for aft dup emit then next drop ; hidden
 : spaces =bl nchars ;                     ( +n -- )
 : cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop ; ( b b u -- )
 : fill swap for swap aft 2dup c! 1+ then next 2drop ; ( b u c -- )
@@ -264,7 +264,7 @@ virtual-machine-error: -throw
 : pack$ ( b u a -- a ) \ null fill
   aligned dup >r over
   dup cell negate and ( align down )
-  - over+ 0 swap ! 2dup c! 1+ swap cmove r> ; 
+  - over+ 0 swap ! 2dup c! 1+ swap cmove r> ;
 
 \ : ^h ( bot eot cur c -- bot eot cur )
 \   >r over r@ < dup
@@ -330,16 +330,16 @@ virtual-machine-error: -throw
   begin
     dup @
   while
-    dup @ @ r@ swap seacher ?dup 
-    if 
-      >r rot drop r> rdrop exit 
+    dup @ @ r@ swap seacher ?dup
+    if
+      >r rot drop r> rdrop exit
     then
     cell+
   repeat drop 0 r> 0 ; hidden
 
 : search-wordlist seacher rot drop ; ( a wid -- pwd 1 | pwd -1 | a 0 )
 : find ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
-  finder rot drop ; 
+  finder rot drop ;
 
 : numeric? ( char -- n|-1 : convert character in 0-9 a-z range to number )
   >lower
@@ -348,7 +348,7 @@ virtual-machine-error: -throw
   drop -1 ; hidden
 
 : digit? ( c -- f : is char a digit given base )
-  >lower numeric? base @ u< ; hidden 
+  >lower numeric? base @ u< ; hidden
 
 : do-number ( n b u -- n b u : convert string )
   begin
@@ -413,14 +413,14 @@ virtual-machine-error: -throw
   r> scan swap r> - >r - r> 1+ ; hidden
 
 : parse ( c -- b u ; <string> )
-   >r tib >in @ + #tib @ >in @ - r> parser >in +! -trailing 0 max ; 
+   >r tib >in @ + #tib @ >in @ - r> parser >in +! -trailing 0 max ;
 : ) ; immediate
 : "(" 41 parse 2drop ; immediate
 : .( 41 parse type ;
 : "\" #tib @ >in ! ; immediate
 : ?length dup word-length u> if 19 -throw exit then ; hidden
 : word 1depth parse ?length here pack$ ;          ( c -- a ; <string> )
-: token =bl word ; 
+: token =bl word ;
 : char token count drop c@ ;               ( -- c; <string> )
 : .s ( -- ) cr depth for aft r@ pick . then next .s-string print ;
 : unused $4000 here - ; hidden
@@ -457,7 +457,7 @@ virtual-machine-error: -throw
 : make-callable chars $4000 or ; hidden ( cfa -- instruction )
 : compile, make-callable , ; ( cfa -- : compile a code field address )
 : $compile ( pwd -- )
-  dup inline? if cfa @ , exit else cfa compile, exit then ; hidden 
+  dup inline? if cfa @ , exit else cfa compile, exit then ; hidden
 : not-found 13 -throw ; hidden
 : interpret ( ??? a -- ??? : The command/compiler loop )
   find ?dup if
@@ -483,11 +483,11 @@ virtual-machine-error: -throw
 : "immediate" last $4000 toggle ;
 : .ok command? if OK print space then cr ; hidden
 : ?depth sp@ sp0 u< if 4 -throw exit then ; hidden
-: eval 
-  begin 
-    token dup count nip 
-  while 
-    interpret ?depth 
+: eval
+  begin
+    token dup count nip
+  while
+    interpret ?depth
   repeat drop _prompt @execute ; hidden
 : quit preset [ begin query ' eval catch ?error again ;
 : ok! _prompt ! ;
@@ -549,22 +549,22 @@ virtual-machine-error: -throw
 : +csp    1 cells csp +! ; hidden
 : -csp -1 cells csp +! ; hidden
 : ?unique ( a -- a : print a message if a word definition is not unique )
-  dup last seacher 
-  if 
-    2drop ( last @ nfa print ) redefined print cr exit 
-  then ; hidden 
+  dup last seacher
+  if
+    2drop ( last @ nfa print ) redefined print cr exit
+  then ; hidden
 : ?nul ( b -- : check for zero length strings )
-  count 0= if 16 -throw exit then 1- ; hidden 
+  count 0= if 16 -throw exit then 1- ; hidden
 : find-cfa token find if cfa exit else not-found exit then ; hidden
 : "'" find-cfa state @ if literal exit then ; immediate
 : [compile] ?compile find-cfa compile, ; immediate ( -- ; <string> )
 \ NB. 'compile' only works for words, instructions, and numbers below $8000 )
-: compile  r> dup @ , cell+ >r ; ( -- : Compile next compiled word )  
+: compile  r> dup @ , cell+ >r ; ( -- : Compile next compiled word )
 : "[char]" ?compile char literal ; immediate ( --, <string> : )
 \ : ?quit command? if 56 -throw exit then ; hidden
 : ";" ( ?quit ) ( ?compile ) +csp ?csp get-current ! =exit ,  [ ; immediate
-: ":" 
-   align !csp here dup last-def ! 
+: ":"
+   align !csp here dup last-def !
    last , token ?nul ?unique count + aligned cp ! ] ;
 : jumpz, chars $2000 or , ; hidden
 : jump, chars ( $0000 or ) , ; hidden
@@ -610,12 +610,12 @@ virtual-machine-error: -throw
 \     r> r> 1+ r> 2dup <> if >r >r @ >r exit then
 \     >r 1- >r cell+ >r ; hidden
 \ : [unloop] r> rdrop rdrop rdrop >r ; hidden
-\ : loop compile [loop] dup , 
+\ : loop compile [loop] dup ,
 \    compile [unloop] cell- here chars swap ! ; immediate
 \ : [i] r> r> tuck >r >r ; hidden
 \ : i ?compile compile [i] ; immediate
 \ : [?do]
-\    2dup <> if 
+\    2dup <> if
 \      r> dup >r swap rot >r >r cell+ >r exit
 \   then 2drop exit ; hidden
 \ : ?do  ?compile compile [?do] 0 , here ; immediate
@@ -623,28 +623,28 @@ virtual-machine-error: -throw
 \ : back here cell- @ ; hidden ( a -- : get previous cell )
 \ : call? back $e000 and $4000 = ; hidden ( -- f : is call )
 \ : merge? ( -- f : safe to merge exit )
-\   back dup $e000 and $6000 = swap $1c and 0= and ; hidden 
+\   back dup $e000 and $6000 = swap $1c and 0= and ; hidden
 \ : redo here cell- ! ; hidden
 \ : merge back $1c or redo ; hidden
 \ : tail-call ( -- : turn previously compiled call into tail call )
-\   back $1fff and redo ; hidden 
-\ : compile-exit 
-\     call? if 
-\       tail-call 
-\     else 
-\       merge? if 
-\         merge 
-\       else 
-\         =exit , 
-\       then 
+\   back $1fff and redo ; hidden
+\ : compile-exit
+\     call? if
+\       tail-call
+\     else
+\       merge? if
+\         merge
+\       else
+\         =exit ,
+\       then
 \   then ; hidden
-\ : compile-exit 
-\    call? if 
-\      tail-call 
-\    else 
-\      merge? 
-\      if merge 
-\    then 
+\ : compile-exit
+\    call? if
+\      tail-call
+\    else
+\      merge?
+\      if merge
+\    then
 \  then =exit , ; hidden
 \ : "exit" compile-exit ; immediate
 \ : "exit" =exit , ; immediate
@@ -728,7 +728,7 @@ virtual-machine-error: -throw
 ( @warning This disassembler is experimental, and not liable to work )
 
 : validate ( cfa pwd -- nfa | 0 )
-  tuck cfa <> if drop 0 exit else nfa exit then ; hidden 
+  tuck cfa <> if drop 0 exit else nfa exit then ; hidden
 
 ( @todo Do this for every vocabulary loaded, and name assembly instruction )
 : name ( cfa -- nfa )
@@ -755,8 +755,8 @@ virtual-machine-error: -throw
 : decompiler ( previous current -- : decompile starting at address )
   >r
    begin dup r@ u< while
-     dup 5u.r colon 
-    dup @ dup space 
+     dup 5u.r colon
+    dup @ dup space
     .instruction $4000 = if dup 5u.r space .name else 5u.r then cr cell+
    repeat rdrop drop ; hidden
 
@@ -794,11 +794,11 @@ virtual-machine-error: -throw
 : anonymous get-order 1+ here 1 cells allot swap set-order ;
 : definitions context @ set-current ;
 : (order) ( w wid*n n -- wid*n w n )
-  dup if 
-    1- swap >r (order) over r@ xor 
+  dup if
+    1- swap >r (order) over r@ xor
     if
-      1+ r> -rot exit 
-    then r> drop 
+      1+ r> -rot exit
+    then r> drop
   then ;
 : -order get-order (order) nip set-order ; ( wid -- )
 : +order dup >r -order get-order r> swap 1+ set-order ; ( wid -- )
@@ -807,7 +807,7 @@ virtual-machine-error: -throw
 : editor decimal root-voc editor-voc 2 [set-order] ;
 
 : .words space begin dup while dup .id space @address repeat drop cr ; hidden
-: [words] 
+: [words]
    get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ; hidden
 
 .set _forth-wordlist $pwd

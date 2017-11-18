@@ -310,7 +310,7 @@ virtual-machine-error: -throw
 : immediate? @ $4000 and logical ; hidden ( pwd -- f : is immediate? )
 : inline?    @ $8000 and logical ; hidden ( pwd -- f : is inline? )
 
-: seacher ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
+: searcher ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
   swap >r dup
   begin
     dup
@@ -330,14 +330,14 @@ virtual-machine-error: -throw
   begin
     dup @
   while
-    dup @ @ r@ swap seacher ?dup
+    dup @ @ r@ swap searcher ?dup
     if
       >r rot drop r> rdrop exit
     then
     cell+
   repeat drop 0 r> 0 ; hidden
 
-: search-wordlist seacher rot drop ; ( a wid -- pwd 1 | pwd -1 | a 0 )
+: search-wordlist searcher rot drop ; ( a wid -- pwd 1 | pwd -1 | a 0 )
 : find ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
   finder rot drop ;
 
@@ -549,7 +549,7 @@ virtual-machine-error: -throw
 : +csp    1 cells csp +! ; hidden
 : -csp -1 cells csp +! ; hidden
 : ?unique ( a -- a : print a message if a word definition is not unique )
-  dup last seacher
+  dup last searcher
   if
     2drop ( last @ nfa print ) redefined print cr exit
   then ; hidden

@@ -42,6 +42,10 @@ cross: meta.blk
 cross-run: cross
 	${DF}${FORTH} i meta.blk meta.blk
 
+double-cross-run: cross
+	${DF}${FORTH} f meta.blk xx.blk meta.fth
+	cmp meta.blk xx.blk
+
 static: CC=musl-gcc
 static: CFLAGS+=-static
 static: ${FORTH}

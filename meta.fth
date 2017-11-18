@@ -70,10 +70,6 @@ only forth definitions hex
 \ to be defined before it can be completed so the metacompiler and
 \ assembler are not completely separate modules
 
-\ @todo Fix the order of the vocabularies, the order should be meta, then
-\ target.1, with meta taking priority, as words like "for" will be defined
-\ in the target as well as in the meta-compiler itself.
-
 variable meta       ( Metacompilation vocabulary )
 meta +order definitions
 
@@ -99,6 +95,8 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 \ @todo Find out what words are redefined!
 
 \ : ?exit if rdrop exit then ;
+: ( [char] ) parse 2drop ; immediate
+: \ source drop @ >in ! ; immediate
 : there tcp @ ; ( -- a : target dictionary pointer value )
 : tc! #target + c! ;
 : tc@ #target + c@ ;
@@ -434,7 +432,7 @@ t: words _words execute-location t;
 t: set-order _set-order execute-location t;
 t: forth _forth execute-location t;
 \ @todo Check if this is correct
-[u] root-voc [last] t! 0 tlast s!  
+[last] [u] root-voc t! 0 tlast s!  
 
 \ === ASSEMBLY INSTRUCTIONS ===
 \ @note If assembly instructions are to be inlined, 't;' will need to be 
@@ -484,7 +482,7 @@ t: mod      mod      t;
 t: rdrop    rdrop    t;
 
 t: end-code forth _do_semi_colon execute-location t; immediate
-[u] assembler-voc [last] t! 
+[last] [u] assembler-voc t! 
 
 t: assembler root-voc assembler-voc 2 literal set-order t;
 t: ;code assembler t; immediate 
@@ -845,11 +843,10 @@ h: parser ( b u c -- b u delta )
 
 t: parse ( c -- b u t; <string> )
    >r tib >in @ + #tib @ >in @ - r> parser >in +! -trailing 0 literal max t; 
-\ @todo Add these words only to the target dictionary
-\ t: ) t; immediate
-\ t: "(" $29 literal parse 2drop t; immediate
-\ t: .( $29 literal parse type t;
-\ t: "\" #tib @ >in ! t; immediate
+t: ) t; immediate
+t: ( $29 literal parse 2drop t; immediate
+t: .( $29 literal parse type t;
+t: \ #tib @ >in ! t; immediate
 h: ?length dup word-length u> if $13 literal -throw exit then t; 
 t: word 1depth parse ?length here pack$ t;  ( c -- a ; <string> )
 t: token =bl word t; 
@@ -918,7 +915,6 @@ t: immediate last $4000 literal toggle t;
 \ @todo Implement target string literals 
 h: .ok command? if ( OK print space ) then cr t; 
 h: ?depth sp@ sp0 u< if 4 literal -throw exit then t; 
-\ @todo Implement interpret
 h: eval 
   begin 
     token dup count nip 
@@ -1093,15 +1089,15 @@ t: io! console preset t; ( -- : initialize I/O )
 \ 
 \ ( ==================== Strings ======================================= )
 \ 
-\ : do$ r> r@ r> count + aligned >r swap >r ; hidden ( -- a )
-\ : $"| do$ nop ; hidden   ( -- a : do string NB. nop to fool optimizer )
-\ : ."| do$ print ; hidden                           ( -- : print string )
-\ : $,' 34 word count + aligned cp ! ; hidden         ( -- )
-\ : $"  ?compile compile $"| $,' ; immediate         ( -- ; <string> )
-\ : ."  ?compile compile ."| $,' ; immediate         ( -- ; <string> )
-\ : abort -1 (bye) ;
-\ : {abort} do$ print cr abort ; hidden
-\ : abort" ?compile compile {abort} $,' ; immediate
+h: do$ r> r@ r> count + aligned >r swap >r t; ( -- a )
+h: $"| do$ nop t; ( -- a : do string NB. nop to fool optimizer )
+h: ."| do$ print t; ( -- : print string )
+h: $,' [char] " word count + aligned cp ! t; ( -- )
+t: $"  ?compile compile $"| $,' t; immediate         ( -- ; <string> )
+t: ."  ?compile compile ."| $,' t; immediate         ( -- ; <string> )
+t: abort -1 literal (bye) t;
+h: {abort} do$ print cr abort t; 
+\ t: abort" ?compile compile {abort} $,' t; immediate
 \ 
 \ ( ==================== Strings ======================================= )
 \ 
@@ -1152,10 +1148,9 @@ t: list
 \ ( ==================== Booting ======================================= )
 \ 
 
-\ @todo add 'forth' back into 'cold'
 t: cold 
    $10 literal block b/buf 0 literal fill 
-   $12 literal retrieve sp0 sp! io! ( forth ) t;
+   $12 literal retrieve sp0 sp! io! forth t;
 \ @todo fix print string
 t: hi hex cr ( hi-string print ) ver 0 literal u.r cr here . .free cr [ t;
 h: normal-running hi quit t; 
@@ -1214,75 +1209,79 @@ t: boot! _boot ! t; ( xt -- )
 \ 
 \ ( ==================== Vocabulary Words ============================== )
 \ 
-\ : find-empty-cell begin dup @ while cell+ repeat ; hidden ( a -- a )
-\ 
-\ : get-order ( -- widn ... wid1 n : get the current search order )
-\   context
-\   find-empty-cell
-\   dup cell- swap
-\   context - chars dup >r 1- dup 0< if 50 -throw exit then
-\   for aft dup @ swap cell- then next @ r> ;
-\ 
-\ : [set-order] ( widn ... wid1 n -- : set the current search order )
-\   dup -1  = if drop root-voc 1 [set-order] exit then
-\   dup #vocs > if 49 -throw exit then
-\   context swap for aft tuck ! cell+ then next 0 swap ! ; hidden
-\ 
-\ : previous get-order swap drop 1- [set-order] ;
-\ : also get-order over swap 1+ [set-order] ;
-\ : only -1 [set-order] ;
-\ : order get-order for aft . then next cr ;
-\ : anonymous get-order 1+ here 1 cells allot swap set-order ;
-\ : definitions context @ set-current ;
-\ : (order) ( w wid*n n -- wid*n w n )
-\   dup if 
-\     1- swap >r (order) over r@ xor 
-\     if
-\       1+ r> -rot exit 
-\     then r> drop 
-\   then ;
-\ : -order get-order (order) nip set-order ; ( wid -- )
-\ : +order dup >r -order get-order r> swap 1+ set-order ; ( wid -- )
-\ 
-\ : [forth] root-voc forth-wordlist 2 [set-order] ; hidden
-\ : editor decimal root-voc editor-voc 2 [set-order] ;
-\ 
-\ : .words space begin dup while dup .id space @address repeat drop cr ; hidden
-\ : [words] 
-\   get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ; hidden
-\ 
+h: find-empty-cell begin dup @ while cell+ repeat t; ( a -- a )
+
+t: get-order ( -- widn ... wid1 n : get the current search order )
+  context
+  find-empty-cell
+  dup cell- swap
+  context - chars dup >r 1- dup 0< if $32 literal -throw exit then
+  for aft dup @ swap cell- then next @ r> t;
+
+h: [set-order] ( widn ... wid1 n -- : set the current search order )
+  dup -1 literal  = if drop root-voc 1 literal [set-order] exit then
+  dup #vocs > if $31 literal -throw exit then
+  context swap for aft tuck ! cell+ then next 0 literal swap ! t; 
+
+t: previous get-order swap drop 1- [set-order] t;
+t: also get-order over swap 1+ [set-order] t;
+t: only -1 literal [set-order] t;
+t: order get-order for aft . then next cr t;
+t: anonymous get-order 1+ here 1 literal cells allot swap set-order t;
+t: definitions context @ set-current t;
+t: (order) ( w wid*n n -- wid*n w n )
+  dup if 
+    1- swap >r (order) over r@ xor 
+    if
+      1+ r> -rot exit 
+    then r> drop 
+  then t;
+t: -order get-order (order) nip set-order t; ( wid -- )
+t: +order dup >r -order get-order r> swap 1+ set-order t; ( wid -- )
+
+h: [forth] root-voc forth-wordlist 2 literal [set-order] t; 
+t: editor decimal root-voc editor-voc 2 literal [set-order] t;
+
+h: .words space begin dup while dup .id space @address repeat drop cr t; 
+h: [words] 
+  get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat t; 
+
+[last] [u] _forth-wordlist t!
+[u] _forth-wordlist [u] current t!
 \ .set _forth-wordlist $pwd
 \ .set current _forth-wordlist
-\ 
+
 \ ( ==================== Vocabulary Words ============================== )
 \ 
 \ ( ==================== Block Editor ================================== )
 \ 
+0 tlast s!
 \ .pwd 0
-\ : [block] blk @ block ; hidden
-\ : [check] dup b/buf c/l/ u>= if 24 -throw exit then ; hidden
-\ : [line] [check] c/l* [block] + ; hidden
-\ : b retrieve ;
-\ : l blk @ list ;
-\ : n  1 +block b l ;
-\ : p -1 +block b l ;
-\ : d [line] c/l blank ;
-\ : x [block] b/buf blank ;
-\ : s update flush ;
-\ : q forth flush ;
-\ : e forth blk @ load editor ;
-\ : ia c/l* + [block] + source drop >in @ +
-\   swap source nip >in @ - cmove call "\" ;
-\ : i 0 swap ia ;
-\ : u update ;
-\ \ : w words ;
-\ \ : yank pad c/l ; hidden
-\ \ : c [line] yank >r swap r> cmove ;
-\ \ : y [line] yank cmove ;
-\ \ : ct swap y c ;
-\ \ : ea [line] c/l evaluate ;
-\ \ : sw 2dup y [line] swap [line] swap c/l cmove c ;
+h: [block] blk @ block t; 
+h: [check] dup b/buf c/l/ u>= if $18 literal -throw exit then t; 
+h: [line] [check] c/l* [block] + t; 
+t: b retrieve t;
+t: l blk @ list t;
+t: n  1 literal +block b l t;
+t: p -1 literal +block b l t;
+t: d [line] c/l blank t;
+t: x [block] b/buf blank t;
+t: s update flush t;
+t: q forth flush t;
+t: e forth blk @ load editor t;
+ t: ia c/l* + [block] + source drop >in @ +
+   swap source nip >in @ - cmove [t] \ tcompile, t;
+ t: i 0 literal swap ia t;
+t: u update t;
+\ t: w words t;
+\ h: yank pad c/l t; hidden
+\ t: c [line] yank >r swap r> cmove t;
+\ t: y [line] yank cmove t;
+\ t: ct swap y c t;
+\ t: ea [line] c/l evaluate t;
+\ t: sw 2dup y [line] swap [line] swap c/l cmove c t;
 \ .set editor-voc $pwd
+[last] [u] editor-voc t!
 \ 
 \ ( ==================== Block Editor ================================== )
  
@@ -1298,18 +1297,19 @@ t: test-word
     999 literal . cr
     test-constant tx! 
     test-variable @ tx!
-    6b literal emit
+    6b literal emit 
     6b literal tx! cr bye t;
   \ begin rx? tx! again t;
   \ begin test-constant tx! again t;
 
-\ @todo Many variables need setting before things will work, like
-\ _emit, cp, etcetera. 
+there           [u] cp t!
+\ [t] :           [u] _do_colon t!
+\ [t] ;           [u] _do_semi_colon t!
+[t] [forth]     [u] _forth t!
+[t] [set-order] [u] _set-order t!
+[t] [words]     [u] _words t!
 [t] boot 2/ 0 t! ( set starting word )
-[t] test-word [u] _boot t!
-
-\ .set cp  $pc
-there [u] cp t!
+[t] normal-running [u] _boot t!
 
 \ .set _do_colon      ":"
 \ .set _do_semi_colon ";"

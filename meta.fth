@@ -111,14 +111,14 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 : t,  there t!  =cell tcp +! ;
 : tallot tcp +! ;
 \ @todo this needs testing
-: $literal" [char] " word count dup tc, 1- for count tc, next drop talign ;
+: $literal [char] " word count dup tc, 1- for count tc, next drop talign ;
 : s! ! ;
 : dump-hex #target there 16 + dump ;
 : display ( -- : display metacompilation and target information )
   verbose 0= if exit then
   hex
   ." META COMPILATION COMPLETE" cr
-  dump-hex
+  dump-hex cr
   ." META: "       meta        . cr
   ." TARGET: "     target.1    . cr
   ." ASSEMBLER: "  assembler.1 . cr
@@ -298,6 +298,7 @@ a: return ( -- : Compile a return into the target )
 : constant tcreate , does> @ literal ;
 : [char] char literal ;
 : tcompile, [a] call ;
+: tcall [t] tcompile, ;
 
 \ Instructions
 
@@ -347,8 +348,10 @@ a: return ( -- : Compile a return into the target )
 \ @todo make a more compact 'next' construct
 : next r@ while r> 1- >r repeat r> drop ; 
 
-\ @todo construct =invert with the assembler 
+\ @todo construct =invert, =exit, =>r with the assembler 
 $6a00 constant =invert     ( invert instruction )
+$601c constant =exit       ( return/exit instruction )
+$6147 constant =>r         ( to return stack instruction )
 $20   constant =bl         ( blank, or space )
 $d    constant =cr         ( carriage return )
 $a    constant =lf         ( line feed )
@@ -500,17 +503,6 @@ $400  tconstant b/buf ( size of a block )
 $1984 tconstant ver   ( eForth version )
 
 \ location .s-string     " <sp"        ( used by .s )
-\ location see.unknown   "???"         ( used by 'see' for unknown words )
-\ location see.lit       "LIT"         ( decompilation -> literal )
-\ location see.alu       "ALU"         ( decompilation -> ALU operation )
-\ location see.call      "CAL"         ( decompilation -> Call )
-\ location see.branch    "BRN"         ( decompilation -> Branch )
-\ location see.0branch   "BRZ"         ( decompilation -> 0 Branch )
-\ location see.immediate " immediate " ( used by "see", for immediate words )
-\ location see.inline    " inline "    ( used by "see", for inline words )
-\ location OK            " ok"         ( used by "prompt" )
-\ location redefined     " redefined"  ( used by ":" when a word is redefined )
-\ location hi-string     "eFORTH V"    ( used by "hi" )
 
 \ === ASSEMBLY INSTRUCTIONS ===
 t: 2drop drop drop t;       ( n n -- )
@@ -912,8 +904,12 @@ h: interpret ( ??? a -- ??? : The command/compiler loop )
   then t; 
  
 t: immediate last $4000 literal toggle t;
+h: do$ r> r@ r> count + aligned >r swap >r t; ( -- a )
+h: $"| do$ nop t; ( -- a : do string NB. nop to fool optimizer )
+h: ."| do$ print t; ( -- : print string )
+
 \ @todo Implement target string literals 
-h: .ok command? if ( OK print space ) then cr t; 
+h: .ok command? if ."| $literal  ok  " space then cr t; 
 h: ?depth sp@ sp0 u< if 4 literal -throw exit then t; 
 h: eval 
   begin 
@@ -975,65 +971,64 @@ t: io! console preset t; ( -- : initialize I/O )
 \ ( ==================== Advanced I/O Control ========================== )
 \ 
 \ ( ==================== Control Structures ============================ )
-\ 
-\ : !csp sp@ csp ! ; hidden
-\ : ?csp sp@ csp @ xor if 22 -throw exit then ; hidden
-\ : +csp    1 cells csp +! ; hidden
-\ : -csp -1 cells csp +! ; hidden
-\ : ?unique ( a -- a : print a message if a word definition is not unique )
-\   dup last seacher 
-\   if 
-\     2drop ( last @ nfa print ) redefined print cr exit 
-\   then ; hidden 
-\ : ?nul ( b -- : check for zero length strings )
-\   count 0= if 16 -throw exit then 1- ; hidden 
-\ : find-cfa token find if cfa exit else not-found exit then ; hidden
-\ : "'" find-cfa state @ if literal exit then ; immediate
-\ : [compile] ?compile find-cfa compile, ; immediate ( -- ; <string> )
-\ \ NB. 'compile' only works for words, instructions, and numbers below $8000 )
-\ : compile  r> dup @ , cell+ >r ; ( -- : Compile next compiled word )  
-\ : "[char]" ?compile char literal ; immediate ( --, <string> : )
-\ \ : ?quit command? if 56 -throw exit then ; hidden
-\ : ";" ( ?quit ) ( ?compile ) +csp ?csp get-current ! =exit ,  [ ; immediate
-\ : ":" 
-\    align !csp here dup last-def ! 
-\    last , token ?nul ?unique count + aligned cp ! ] ;
-\ : jumpz, chars $2000 or , ; hidden
-\ : jump, chars ( $0000 or ) , ; hidden
-\ : "begin" ?compile here -csp ; immediate
-\ : "until" ?compile jumpz, +csp ; immediate
-\ : "again" ?compile jump, +csp ; immediate
-\ : here-0 here 0 ; hidden
-\ : "if" ?compile here-0 jumpz, -csp ; immediate
-\ : doThen  here chars over @ or swap ! ; hidden
-\ : "then" ?compile doThen +csp ; immediate
-\ : "else" ?compile here-0 jump, swap doThen ; immediate
-\ : "while" ?compile call "if" ; immediate
-\ : "repeat" ?compile swap call "again" call "then" ; immediate
-\ : last-cfa last-def @ cfa ; hidden ( -- u )
-\ : recurse ?compile last-cfa compile, ; immediate
-\ : tail ?compile last-cfa jump, ; immediate
-\ : create call ":" compile doVar get-current ! [ ;
-\ : >body cell+ ;
-\ : doDoes r> chars here chars last-cfa dup cell+ doLit ! , ; hidden
-\ : does> ?compile compile doDoes nop ; immediate
-\ : "variable" create 0 , ;
-\ : "constant" create ' doConst make-callable here cell- ! , ;
-\ : ":noname" here ] !csp ;
-\ : "for" ?compile =>r , here -csp ; immediate
-\ : "next" ?compile compile doNext , +csp ; immediate
-\ : "aft" ?compile drop here-0 jump, call "begin" swap ; immediate
-\ : doer create =exit last-cfa ! =exit ,  ;
-\ : make
-\   find-cfa find-cfa make-callable
-\   state @
-\   if
-\     literal literal compile ! exit
-\   else
-\     swap ! exit
-\   then ; immediate
-\ 
-\ 
+
+h: !csp sp@ csp ! t; 
+h: ?csp sp@ csp @ xor if $16 literal -throw exit then t; 
+h: +csp  1 literal cells csp +! t; 
+h: -csp -1 literal cells csp +! t; 
+\ @todo print message
+h: ?unique ( a -- a : print a message if a word definition is not unique )
+  dup last seacher 
+  if 
+    2drop ( last @ nfa print ) ."| $literal redefined " cr exit 
+  then t;  
+h: ?nul ( b -- : check for zero length strings )
+   count 0= if $a literal -throw exit then 1- t; 
+h: find-cfa token find if cfa exit else not-found exit then t; 
+t: ' find-cfa state @ if tcall literal exit then t; immediate 
+t: [compile] ?compile find-cfa compile, t; immediate  ( -- ; <string> )  
+\ NB. 'compile' only works for words, instructions, and numbers below $8000
+t: compile  r> dup @ , cell+ >r t; ( -- : Compile next compiled word )  
+t: [char] ?compile char tcall literal t; immediate ( --, <string> : ) 
+h: ?quit command? if $38 literal -throw exit then t; 
+t: ; ( ?quit ) ( ?compile ) +csp ?csp get-current ! =exit ,  [ t; immediate
+t: : align !csp here dup last-def ! 
+    last , token ?nul ?unique count + aligned cp ! ] t;
+h: jumpz, chars $2000 literal or , t; 
+h: jump, chars ( $0000 literal or ) , t; 
+t: begin ?compile here -csp t; immediate
+t: until ?compile jumpz, +csp t; immediate
+t: again ?compile jump, +csp t; immediate
+h: here-0 here 0 literal t; 
+t: if ?compile here-0 jumpz, -csp t; immediate
+h: doThen  here chars over @ or swap ! t; 
+t: then ?compile doThen +csp t; immediate
+t: else ?compile here-0 jump, swap doThen t; immediate
+t: while ?compile tcall if t; immediate
+t: repeat ?compile swap tcall again tcall then t; immediate
+h: last-cfa last-def @ cfa t;  ( -- u )
+t: recurse ?compile last-cfa compile, t; immediate
+t: tail ?compile last-cfa jump, t; immediate
+t: create tcall : compile doVar get-current ! [ t;
+t: >body cell+ t;
+h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , t; 
+t: does> ?compile compile doDoes nop t; immediate
+t: variable create 0 literal , t;
+t: constant create [t] doConst literal make-callable here cell- ! , t;
+t: :noname here ] !csp t;
+t: for ?compile =>r , here -csp t; immediate
+t: next ?compile compile doNext , +csp t; immediate
+t: aft ?compile drop here-0 jump, tcall begin swap t; immediate
+t: doer create =exit last-cfa ! =exit ,  t;
+t: make
+  find-cfa find-cfa make-callable
+  state @
+  if
+    tcall literal tcall literal compile ! exit
+  else
+    swap ! exit
+  then t; immediate
+ 
 \ \ : [leave] rdrop rdrop rdrop ; hidden
 \ \ : leave ?compile compile [leave] ; immediate
 \ \ : [do] r> dup >r swap rot >r >r cell+ >r ; hidden
@@ -1089,15 +1084,12 @@ t: io! console preset t; ( -- : initialize I/O )
 \ 
 \ ( ==================== Strings ======================================= )
 \ 
-h: do$ r> r@ r> count + aligned >r swap >r t; ( -- a )
-h: $"| do$ nop t; ( -- a : do string NB. nop to fool optimizer )
-h: ."| do$ print t; ( -- : print string )
 h: $,' [char] " word count + aligned cp ! t; ( -- )
 t: $"  ?compile compile $"| $,' t; immediate         ( -- ; <string> )
 t: ."  ?compile compile ."| $,' t; immediate         ( -- ; <string> )
 t: abort -1 literal (bye) t;
 h: {abort} do$ print cr abort t; 
-\ t: abort" ?compile compile {abort} $,' t; immediate
+t: abort" ?compile compile {abort} $,' t; immediate \ "
 \ 
 \ ( ==================== Strings ======================================= )
 \ 
@@ -1146,13 +1138,13 @@ t: list
 \ ( ==================== Block Word Set ================================ )
 \ 
 \ ( ==================== Booting ======================================= )
-\ 
 
 t: cold 
    $10 literal block b/buf 0 literal fill 
    $12 literal retrieve sp0 sp! io! forth t;
 \ @todo fix print string
-t: hi hex cr ( hi-string print ) ver 0 literal u.r cr here . .free cr [ t;
+t: hi hex cr ."| $literal eFORTH V " ver 0 literal 
+u.r cr here . .free cr [ t;
 h: normal-running hi quit t; 
 h: boot cold _boot @execute bye t; 
 t: boot! _boot ! t; ( xt -- )
@@ -1160,50 +1152,63 @@ t: boot! _boot ! t; ( xt -- )
 \ ( ==================== Booting ======================================= )
 \ 
 \ ( ==================== See =========================================== )
-\ 
+\ location see.unknown   "???"         ( used by 'see' for unknown words )
+\ location see.lit       "LIT"         ( decompilation -> literal )
+\ location see.alu       "ALU"         ( decompilation -> ALU operation )
+\ location see.call      "CAL"         ( decompilation -> Call )
+\ location see.branch    "BRN"         ( decompilation -> Branch )
+\ location see.0branch   "BRZ"         ( decompilation -> 0 Branch )
+\ location see.immediate " immediate " ( used by "see", for immediate words )
+\ location see.inline    " inline "    ( used by "see", for inline words )
+ 
 \ ( @warning This disassembler is experimental, and not liable to work )
 \ 
-\ : validate ( cfa pwd -- nfa | 0 )
-\   tuck cfa <> if drop 0 exit else nfa exit then ; hidden 
-\ 
-\ ( @todo Do this for every vocabulary loaded, and name assembly instruction )
-\ : name ( cfa -- nfa )
-\   address cells >r
-\   \ last
-\   context @ @address
-\   begin
-\     dup
-\   while
-\     address dup r@ swap dup @ address swap within ( simplify? )
-\     if @address r> swap validate exit then
-\     address @
-\   repeat rdrop ; hidden
-\ 
-\ : .name name ?dup 0= if see.unknown then print ; hidden
-\ 
-\ : .instruction ( instruction -- masked )
-\   dup $8000 and          if drop $8000 see.lit     print exit then
-\   dup $6000  and $6000 = if drop $6000 see.alu     print exit then
-\   dup $6000  and $4000 = if drop $4000 see.call    print exit then
-\       $6000  and $2000 = if      $2000 see.0branch print exit then
-\   0 see.branch print ; hidden
-\ 
-\ : decompiler ( previous current -- : decompile starting at address )
-\   >r
-\    begin dup r@ u< while
-\      dup 5u.r colon 
-\     dup @ dup space 
-\     .instruction $4000 = if dup 5u.r space .name else 5u.r then cr cell+
-\    repeat rdrop drop ; hidden
-\ 
-\ : see ( --, <string> : decompile a word )
-\   token finder 0= if not-found exit then
-\   swap 2dup = if drop here then >r
-\   cr colon space dup .id space dup
-\   cr
-\   cfa r> decompiler space 59 emit
-\   dup inline?    if see.inline    print then
-\       immediate? if see.immediate print then cr ;
+h: validate ( cfa pwd -- nfa | 0 )
+  tuck cfa <> if drop 0 literal exit else nfa exit then t; 
+
+( @todo Do this for every vocabulary loaded, and name assembly instruction )
+h: name ( cfa -- nfa )
+  address cells >r
+  \ last
+  context @ @address
+  begin
+    dup
+  while
+    address dup r@ swap dup @ address swap within ( simplify? )
+    if @address r> swap validate exit then
+    address @
+  repeat rdrop t; 
+
+h: .name name ?dup 0= if $"| $literal ??? " then print t; 
+
+h: .instruction ( instruction -- masked )
+  dup $8000 literal and                 
+    if drop $8000 literal ."| $literal LIT " exit then
+  dup $6000 literal and $6000 literal = 
+    if drop $6000 literal ."| $literal ALU " exit then
+  dup $6000 literal and $4000 literal = 
+    if drop $4000 literal ."| $literal CAL " exit then
+      $6000 literal and $2000 literal = 
+    if      $2000 literal ."| $literal BRN " exit then
+  0 literal ."| $literal BRZ " nop t; 
+
+h: decompiler ( previous current -- : decompile starting at address )
+  >r
+   begin dup r@ u< while
+     dup 5u.r colon 
+    dup @ dup space 
+    .instruction $4000 literal = 
+    if dup 5u.r space .name else 5u.r then cr cell+
+   repeat rdrop drop t; 
+
+t: see ( --, <string> : decompile a word )
+  token finder 0= if not-found exit then
+  swap 2dup = if drop here then >r
+  cr colon space dup .id space dup
+  cr
+  cfa r> decompiler space $3b literal emit
+  dup inline?    if ."| $literal inline " then
+      immediate? if ."| $literal immediate " then cr t;
 \ 
 \ ( ==================== See =========================================== )
 \ 
@@ -1303,8 +1308,8 @@ t: test-word
   \ begin test-constant tx! again t;
 
 there           [u] cp t!
-\ [t] :           [u] _do_colon t!
-\ [t] ;           [u] _do_semi_colon t!
+[t] :           [u] _do_colon t!
+[t] ;           [u] _do_semi_colon t!
 [t] [forth]     [u] _forth t!
 [t] [set-order] [u] _set-order t!
 [t] [words]     [u] _words t!

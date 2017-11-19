@@ -22,6 +22,8 @@ constant rp0           $7fff hidden ( start of return stack )
 entry:             .allocate 2 ( Entry point - not an interrupt )
 error:             .allocate 2 ( Error vector )
 
+.allocate 18
+
 location cp               0 ( Dictionary Pointer: Set at end of file )
 location root-voc         0 ( root vocabulary )
 location editor-voc       0 ( editor vocabulary )

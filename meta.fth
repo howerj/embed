@@ -255,8 +255,8 @@ a: return ( -- : Compile a return into the target )
   safe?  if alu>return exit then
   [a] return ;
 
-: inline  tlast @ t@ $8000 or tlast  @ t! ;
-: immediate tlast @ t@ $4000 or tlast  @ t! ;
+: inline    tlast @ t@ $8000 or tlast @ t! ;
+: immediate tlast @ t@ $4000 or tlast @ t! ;
 
 \ create a word in the metacompilers dictionary, not the targets
 : tcreate get-current >r target.1 set-current create r> set-current ;
@@ -535,18 +535,22 @@ $400     tconstant b/buf ( size of a block )
 
 \ === ASSEMBLY INSTRUCTIONS ===
 
-h: dup-@ dup @ t;           ( a -- a u )
-h: swap! swap ! t;          ( a u -- )
-h: [-1] -1 literal t;       ( -- -1 : space saving measure, push -1 )
-h: eof [-1] t;              ( -- : constant for End of File marker )
-t: 2drop drop drop t;       ( n n -- )
+h: dup-@ dup @ t;            ( a -- a u )
+h: swap! swap ! t;           ( a u -- )
+h: [-1] -1 literal t;        ( -- -1 : space saving measure, push -1 )
+h: eof [-1] t;               ( -- : constant for End of File marker )
+t: 2drop drop drop t;        ( n n -- )
+h: drop-0 drop 0 literal t;  ( n -- 0 )
 h: 2drop-0 2drop 0 literal t; ( n n -- 0 )
-t: 1+ 1 literal + t;        ( n -- n : increment a value  )
-t: negate invert 1+ t;      ( n -- n : negate a number )
-t: - negate + t;            ( n1 n2 -- n : subtract n1 from n2 )
-h: over- over - t;          ( u u -- u u )
-h: in! >in ! t;             ( u -- )
+h: state@ state @ t;         ( -- u )
+t: 1+ 1 literal + t;         ( n -- n : increment a value  )
+t: negate invert 1+ t;       ( n -- n : negate a number )
+t: - negate + t;             ( n1 n2 -- n : subtract n1 from n2 )
+h: over- over - t;           ( u u -- u u )
+h: in! >in ! t;              ( u -- )
+h: in@ >in @ t;              ( -- u )
 t: aligned dup 1 literal and + t;   ( b -- a )
+h: cp! aligned cp ! t;               ( n -- )
 t: bye 0 literal (bye) t;    ( -- : leave the interpreter )
 t: cell- cell - t;           ( a -- a : adjust address to previous cell )
 t: cell+ cell + t;           ( a -- a : move address forward to next cell )
@@ -577,11 +581,11 @@ t: c!                       ( c b -- )
   >r over xor r> and xor swap ( -2 and ) ! t;
 t: 2! ( d a -- ) tuck ! cell+ ! t;     ( n n a -- )
 t: 2@ ( a -- d ) dup cell+ @ swap @ t; ( a -- n n )
-t: command? state @ 0= t;     ( -- f )
+t: command? state@ 0= t;     ( -- f )
 t: get-current current @ t;
 t: set-current current ! t;
 t: here cp @ t;               ( -- a )
-t: align here aligned cp ! t; ( -- )
+t: align here cp! t; ( -- )
 
 t: source #tib 2@ t;                    ( -- a u )
 t: source-id id @ t;                    ( -- 0 | -1 )
@@ -649,7 +653,7 @@ t: catch
   rp@ handler !
   execute
   r> handler !
-  r> drop 0 literal t;
+  r> drop-0 t;
 
 t: throw
   ?dup if
@@ -751,7 +755,7 @@ t: accept ( b u -- b u )
   repeat drop over- t;
 
 t: expect ( b u -- ) _expect @execute span ! drop t;
-t: query tib tib-length _expect @execute #tib ! drop 0 literal in! t; ( -- )
+t: query tib tib-length _expect @execute #tib ! drop-0 in! t; ( -- )
 
 t: =string ( a1 u2 a1 u2 -- f : string equality )
   >r swap r> ( a1 a2 u1 u2 )
@@ -795,7 +799,7 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
       >r rot drop r> rdrop exit
     then
     cell+
-  repeat drop 0 literal r> 0 literal t;
+  repeat drop-0 r> 0 literal t;
 
 t: search-wordlist searcher rot drop t; ( a wid -- pwd 1 | pwd -1 | a 0 )
 t: find ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
@@ -878,7 +882,7 @@ h: parser ( b u c -- b u delta )
   r> scanner swap r> - >r - r> 1+ t;
 
 t: parse ( c -- b u t; <string> )
-   >r tib >in @ + #tib @ >in @ - r> parser >in +! -trailing 0 literal max t;
+   >r tib in@ + #tib @ in@ - r> parser >in +! -trailing 0 literal max t;
 t: ) t; immediate
 t: ( $29 literal parse 2drop t; immediate \ )
 t: .( $29 literal parse type t;
@@ -906,7 +910,7 @@ h: ?error ( n -- : perform actions on error )
   then t;
 
 h: ?dictionary dup $3f00 literal u> if 8 literal -throw exit then t;
-t: , here dup cell+ ?dictionary aligned cp ! ! t; ( u -- )
+t: , here dup cell+ ?dictionary cp! ! t; ( u -- )
 t: c, here ?dictionary c! cp 1+! t; ( c -- : store 'c' in the dictionary )
 h: doLit $8000 literal or , t;
 h: ?compile command? if $e literal -throw exit then t;
@@ -933,7 +937,7 @@ h: not-found $d literal -throw t;
 
 h: interpret ( ??? a -- ??? : The command/compiler loop )
   find ?dup if
-    state @
+    state@
     if
       0> if \ immediate
         cfa execute exit
@@ -946,7 +950,7 @@ h: interpret ( ??? a -- ??? : The command/compiler loop )
   else \ not a word
     dup count number? if
       nip
-      state @ if [t] literal tcompile, exit then
+      state@ if [t] literal tcompile, exit then
     else
       drop space print not-found exit
     then
@@ -972,7 +976,7 @@ t: ok! _prompt ! t;
 t: evaluate ( a u -- )
   _prompt @ >r  0 literal  ok!
   id      @ >r [-1]        id !
-  >in     @ >r  0 literal  in!
+  in@       >r  0 literal  in!
   source >r >r
   #tib 2!
   [t] eval literal catch
@@ -1032,7 +1036,7 @@ h: ?unique ( a -- a : print a message if a word definition is not unique )
 h: ?nul ( b -- : check for zero length strings )
    count 0= if $a literal -throw exit then 1- t;
 h: find-cfa token find if cfa exit else not-found exit then t;
-t: ' find-cfa state @ if tcall literal exit then t; immediate
+t: ' find-cfa state@ if tcall literal exit then t; immediate
 t: [compile] ?compile find-cfa compile, t; immediate  ( -- ; <string> )
 \ NB. 'compile' only works for words, instructions, and numbers below $8000
 t: compile  r> dup-@ , cell+ >r t; ( -- : Compile next compiled word )
@@ -1040,7 +1044,7 @@ t: [char] ?compile char tcall literal t; immediate ( --, <string> : )
 h: ?quit command? if $38 literal -throw exit then t;
 t: ; ( ?quit ) ( ?compile ) ?check get-current ! =exit ,  [ t; immediate
 t: : align here dup last-def !
-    last , token ?nul ?unique count + aligned cp ! $cafe literal ] t;
+    last , token ?nul ?unique count + cp! $cafe literal ] t;
 h: jumpz, chars $2000 literal or , t;
 h: jump, chars ( $0000 literal or ) , t;
 t: begin ?compile here  t; immediate
@@ -1069,7 +1073,7 @@ t: aft ?compile drop here-0 jump, tcall begin swap t; immediate
 t: doer create =exit last-cfa ! =exit ,  t;
 t: make
   find-cfa find-cfa make-callable
-  state @
+  state@
   if
     tcall literal tcall literal compile ! exit
   else
@@ -1102,7 +1106,7 @@ t: .s ( -- ) cr depth for aft r@ pick . then next ."| $literal  <sp "  t;
 \
 \ ( ==================== Strings ======================================= )
 \
-h: $,' [char] " word count + aligned cp ! t; ( -- )
+h: $,' [char] " word count + cp! t; ( -- )
 t: $"  ?compile compile $"| $,' t; immediate         ( -- ; <string> )
 t: ."  ?compile compile ."| $,' t; immediate         ( -- ; <string> )
 t: abort [-1] (bye) t;
@@ -1155,7 +1159,8 @@ h: [words]
 \ ( ==================== Block Word Set ================================ )
 \
 t: update [-1] block-dirty ! t;          ( -- )
-h: +block blk @ + t;               ( -- )
+h: blk-@ blk @ t;
+h: +block blk-@ + t;               ( -- )
 t: save ( -1 ) 0 literal here (save) throw t;
 t: flush block-dirty @ if 0 literal [-1] (save) throw exit then t;
 
@@ -1213,7 +1218,7 @@ t: boot! _boot ! t; ( xt -- )
 \ @warning This disassembler is experimental, and not liable to work
 
 h: validate ( cfa pwd -- nfa | 0 )
-  tuck cfa <> if drop 0 literal exit else nfa exit then t;
+  tuck cfa <> if drop-0 exit else nfa exit then t;
 
 \ @todo Do this for every vocabulary loaded, and name assembly instruction
 h: name ( cfa -- nfa )
@@ -1267,20 +1272,20 @@ t: see ( --, <string> : decompile a word )
 \ ( ==================== Block Editor ================================== )
 
 0 tlast s!
-h: [block] blk @ block t;
+h: [block] blk-@ block t;
 h: [check] dup b/buf c/l/ u>= if $18 literal -throw exit then t;
 h: [line] [check] c/l* [block] + t;
 t: b retrieve t;
-t: l blk @ list t;
+t: l blk-@ list t;
 t: n  1 literal +block b l t;
 t: p [-1] +block b l t;
 t: d [line] c/l blank t;
 t: x [block] b/buf blank t;
 t: s update flush t;
 t: q forth flush t;
-t: e forth blk @ load editor t;
-t: ia c/l* + [block] + source drop >in @ +
-   swap source nip >in @ - cmove [t] \ tcompile, t;
+t: e forth blk-@ load editor t;
+t: ia c/l* + [block] + source drop in@ +
+   swap source nip in@ - cmove [t] \ tcompile, t;
 t: i 0 literal swap ia t;
 t: u update t;
 \ t: w words t;

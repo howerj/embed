@@ -2,7 +2,7 @@ CFLAGS=-O2 -std=c99 -Wall -Wextra
 CC=gcc
 EXE=
 DF=
-.PHONY: all clean run cross cross-run default static
+.PHONY: all clean run cross cross-run double-cross default static
 
 default: all
 
@@ -42,7 +42,7 @@ cross: meta.blk
 cross-run: cross
 	${DF}${FORTH} i meta.blk meta.blk
 
-double-cross-run: cross
+double-cross: cross
 	${DF}${FORTH} f meta.blk xx.blk meta.fth
 	cmp meta.blk xx.blk
 

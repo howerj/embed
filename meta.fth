@@ -79,14 +79,16 @@ variable tcp           ( Target dictionary pointer )
 variable tlast         ( Last defined word in target )
 variable tdoVar        ( Location of doVar in target )
 variable tdoConst      ( Location of doConst in target )
+variable tdoNext       ( Location of doNext in target )
+variable fence         ( Do not peephole optimize before this point )
 5000 constant #target  ( Memory location where the target image will be built )
 2000 constant #max     ( Max number of cells in generated image )
 2    constant =cell    ( Target cell size )
 \ @todo Currently optimizations break things, this needs fixing.
-0    constant optimize ( Turn optimizations on [-1] or off [0] )
+-1   constant optimize ( Turn optimizations on [-1] or off [0] )
 variable header -1 header ! ( If true Headers in the target will be generated )
 
--1   constant verbose  ( )
+1   constant verbose  ( )
 #target #max 0 fill    ( Erase the target memory location )
 
 : ]asm assembler.1 +order ; immediate ( -- )
@@ -113,18 +115,24 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 : t,  there t!  =cell tcp +! ;
 : tallot tcp +! ;
 : $literal [char] " word count dup tc, 1- for count tc, next drop talign ;
+: tcells =cell * ;
+: tbody 1 tcells + ;
 : s! ! ;
 : dump-hex #target there 16 + dump ;
+: update-fence there fence ! ;
 : display ( -- : display metacompilation and target information )
   verbose 0= if exit then
   hex
   ." META COMPILATION COMPLETE" cr
-  dump-hex cr
+  verbose 2 = if 
+    dump-hex cr 
+    ." TARGET DICTIONARY: " cr
+    words 
+  then
+
   ." META: "       meta        . cr
   ." TARGET: "     target.1    . cr
   ." ASSEMBLER: "  assembler.1 . cr
-  ." TARGET DICTIONARY: " cr
-  words
   ." HOST: "       here        . cr
   ." TARGET: "     there       . cr ;
 : save-hex ( -- : save target binary to file )
@@ -213,18 +221,48 @@ a: return ( -- : Compile a return into the target )
 
 \ @todo Improve with fence variable set by control structures
 \ @todo Use optimizer from "eforth.fth"
+
+\ : back here cell- @ ; hidden ( a -- : get previous cell )
+\ : call? back $e000 and $4000 = ; hidden ( -- f : is call )
+\ : merge? ( -- f : safe to merge exit )
+\   back dup $e000 and $6000 = swap $1c and 0= and ; hidden
+\ : redo here cell- ! ; hidden
+\ : merge back $1c or redo ; hidden
+\ : tail-call ( -- : turn previously compiled call into tail call )
+\   back $1fff and redo ; hidden
+\ : compile-exit
+\     call? if
+\       tail-call
+\     else
+\       merge? if
+\         merge
+\       else
+\         =exit ,
+\       then
+\   then ; hidden
+\ : compile-exit
+\    call? if
+\      tail-call
+\    else
+\      merge?
+\      if merge
+\    then
+\  then =exit , ; hidden
+\ : "exit" compile-exit ; immediate
+\ : "exit" =exit , ; immediate
+
 : lookback there =cell - t@ ;
 : call? lookback e000 and 4000 = ;
 : call>goto there =cell - dup t@ 1fff and swap t! ;
-: safe? lookback e000 and 6000 = lookback 004c and 0= and ;
+: fence? fence @ there =cell - u> ;
+: safe? lookback e000 and 6000 = lookback 001f and 0= and ;
 : alu>return there =cell - dup t@ [a] r->pc [a] r-1 swap t! ;
+
 : exit,
-  call? if
-   call>goto else safe? if
-    alu>return else
-	 [a] return
-   then
-  then ;
+  fence? if [a] return exit then
+  call?  if call>goto  exit then
+  safe?  if alu>return exit then
+  [a] return ;
 
 : inline  tlast @ t@ $8000 or tlast  @ t! ;
 : immediate tlast @ t@ $4000 or tlast  @ t! ;
@@ -258,6 +296,8 @@ a: return ( -- : Compile a return into the target )
 \ @todo Increase efficiency of these variable and constant, when metacompiling
 \ constants, the constant itself should be compiled as a literal if and only
 \ if the number can be stored in a single cell (is less than $7fff)
+\ @todo Change constant/variable method depending on optimization level
+\ @todo Abort if tdoConst or tdoVar are zero
 
 : tconstant ( "name", n -- , Run Time: -- n )
   >r
@@ -265,7 +305,8 @@ a: return ( -- : Compile a return into the target )
   thead
   there tdoConst @ [a] call r> t, >r
   tcreate r> ,
-  does> @ [a] call ;
+  does> @ tbody t@ [a] literal ;
+  \ @ [a] call ;
 
 : tvariable ( "name", n -- , Run Time: -- a )
   >r
@@ -273,7 +314,8 @@ a: return ( -- : Compile a return into the target )
   thead
   there tdoVar @ [a] call r> t, >r
   tcreate r> ,
-  does> @ [a] call ;
+  does> @ tbody [a] literal ;
+  \ @ [a] call ;
 
 : tlocation ( "name", n -- : Reserve space in target for a memory location )
   header @ >r 0 header ! tvariable r> header !  ;
@@ -284,10 +326,10 @@ a: return ( -- : Compile a return into the target )
 : [u] [t] =cell + ;
 
 : literal [a] literal ;
-: begin  there ;
+: begin  there update-fence ;
 : until  [a] ?branch ;
-: if     there 0 [a] ?branch ;
-: skip   there 0 [a] branch ;
+: if     there update-fence 0 [a] ?branch  ;
+: skip   there update-fence 0 [a] branch ;
 : then   begin 2/ over t@ or swap t! ;
 : else   skip swap then ;
 : while  if swap ;
@@ -298,6 +340,7 @@ a: return ( -- : Compile a return into the target )
 : [char] char literal ;
 : tcompile, [a] call ;
 : tcall [t] tcompile, ;
+: next tdoNext @ [a] call t, update-fence ;
 
 \ Instructions
 
@@ -345,7 +388,7 @@ a: return ( -- : Compile a return into the target )
 
 : for >r begin ;
 \ @todo make a more compact 'next' construct
-: next r@ while r> 1- >r repeat r> drop ;
+\ : next r@ while r> 1- >r repeat r> drop ;
 
 \ @todo construct =invert, =exit, =>r with the assembler
 $6a00 constant =invert     ( invert instruction )
@@ -496,9 +539,9 @@ $400  tconstant b/buf ( size of a block )
 0     tvariable blk   ( current blk loaded, set in 'cold' )
 $1984 tconstant ver   ( eForth version )
 
-\ location .s-string     " <sp"        ( used by .s )
-
 \ === ASSEMBLY INSTRUCTIONS ===
+
+t: [-1] -1 literal t;       ( -- -1 : space saving measure, push -1 )
 t: 2drop drop drop t;       ( n n -- )
 t: 1+ 1 literal + t;        ( n -- n : increment a value  )
 t: negate invert 1+ t;      ( n -- n : negate a number )
@@ -521,7 +564,7 @@ t: 2dup over over t;         ( n1 n2 -- n1 n2 n1 n2 )
 t: tuck swap over t;         ( n1 n2 -- n2 n1 n2 )
 t: +! tuck @ + swap ! t;     ( n a -- : increment value at address by 'n' )
 t: 1+!  1 literal swap +! t; ( a -- : increment value at address by 1 )
-t: 1-! -1 literal swap +! t; ( a -- : decrement value at address by 1 )
+t: 1-! [-1] swap +! t;       ( a -- : decrement value at address by 1 )
 t: execute >r t;             ( cfa -- : execute a function )
 t: c@ dup  @ swap 1 literal and
    if
@@ -554,6 +597,7 @@ t: -rot swap >r swap r> t;              ( n1 n2 n3 -- n3 n1 n2 )
 \ h: 2>r r> -rot >r >r >r t;            ( u1 u2 --, R: -- u1 u2 )
 \ h: 2r> r> r> r> rot >r t;             ( -- u1 u2, R: u1 u2 -- )
 h: doNext r> r> ?dup if 1- >r @ >r exit then cell+ >r t;
+[t] doNext tdoNext s!
 t: min 2dup < if drop exit else nip exit then t; ( n n -- n )
 t: max 2dup > if drop exit else nip exit then t; ( n n -- n )
 h: >char $7f literal and dup $7f literal =bl within
@@ -586,7 +630,7 @@ h: typist ( b u f -- : print a string )
   repeat
   rdrop 2drop t;
 t: type 0 literal typist t;                           ( b u -- )
-h: $type -1 literal typist t;
+h: $type [-1] typist t;
 h: print count type t;                ( b -- )
 h: decimal? $30 literal $3a literal within t; ( c -- f : decimal char? )
 h: lowercase? [char] a [char] { within t;   ( c -- f )
@@ -640,7 +684,7 @@ h: 1depth 1 literal ?ndepth t;
 \       if >r drop 1+ r> else drop then r>
 \     next
 \     drop swap exit
-\   then drop 2drop -1 literal dup t;
+\   then drop 2drop [-1] dup t;
 
 \ t: m/mod ( d n -- r q ) \ floored division
 \   dup 0< dup >r
@@ -717,7 +761,7 @@ t: =string ( a1 u2 a1 u2 -- f : string equality )
       count >r swap count r> xor
       if rdrop 2drop 0 literal exit then
     then
-  next 2drop -1 literal t;
+  next 2drop [-1] t;
 
 t: nfa address cell+ t; ( pwd -- nfa : move to name field address)
 t: cfa nfa dup count nip + cell+ $fffe literal and t; ( pwd -- cfa )
@@ -733,7 +777,7 @@ h: searcher ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
   while
     dup nfa count r@ count =string
     if ( found! )
-      dup immediate? if 1 literal else -1 literal then
+      dup immediate? if 1 literal else [-1] then
       rdrop exit
     then
     nip dup @address
@@ -761,7 +805,7 @@ h: numeric? ( char -- n|-1 : convert character in 0-9 a-z range to number )
   >lower
   dup lowercase? if $57 literal - exit then ( 97 = 'a', +10 as 'a' == 10 )
   dup decimal?   if $30 literal - exit then ( 48 = '0' )
-  drop -1 literal t;
+  drop [-1] t;
 
 h: digit? ( c -- f : is char a digit given base )
   >lower numeric? base @ u< t;
@@ -785,7 +829,7 @@ h: string@ over c@ t; ( b u -- b u c )
 h: negative?
    string@ $2D literal =
    if
-     +string -1 literal
+     +string [-1]
    else
      0 literal then t; ( b u -- f )
 
@@ -847,7 +891,7 @@ h: unused $4000 literal here - t;
 h: .free unused u. t;
 
 h: preset ( tib ) tib-start #tib cell+ ! 0 literal >in ! 0 literal id ! t;
-t: ] -1 literal state ! t;
+t: ] [-1]       state ! t;
 t: [  0 literal state ! t; immediate
 
 h: ?error ( n -- : perform actions on error )
@@ -921,7 +965,7 @@ t: ok! _prompt ! t;
 \ @todo factor into get input and set input
 t: evaluate ( a u -- )
   _prompt @ >r  0 literal  ok!
-  id      @ >r -1 literal  id !
+  id      @ >r [-1]        id !
   >in     @ >r  0 literal  >in !
   source >r >r
   #tib 2!
@@ -975,7 +1019,7 @@ t: io! console preset t; ( -- : initialize I/O )
 h: !csp sp@ csp ! t;
 h: ?csp sp@ csp @ xor if $16 literal -throw exit then t;
 h: +csp  1 literal cells csp +! t;
-h: -csp -1 literal cells csp +! t;
+h: -csp [-1]       cells csp +! t;
 \ @todo print last word
 h: ?unique ( a -- a : print a message if a word definition is not unique )
   dup last searcher
@@ -1047,36 +1091,7 @@ t: .s ( -- ) cr depth for aft r@ pick . then next ."| $literal  <sp "  t;
 \ \      r> dup >r swap rot >r >r cell+ >r exit
 \ \   then 2drop exit ; hidden
 \ \ : ?do  ?compile compile [?do] 0 , here ; immediate
-\
-\ \ : back here cell- @ ; hidden ( a -- : get previous cell )
-\ \ : call? back $e000 and $4000 = ; hidden ( -- f : is call )
-\ \ : merge? ( -- f : safe to merge exit )
-\ \   back dup $e000 and $6000 = swap $1c and 0= and ; hidden
-\ \ : redo here cell- ! ; hidden
-\ \ : merge back $1c or redo ; hidden
-\ \ : tail-call ( -- : turn previously compiled call into tail call )
-\ \   back $1fff and redo ; hidden
-\ \ : compile-exit
-\ \     call? if
-\ \       tail-call
-\ \     else
-\ \       merge? if
-\ \         merge
-\ \       else
-\ \         =exit ,
-\ \       then
-\ \   then ; hidden
-\ \ : compile-exit
-\ \    call? if
-\ \      tail-call
-\ \    else
-\ \      merge?
-\ \      if merge
-\ \    then
-\ \  then =exit , ; hidden
-\ \ : "exit" compile-exit ; immediate
-\ \ : "exit" =exit , ; immediate
-\
+
 \ \ Evaluate instruction, this would work in a normal Forth, but
 \ \ not with this cross compiler:
 \ \   : ex [ here 2 cells + ] literal ! [ 0 , ] ;
@@ -1088,7 +1103,7 @@ t: .s ( -- ) cr depth for aft r@ pick . then next ."| $literal  <sp "  t;
 h: $,' [char] " word count + aligned cp ! t; ( -- )
 t: $"  ?compile compile $"| $,' t; immediate         ( -- ; <string> )
 t: ."  ?compile compile ."| $,' t; immediate         ( -- ; <string> )
-t: abort -1 literal (bye) t;
+t: abort [-1] (bye) t;
 h: {abort} do$ print cr abort t;
 t: abort" ?compile compile {abort} $,' t; immediate \ "
 \
@@ -1096,10 +1111,10 @@ t: abort" ?compile compile {abort} $,' t; immediate \ "
 \
 \ ( ==================== Block Word Set ================================ )
 \
-t: update -1 literal block-dirty ! t;          ( -- )
+t: update [-1] block-dirty ! t;          ( -- )
 h: +block blk @ + t;               ( -- )
 t: save ( -1 ) 0 literal here (save) throw t;
-t: flush block-dirty @ if -1 literal (save) throw exit then t;
+t: flush block-dirty @ if [-1] (save) throw exit then t;
 
 t: block ( k -- a )
   1depth
@@ -1217,13 +1232,13 @@ t: get-order ( -- widn ... wid1 n : get the current search order )
   for aft dup @ swap cell- then next @ r> t;
 
 h: [set-order] ( widn ... wid1 n -- : set the current search order )
-  dup -1 literal  = if drop root-voc 1 literal [set-order] exit then
+  dup [-1] = if drop root-voc 1 literal [set-order] exit then
   dup #vocs > if $31 literal -throw exit then
   context swap for aft tuck ! cell+ then next 0 literal swap ! t;
 
 t: previous get-order swap drop 1- [set-order] t;
 t: also get-order over swap 1+ [set-order] t;
-t: only -1 literal [set-order] t;
+t: only [-1] [set-order] t;
 t: order get-order for aft . then next cr t;
 t: anonymous get-order 1+ here 1 literal cells allot swap set-order t;
 t: definitions context @ set-current t;
@@ -1261,7 +1276,7 @@ h: [line] [check] c/l* [block] + t;
 t: b retrieve t;
 t: l blk @ list t;
 t: n  1 literal +block b l t;
-t: p -1 literal +block b l t;
+t: p [-1] +block b l t;
 t: d [line] c/l blank t;
 t: x [block] b/buf blank t;
 t: s update flush t;

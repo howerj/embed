@@ -78,6 +78,7 @@ variable tdoVar        ( Location of doVar in target )
 variable tdoConst      ( Location of doConst in target )
 variable tdoNext       ( Location of doNext in target )
 variable fence         ( Do not peephole optimize before this point )
+1984 constant #version ( Version number )
 5000 constant #target  ( Memory location where the target image will be built )
 2000 constant #max     ( Max number of cells in generated image )
 2    constant =cell    ( Target cell size )
@@ -242,10 +243,10 @@ a: return ( -- : Compile a return into the target )
 \ if possible.
 
 : lookback there =cell - t@ ;
-: call? lookback e000 and [a] #call = ;
-: call>goto there =cell - dup t@ 1fff and swap t! ;
-: fence? fence @ there =cell - u> ;
-: safe? lookback e000 and [a] #alu = lookback 001c and 0= and ;
+: call? lookback $e000 and [a] #call = ;
+: call>goto there =cell - dup t@ $1fff and swap t! ;
+: fence? fence @ there =cell -  u> ; \ @note remove '=cell -' ???
+: safe? lookback $e000 and [a] #alu = lookback $001c and 0= and ;
 : alu>return there =cell - dup t@ [a] r->pc [a] r-1 swap t! ;
 
 : exit,
@@ -405,7 +406,6 @@ $7fff constant rp0 ( start of return stack )
 ( Volatile variables )
 $4000 constant _test       ( used in skip/test )
 $4002 constant last-def    ( last, possibly unlinked, word definition )
-$4004 constant csp         ( stack pointer for error checking )
 $4006 constant id          ( used for source id )
 $4008 constant seed        ( seed used for the PRNG )
 $400A constant handler     ( current handler for throw/catch )
@@ -436,15 +436,16 @@ meta -order meta +order
 \ <https://stackoverflow.com/questions/323604> for more information about
 \ how to design binary formats
 
-0     t, \  $0: First instruction executed, jump to start / reset vector
-0     t, \  $2: Instruction exception vector
-$4689 t, \  $4: 0x89 'F'
-$4854 t, \  $6: 'T'  'H'
-$0a0d t, \  $8: '\r' '\n'
-$0a1a t, \  $A: ^Z   '\n'
-0     t, \  $C: For Length
-0     t, \  $E: For CRC
-$0001 t, \ $10: Endianess check
+0        t, \  $0: First instruction executed, jump to start / reset vector
+0        t, \  $2: Instruction exception vector
+$4689    t, \  $4: 0x89 'F'
+$4854    t, \  $6: 'T'  'H'
+$0a0d    t, \  $8: '\r' '\n'
+$0a1a    t, \  $A: ^Z   '\n'
+0        t, \  $C: For Length
+0        t, \  $E: For CRC
+$0001    t, \ $10: Endianess check
+#version t, \ $11: Version information
 
 h: doVar   r> t;
 h: doConst r> @ t;
@@ -521,16 +522,16 @@ t: assembler root-voc assembler-voc 2 literal set-order t;
 t: ;code assembler t; immediate
 t: code _do_colon execute-location assembler t;
 
-$2    tconstant cell  ( size of a cell in bytes )
-$0    tvariable >in   ( Hold character pointer when parsing input )
-$0    tvariable state ( compiler state variable )
-$0    tvariable hld   ( Pointer into hold area for numeric output )
-$10   tvariable base  ( Current output radix )
-$0    tvariable span  ( Hold character count received by expect   )
-$8    tconstant #vocs ( number of vocabularies in allowed )
-$400  tconstant b/buf ( size of a block )
-0     tvariable blk   ( current blk loaded, set in 'cold' )
-$1984 tconstant ver   ( eForth version )
+$2       tconstant cell  ( size of a cell in bytes )
+$0       tvariable >in   ( Hold character pointer when parsing input )
+$0       tvariable state ( compiler state variable )
+$0       tvariable hld   ( Pointer into hold area for numeric output )
+$10      tvariable base  ( Current output radix )
+$0       tvariable span  ( Hold character count received by expect   )
+$8       tconstant #vocs ( number of vocabularies in allowed )
+$400     tconstant b/buf ( size of a block )
+0        tvariable blk   ( current blk loaded, set in 'cold' )
+#version tconstant ver   ( eForth version )
 
 \ === ASSEMBLY INSTRUCTIONS ===
 
@@ -924,6 +925,12 @@ h: $compile ( pwd -- )
   dup inline? if cfa @ , exit else cfa compile, exit then t;
 h: not-found $d literal -throw t;
 
+\ @todo more words should have vectored execution, including:
+\ * interpret
+\ * actions on error condition in 'quit' loop
+\ * '[', ']' and 'literal'
+\ * 'abort'
+
 h: interpret ( ??? a -- ??? : The command/compiler loop )
   find ?dup if
     state @
@@ -976,10 +983,10 @@ t: evaluate ( a u -- )
   throw t;
 
 t: random ( -- u : 16-bit xorshift PRNG )
-  seed @ ?dup 0= if 7 literal seed ! random exit then
+  seed @ ?dup 0= if $7 literal seed ! random exit then
   dup $d literal lshift xor
-  dup  9 literal rshift xor
-  dup  7 literal lshift xor
+  dup $9 literal rshift xor
+  dup $7 literal lshift xor
   dup seed ! t;
 
 h: 5u.r 5 literal u.r t;
@@ -1013,13 +1020,8 @@ t: io! console preset t; ( -- : initialize I/O )
 \
 \ ( ==================== Control Structures ============================ )
 
-\ @todo The csp mechanism could be replaced with a simple special variable
-\ pushed by ':' and checked by ';', like in the metacompiler.
-h: !csp sp@ csp ! t;
-h: ?csp sp@ csp @ xor if $16 literal -throw exit then t;
-h: +csp  1 literal cells csp +! t;
-h: -csp [-1]       cells csp +! t;
-\ @todo print last word
+h: ?check ( $cafe -- : check for magic number on the stack )
+   $cafe literal <> if $16 literal -throw exit then t;
 h: ?unique ( a -- a : print a message if a word definition is not unique )
   dup last @ searcher
   if
@@ -1036,33 +1038,33 @@ t: [compile] ?compile find-cfa compile, t; immediate  ( -- ; <string> )
 t: compile  r> dup-@ , cell+ >r t; ( -- : Compile next compiled word )
 t: [char] ?compile char tcall literal t; immediate ( --, <string> : )
 h: ?quit command? if $38 literal -throw exit then t;
-t: ; ( ?quit ) ( ?compile ) +csp ?csp get-current ! =exit ,  [ t; immediate
-t: : align !csp here dup last-def !
-    last , token ?nul ?unique count + aligned cp ! ] t;
+t: ; ( ?quit ) ( ?compile ) ?check get-current ! =exit ,  [ t; immediate
+t: : align here dup last-def !
+    last , token ?nul ?unique count + aligned cp ! $cafe literal ] t;
 h: jumpz, chars $2000 literal or , t;
 h: jump, chars ( $0000 literal or ) , t;
-t: begin ?compile here -csp t; immediate
-t: until ?compile jumpz, +csp t; immediate
-t: again ?compile jump, +csp t; immediate
+t: begin ?compile here  t; immediate
+t: until ?compile jumpz,  t; immediate
+t: again ?compile jump, t; immediate
 h: here-0 here 0 literal t;
-t: if ?compile here-0 jumpz, -csp t; immediate
+t: if ?compile here-0 jumpz, t; immediate
 h: doThen  here chars over @ or swap! t;
-t: then ?compile doThen +csp t; immediate
+t: then ?compile doThen t; immediate
 t: else ?compile here-0 jump, swap doThen t; immediate
 t: while ?compile tcall if t; immediate
 t: repeat ?compile swap tcall again tcall then t; immediate
 h: last-cfa last-def @ cfa t;  ( -- u )
 t: recurse ?compile last-cfa compile, t; immediate
 t: tail ?compile last-cfa jump, t; immediate
-t: create tcall : compile doVar get-current ! [ t;
+t: create tcall : drop compile doVar get-current ! [ t;
 t: >body cell+ t;
 h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , t;
 t: does> ?compile compile doDoes nop t; immediate
 t: variable create 0 literal , t;
 t: constant create [t] doConst literal make-callable here cell- ! , t;
-t: :noname here ] !csp t;
-t: for ?compile =>r , here -csp t; immediate
-t: next ?compile compile doNext , +csp t; immediate
+\ t: :noname here $cafe literal ]  t;
+t: for ?compile =>r , here t; immediate
+t: next ?compile compile doNext , t; immediate
 t: aft ?compile drop here-0 jump, tcall begin swap t; immediate
 t: doer create =exit last-cfa ! =exit ,  t;
 t: make
@@ -1148,9 +1150,6 @@ h: [words]
 
 \ ( ==================== Vocabulary Words ============================== )
 
-
-
-\
 \ ( ==================== Strings ======================================= )
 \
 \ ( ==================== Block Word Set ================================ )

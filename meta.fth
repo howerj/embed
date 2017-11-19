@@ -255,7 +255,7 @@ a: return ( -- : Compile a return into the target )
 : call? lookback e000 and 4000 = ;
 : call>goto there =cell - dup t@ 1fff and swap t! ;
 : fence? fence @ there =cell - u> ;
-: safe? lookback e000 and 6000 = lookback 001f and 0= and ;
+: safe? lookback e000 and 6000 = lookback 001c and 0= and ;
 : alu>return there =cell - dup t@ [a] r->pc [a] r-1 swap t! ;
 
 : exit,

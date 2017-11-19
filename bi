@@ -38,11 +38,18 @@ for
 next
 :
 ;
+h:
+t:
+t;
 begin
 while
 repeat
 again
 until
+literal
+immediate
+hidden
+inline
 STOP
 
 # Generate bi-grams

@@ -46,6 +46,9 @@ double-cross: cross
 	${DF}${FORTH} f meta.blk xx.blk meta.fth
 	cmp meta.blk xx.blk
 
+tron: CFLAGS+=-DTRON
+tron: ${FORTH}
+
 static: CC=musl-gcc
 static: CFLAGS+=-static
 static: ${FORTH}

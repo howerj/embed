@@ -14,6 +14,13 @@
 #define SP0  (8704u)   /* Variable Stack Start: 8192 (end of program area) + 512 (block size) */
 #define RP0  (32767u)  /* Return Stack Start: end of CORE in words */
 
+#ifdef TRON
+#define TRACE(PC,I,SP,RP) \
+	fprintf(stderr, "%04x %04x %04x %04x\n", (unsigned)(PC), (unsigned)(I), (unsigned)(SP), (unsigned)(RP));
+#else
+#define TRACE(PC, I, SP, RP)
+#endif
+
 typedef uint16_t uw_t;
 typedef int16_t  sw_t;
 typedef uint32_t ud_t;
@@ -89,6 +96,7 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 	uw_t *m = h->core;
 	for(;;) {
 		const uw_t instruction = m[pc];
+		TRACE(pc, instruction, sp, rp);
 		assert(!(sp & 0x8000) && !(rp & 0x8000));
 
 		if(0x8000 & instruction) { /* literal */
@@ -130,7 +138,6 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 26: if(t) { T=(sw_t)n/(sw_t)t; t=(sw_t)n%(sw_t)t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
 			case 27: goto finished;
 			}
-
 			sp += delta[ instruction       & 0x3];
 			rp -= delta[(instruction >> 2) & 0x3];
 			if(instruction & 0x20)

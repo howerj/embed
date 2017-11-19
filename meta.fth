@@ -91,8 +91,6 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 : a: get-current assembler.1 set-current : ; ( "name" -- wid link )
 : a; [compile] ; set-current ; immediate ( wid link -- )
 
-\ @todo Find out what words are redefined!
-\ : ?exit if rdrop exit then ;
 : ( [char] ) parse 2drop ; immediate
 : \ source drop @ >in ! ; immediate
 : there tcp @ ; ( -- a : target dictionary pointer value )
@@ -130,6 +128,22 @@ variable header -1 header ! ( If true Headers in the target will be generated )
   ." ASSEMBLER: "  assembler.1 . cr
   ." HOST: "       here        . cr
   ." TARGET: "     there       . cr ;
+
+: ccitt ( crc c -- crc : calculate polynomial $1021 AKA "x16 + x12 + x5 + 1" )
+ 	over $8  rshift xor   ( crc x )
+ 	dup  $4  rshift xor   ( crc x )
+ 	dup  $5  lshift xor   ( crc x )
+ 	dup  $c  lshift xor   ( crc x )
+ 	swap $8  lshift xor ; ( crc )
+
+: crc ( b u -- u : calculate ccitt-ffff CRC )
+	$ffff >r
+	begin
+		dup
+	while
+		over c@ r> swap ccitt >r 1 /string
+	repeat 2drop r> ;
+
 : save-hex ( -- : save target binary to file )
    #target #target there + (save) throw ;
 
@@ -143,9 +157,6 @@ variable header -1 header ! ( If true Headers in the target will be generated )
   token assembler.1 search-wordlist 0= if abort" [a]? " then
   cfa compile, ; immediate
 
-\  @bug immediate cannot be placed after 'a;' because of the way linking
-\ vocabularies into the dictionary works, in fact the word 'a;' should not be
-\ necessary but it is a work around for another hack
 a: asm[ assembler.1 -order ( [ immediate ] ) a; ( -- )
 
 \ ALU Operations
@@ -242,23 +253,23 @@ a: return ( -- : Compile a return into the target )
 : lookahead ( -- b u : parse a word, but leave it in the input stream )
   >in @ >r bl parse r> >in ! ;
 
-: t:
+: t: ( "name", -- : creates a word in the target dictionary )
   $f00d
   lookahead
   thead tcreate
   there , does> @ [a] call ;
 
+\ @todo Add an option for adding hidden words to a separate vocabulary,
+\ instead of eliding their word headers, this will make the words still
+\ accessible, but will keep the dictionary clean.
 : h: ( -- : create a word with no name in the target dictionary )
-  $f00d
-  tcreate there , does> @ [a] call ;
+ $f00d
+ tcreate there , does> @ [a] call ;
 
 : t;
    $f00d <> if abort" unstructured! " then
    optimize if exit, else [a] return then ;
 
-\ @todo Increase efficiency of these variable and constant, when metacompiling
-\ constants, the constant itself should be compiled as a literal if and only
-\ if the number can be stored in a single cell (is less than $7fff)
 \ @todo Change constant/variable method depending on optimization level
 \ @todo Abort if tdoConst or tdoVar are zero
 
@@ -338,7 +349,6 @@ a: return ( -- : Compile a return into the target )
 : rp@     ]asm  #rp@     t->n   d+1   alu asm[ ;
 : rp!     ]asm  #rp!     d-1    alu asm[ ;
 : 0=      ]asm  #t==0    alu asm[ ;
-: nop     ]asm  #t       alu asm[ ;
 : (bye)   ]asm  #bye     alu asm[ ;
 : rx?     ]asm  #rx      t->n   d+1   alu asm[ ;
 : tx!     ]asm  #tx      n->t   d-1   alu asm[ ;
@@ -350,19 +360,20 @@ a: return ( -- : Compile a return into the target )
 : rdrop   ]asm  #t       r-1    alu asm[ ;
 
 : for >r begin ;
-\ @todo make a more advanced 'next' construct
 \ : next r@ while r> 1- >r repeat r> drop ;
 
 \ @todo construct =invert, =exit, =>r with the assembler
+\ ]asm  #~t      alu asm[
 $6a00 constant =invert     ( invert instruction )
+\ ]asm  #t r->pc  r-1 alu asm[
 $601c constant =exit       ( return/exit instruction )
+\ ]asm  #n  t->r d-1 r+1 alu asm[
 $6147 constant =>r         ( to return stack instruction )
 $20   constant =bl         ( blank, or space )
 $d    constant =cr         ( carriage return )
 $a    constant =lf         ( line feed )
 $8    constant =bs         ( back space )
 $1b   constant =escape     ( escape character )
-$ffff constant eof         ( end of file )
 
 $10   constant dump-width  ( number of columns for 'dump' )
 $50   constant tib-length  ( size of terminal input buffer )
@@ -412,8 +423,12 @@ target.1 +order
 \ The first two 16-bit cells contain the start vector and the trap
 \ handler
 
+\ @todo Do not use doConst for metacompiled constants, instead simply compile
+\ in the number and then an exit, this should be faster whilst being the same
+\ size for constants less than $7fff
+
 meta -order meta +order
-4 tallot
+2 tcells tallot
 h: doVar   r> t;
 h: doConst r> @ t;
 
@@ -472,7 +487,6 @@ t: 1-       1-       nop t; inline
 t: rp@      rp@      nop t; inline
 t: rp!      rp!      nop t; inline
 t: 0=       0=       nop t; inline
-t: nop      nop      nop t; inline
 t: (bye)    (bye)    nop t; inline
 t: rx?      rx?      nop t; inline
 t: tx!      tx!      nop t; inline
@@ -503,7 +517,8 @@ $1984 tconstant ver   ( eForth version )
 
 \ === ASSEMBLY INSTRUCTIONS ===
 
-t: [-1] -1 literal t;       ( -- -1 : space saving measure, push -1 )
+h: [-1] -1 literal t;       ( -- -1 : space saving measure, push -1 )
+h: eof [-1] t;              ( -- : constant for End of File marker )
 t: 2drop drop drop t;       ( n n -- )
 t: 1+ 1 literal + t;        ( n -- n : increment a value  )
 t: negate invert 1+ t;      ( n -- n : negate a number )
@@ -842,7 +857,7 @@ h: parser ( b u c -- b u delta )
 t: parse ( c -- b u t; <string> )
    >r tib >in @ + #tib @ >in @ - r> parser >in +! -trailing 0 literal max t;
 t: ) t; immediate
-t: ( $29 literal parse 2drop t; immediate
+t: ( $29 literal parse 2drop t; immediate \ )
 t: .( $29 literal parse type t;
 t: \ #tib @ >in ! t; immediate
 h: ?length dup word-length u> if $13 literal -throw exit then t;
@@ -984,9 +999,11 @@ h: +csp  1 literal cells csp +! t;
 h: -csp [-1]       cells csp +! t;
 \ @todo print last word
 h: ?unique ( a -- a : print a message if a word definition is not unique )
-  dup last searcher
+  dup last @ searcher
   if
-    2drop ( last @ nfa print ) ."| $literal redefined " cr exit
+    \ source type
+    space
+    2drop last-def @ nfa print  ."| $literal  redefined " cr exit
   then t;
 h: ?nul ( b -- : check for zero length strings )
    count 0= if $a literal -throw exit then 1- t;
@@ -1075,7 +1092,7 @@ t: abort" ?compile compile {abort} $,' t; immediate \ "
 t: update [-1] block-dirty ! t;          ( -- )
 h: +block blk @ + t;               ( -- )
 t: save ( -1 ) 0 literal here (save) throw t;
-t: flush block-dirty @ if [-1] (save) throw exit then t;
+t: flush block-dirty @ if 0 literal [-1] (save) throw exit then t;
 
 t: block ( k -- a )
   1depth
@@ -1119,8 +1136,7 @@ t: list
 t: cold
    $10 literal block b/buf 0 literal fill
    $12 literal retrieve sp0 sp! io! forth t;
-t: hi hex cr ."| $literal eFORTH V " ver 0 literal
-u.r cr here . .free cr [ t;
+t: hi hex cr ."| $literal eFORTH V " ver 0 literal u.r cr here . .free cr [ t;
 h: normal-running hi quit t;
 h: boot cold _boot @execute bye t;
 t: boot! _boot ! t; ( xt -- )
@@ -1239,9 +1255,9 @@ t: x [block] b/buf blank t;
 t: s update flush t;
 t: q forth flush t;
 t: e forth blk @ load editor t;
- t: ia c/l* + [block] + source drop >in @ +
+t: ia c/l* + [block] + source drop >in @ +
    swap source nip >in @ - cmove [t] \ tcompile, t;
- t: i 0 literal swap ia t;
+t: i 0 literal swap ia t;
 t: u update t;
 \ t: w words t;
 \ h: yank pad c/l t; hidden

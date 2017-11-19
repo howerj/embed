@@ -47,9 +47,6 @@ only forth definitions hex
 \    'readme.md' file to this one.
 \    - Document the Forth virtual machine, moving diagrams
 \    from the 'readme.md' file to here.
-\    - Add meta-compile time checking (eg. balanced 't:' and 't;')
-\    - Hide normal word definitions between 't:' and 't;' that are not
-\    in the meta, assembler or target dictionaries
 
 \ Document plan
 \ This program and document are a work in progress, it has been written
@@ -84,7 +81,6 @@ variable fence         ( Do not peephole optimize before this point )
 5000 constant #target  ( Memory location where the target image will be built )
 2000 constant #max     ( Max number of cells in generated image )
 2    constant =cell    ( Target cell size )
-\ @todo Currently optimizations break things, this needs fixing.
 -1   constant optimize ( Turn optimizations on [-1] or off [0] )
 variable header -1 header ! ( If true Headers in the target will be generated )
 
@@ -96,7 +92,6 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 : a; [compile] ; set-current ; immediate ( wid link -- )
 
 \ @todo Find out what words are redefined!
-
 \ : ?exit if rdrop exit then ;
 : ( [char] ) parse 2drop ; immediate
 : \ source drop @ >in ! ; immediate
@@ -218,38 +213,6 @@ a: literal ( n -- : compile a number into target )
   then a;
 a: return ( -- : Compile a return into the target )
    [a] #t [a] r->pc [a] r-1 [a] alu a;
-
-\ @todo Improve with fence variable set by control structures
-\ @todo Use optimizer from "eforth.fth"
-
-\ : back here cell- @ ; hidden ( a -- : get previous cell )
-\ : call? back $e000 and $4000 = ; hidden ( -- f : is call )
-\ : merge? ( -- f : safe to merge exit )
-\   back dup $e000 and $6000 = swap $1c and 0= and ; hidden
-\ : redo here cell- ! ; hidden
-\ : merge back $1c or redo ; hidden
-\ : tail-call ( -- : turn previously compiled call into tail call )
-\   back $1fff and redo ; hidden
-\ : compile-exit
-\     call? if
-\       tail-call
-\     else
-\       merge? if
-\         merge
-\       else
-\         =exit ,
-\       then
-\   then ; hidden
-\ : compile-exit
-\    call? if
-\      tail-call
-\    else
-\      merge?
-\      if merge
-\    then
-\  then =exit , ; hidden
-\ : "exit" compile-exit ; immediate
-\ : "exit" =exit , ; immediate
 
 : lookback there =cell - t@ ;
 : call? lookback e000 and 4000 = ;
@@ -387,7 +350,7 @@ a: return ( -- : Compile a return into the target )
 : rdrop   ]asm  #t       r-1    alu asm[ ;
 
 : for >r begin ;
-\ @todo make a more compact 'next' construct
+\ @todo make a more advanced 'next' construct
 \ : next r@ while r> 1- >r repeat r> drop ;
 
 \ @todo construct =invert, =exit, =>r with the assembler
@@ -469,7 +432,6 @@ h: doConst r> @ t;
 0 tlocation _do_semi_colon    ( execution vector for ';' )
 0 tlocation _boot             ( -- : execute program at startup )
 0 tlocation current           ( WID to add definitions to )
-\ 0 tlocation _message        ( n -- : display an error message )
 
 h: execute-location @ >r t;
 t: forth-wordlist _forth-wordlist t;
@@ -1074,27 +1036,26 @@ t: make
   then t; immediate
 t: .s ( -- ) cr depth for aft r@ pick . then next ."| $literal  <sp "  t;
 
-\ \ : [leave] rdrop rdrop rdrop ; hidden
-\ \ : leave ?compile compile [leave] ; immediate
-\ \ : [do] r> dup >r swap rot >r >r cell+ >r ; hidden
-\ \ : do ?compile compile [do] 0 , here ; immediate
-\ \ : [loop]
-\ \     r> r> 1+ r> 2dup <> if >r >r @ >r exit then
-\ \     >r 1- >r cell+ >r ; hidden
-\ \ : [unloop] r> rdrop rdrop rdrop >r ; hidden
-\ \ : loop compile [loop] dup ,
-\ \    compile [unloop] cell- here chars swap ! ; immediate
-\ \ : [i] r> r> tuck >r >r ; hidden
-\ \ : i ?compile compile [i] ; immediate
-\ \ : [?do]
-\ \    2dup <> if
-\ \      r> dup >r swap rot >r >r cell+ >r exit
-\ \   then 2drop exit ; hidden
-\ \ : ?do  ?compile compile [?do] 0 , here ; immediate
+\ : [leave] rdrop rdrop rdrop ; hidden
+\ : leave ?compile compile [leave] ; immediate
+\ : [do] r> dup >r swap rot >r >r cell+ >r ; hidden
+\ : do ?compile compile [do] 0 , here ; immediate
+\ : [loop]
+\     r> r> 1+ r> 2dup <> if >r >r @ >r exit then
+\     >r 1- >r cell+ >r ; hidden
+\ : [unloop] r> rdrop rdrop rdrop >r ; hidden
+\ : loop compile [loop] dup ,
+\    compile [unloop] cell- here chars swap ! ; immediate
+\ : [i] r> r> tuck >r >r ; hidden
+\ : i ?compile compile [i] ; immediate
+\ : [?do]
+\    2dup <> if
+\      r> dup >r swap rot >r >r cell+ >r exit
+\   then 2drop exit ; hidden
+\ : ?do  ?compile compile [?do] 0 , here ; immediate
 
-\ \ Evaluate instruction, this would work in a normal Forth, but
-\ \ not with this cross compiler:
-\ \   : ex [ here 2 cells + ] literal ! [ 0 , ] ;
+\ ( evaluate instruction )
+\ : ex [ here 2 cells + ] literal ! [ 0 , ] ;
 \
 \ ( ==================== Control Structures ============================ )
 \
@@ -1158,7 +1119,6 @@ t: list
 t: cold
    $10 literal block b/buf 0 literal fill
    $12 literal retrieve sp0 sp! io! forth t;
-\ @todo fix print string
 t: hi hex cr ."| $literal eFORTH V " ver 0 literal
 u.r cr here . .free cr [ t;
 h: normal-running hi quit t;
@@ -1261,15 +1221,12 @@ h: [words]
 
 [last] [u] _forth-wordlist t!
 [u] _forth-wordlist [u] current t!
-\ .set _forth-wordlist $pwd
-\ .set current _forth-wordlist
 
 \ ( ==================== Vocabulary Words ============================== )
-\
+
 \ ( ==================== Block Editor ================================== )
-\
+
 0 tlast s!
-\ .pwd 0
 h: [block] blk @ block t;
 h: [check] dup b/buf c/l/ u>= if $18 literal -throw exit then t;
 h: [line] [check] c/l* [block] + t;
@@ -1293,28 +1250,10 @@ t: u update t;
 \ t: ct swap y c t;
 \ t: ea [line] c/l evaluate t;
 \ t: sw 2dup y [line] swap [line] swap c/l cmove c t;
-\ .set editor-voc $pwd
 [last] [u] editor-voc t! 0 tlast s!
 
 
 \ ( ==================== Block Editor ================================== )
-
-
-\ \ 6a tconstant test-constant
-\ 6a constant test-constant
-\ 6a tvariable test-variable
-\ 6b [u] test-variable t!
-\ 
-\ t: test-word
-\     io!
-\     \ 0 literal here dump
-\     999 literal . cr
-\     test-constant tx!
-\     test-variable @ tx!
-\     6b literal emit
-\     6b literal tx! cr bye t;
-\   \ begin rx? tx! again t;
-\   \ begin test-constant tx! again t;
 
 there           [u] cp t!
 [t] :           [u] _do_colon t!
@@ -1324,15 +1263,6 @@ there           [u] cp t!
 [t] [words]     [u] _words t!
 [t] boot 2/ 0 t! ( set starting word )
 [t] normal-running [u] _boot t!
-
-\ .set _do_colon      ":"
-\ .set _do_semi_colon ";"
-\ .set _forth         [forth]
-\ .set _set-order     [set-order]
-\ .set _words         [words]
-\ .set _boot          normal-running
-\ \ .set _message message  ( execution vector of _message, used in ?error )
-
 
 ( ===                        Target Words                           === )
 

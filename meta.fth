@@ -288,6 +288,10 @@ a: return ( -- : Compile a return into the target )
    optimize if exit, else [a] return then ;
 
 \ @todo Change constant/variable method depending on optimization level
+\ @note A possible space saving measure in the metacompiler is to have
+\ a concept of words only defined in the target dictionary, these words
+\ could include things such as 'for' and 'next', and possible other
+\ immediate words, which are not called by other words.
 
 : fetch-xt @ dup 0= if abort" (null) " then ;
 

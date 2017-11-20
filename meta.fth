@@ -310,12 +310,12 @@ a: return ( -- : Compile a return into the target )
   \ @ [a] call ;
 
 : tlocation ( "name", n -- : Reserve space in target for a memory location )
-  header @ >r 0 header ! tvariable r> header !  ;
+  there swap t, tcreate , does> @ [a] literal ;
 
 : [t]
   token target.1 search-wordlist 0= if abort" [t]? " then
   cfa >body @ ;
-: [u] [t] =cell + ;
+: [u] [t] =cell + ; \ @warning only use on variables, not tlocations 
 
 : literal [a] literal ;
 : begin  there update-fence ;
@@ -471,7 +471,7 @@ t: forth-wordlist _forth-wordlist t;
 t: words _words execute-location t;
 t: set-order _set-order execute-location t;
 t: forth _forth execute-location t;
-[last] [u] root-voc t! 0 tlast s!
+[last] [t] root-voc t! 0 tlast s!
 
 \ === ASSEMBLY INSTRUCTIONS ===
 t: nop      nop      nop t; inline
@@ -516,7 +516,7 @@ t: mod      mod      nop t; inline
 t: rdrop    rdrop    nop t; inline
 
 t: end-code forth _do_semi_colon execute-location t; immediate
-[last] [u] assembler-voc t!
+[last] [t] assembler-voc t!
 
 t: assembler root-voc assembler-voc 2 literal set-order t;
 t: ;code assembler t; immediate
@@ -598,6 +598,7 @@ t: abs dup 0< if negate exit then t;    ( n -- u )
 t: count dup 1+ swap c@ t;              ( cs -- b u )
 t: rot >r swap r> swap t;               ( n1 n2 n3 -- n2 n3 n1 )
 t: -rot swap >r swap r> t;              ( n1 n2 n3 -- n3 n1 n2 )
+\ @todo Implement 2>r and 2r> correctly, and use them
 \ h: 2>r r> -rot >r >r >r t;            ( u1 u2 --, R: -- u1 u2 )
 \ h: 2r> r> r> r> rot >r t;             ( -- u1 u2, R: u1 u2 -- )
 h: doNext r> r> ?dup if 1- >r @ >r exit then cell+ >r t;
@@ -1266,8 +1267,8 @@ t: see ( --, <string> : decompile a word )
 
 \ ( ==================== See =========================================== )
 
-[last] [u] _forth-wordlist t!
-[u] _forth-wordlist [u] current t!
+[last] [t] _forth-wordlist t!
+[t] _forth-wordlist [t] current t!
 
 \ ( ==================== Block Editor ================================== )
 
@@ -1295,18 +1296,18 @@ t: u update t;
 \ t: ct swap y c t;
 \ t: ea [line] c/l evaluate t;
 \ t: sw 2dup y [line] swap [line] swap c/l cmove c t;
-[last] [u] editor-voc t! 0 tlast s!
+[last] [t] editor-voc t! 0 tlast s!
 
 \ ( ==================== Block Editor ================================== )
 
-there           [u] cp t!
-[t] :           [u] _do_colon t!
-[t] ;           [u] _do_semi_colon t!
-[t] [forth]     [u] _forth t!
-[t] [set-order] [u] _set-order t!
-[t] [words]     [u] _words t!
+there           [t] cp t!
+[t] :           [t] _do_colon t!
+[t] ;           [t] _do_semi_colon t!
+[t] [forth]     [t] _forth t!
+[t] [set-order] [t] _set-order t!
+[t] [words]     [t] _words t!
 [t] boot 2/ 0 t! ( set starting word )
-[t] normal-running [u] _boot t!
+[t] normal-running [t] _boot t!
 
 there    6 tcells t! \ Set Length First!
 checksum 7 tcells t! \ Calculate image CRC

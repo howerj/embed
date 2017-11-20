@@ -309,13 +309,6 @@ instruction.
 * A better disassembler, in the form of the 'see' word, would mean the source
 code would not have to be stored - but a word could be disassembled, modified
 and then recompiled.
-* The current Forth is 16-bit only, a 32-bit and a 64-bit Forth would be
-much more useful for hosted platforms, being able to store a pointer in a
-cell, this would require a fair amount of rework in the Forth code to make
-this happen.
-* A metacompiler is the next step in this project, that targets the same
-virtual machine as it is running on, this would allow the removal of the C 
-compiler, the task itself would be a large one but would complete it.
 * To facilitate porting to microcontrollers the Forth could be made to be
 stored in a ROM, with initial variable values copied to RAM, the virtual
 machine would also have to be modified to map different parts of the address
@@ -326,15 +319,6 @@ file access wordset and words for performing tests. These words may or may
 not be implemented at a later date.
 * Relative jumps could be used instead of absolute jumps in the code, this
 would make relocation easier.
-* The assembly instruction "(save)" needs improving, allowing saving a range
-and to different files.
-* New word lists and vocabularies should be created (in different files) for
-various things, such as ANSI escape sequences for terminal handling. A word
-should be used to hide and show the vocabulary so as not to clutter the
-dictionary.
-* The editor should be moved to a separate file, perhaps, and code added from
-my other projects, <https://github.com/howerj/forth-cpu> and
-<https://github.com/howerj/libforth>
 * Save and load all state to disk, not just the core. The current system also
 does not embed format information into the binary files, which means the
 generated object files is indistinguishable from other binary formats.

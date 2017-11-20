@@ -61,10 +61,6 @@ only forth definitions hex
 \ * The eForth program
 \ * Conclusion
 
-\ @todo Implement word hiding by setting a bit in a words name field count,
-\ this would require 'word' to ignore words with that bit set (or with a field
-\ count that is too high)
-
 ( ===                    Metacompilation wordset                    === )
 \ This section defines the metacompilation wordset as well as the
 \ assembler. The cross compiler requires a few assembly instructions
@@ -87,6 +83,7 @@ variable fence         ( Do not peephole optimize before this point )
 2000 constant #max     ( Max number of cells in generated image )
 2    constant =cell    ( Target cell size )
 -1   constant optimize ( Turn optimizations on [-1] or off [0] )
+0    constant swap-endianess ( if true, swap the endianess )
 variable header -1 header ! ( If true Headers in the target will be generated )
 
 1   constant verbose  ( )
@@ -103,9 +100,10 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 : tc@ #target + c@ ;
 : [address] $3fff and ;
 : [last] tlast @ ;
-\ @todo allow for configurable endianess 
-: t! over ff and over tc! swap 8 rshift swap 1+ tc! ;
-: t@ dup tc@ swap 1+ tc@ 8 lshift or ;
+: low  swap-endianess 0= if 1+ then ; ( b -- b )
+: high swap-endianess    if 1+ then ; ( b -- b )
+: t! over ff and over high tc! swap 8 rshift swap low tc! ;
+: t@ dup high tc@ swap low tc@ 8 lshift or ;
 : 2/ 1 rshift ;
 : talign there 1 and tcp +! ;
 : tc, there tc! 1 tcp +! ;
@@ -476,6 +474,7 @@ h: doConst r> @ t;
 0 tlocation _do_semi_colon    ( execution vector for ';' )
 0 tlocation current           ( WID to add definitions to )
 
+\ @todo move this to a different position / remove execution vectors here
 h: execute-location @ >r t;
 t: forth-wordlist _forth-wordlist t;
 t: words _words execute-location t;
@@ -529,6 +528,7 @@ t: /mod     /mod     nop t; inline
 t: /        /        nop t; inline
 t: mod      mod      nop t; inline
 t: rdrop    rdrop    nop t; inline
+\ @todo investigate more special purpose instructions
 \ t: dup-@  dup-@    nop t; inline
 \ t: dup>r  dup>r    nop t; inline
 \ t: 2dup=  2dup=    nop t; inline
@@ -615,6 +615,7 @@ t: source #tib 2@ t;                    ( -- a u )
 t: source-id id @ t;                    ( -- 0 | -1 )
 \ @todo move pad area to somewhere after address $3fff
 t: pad here pad-length + t;             ( -- a )
+\ t: pad $4200 literal t;
 h: @execute @ ?dup if >r then t;        ( cfa -- )
 t: bl =bl t;                            ( -- c )
 t: within over- >r - r> u< t;          ( u lo hi -- f )
@@ -1090,6 +1091,8 @@ t: make
     swap! exit
   then t; immediate
 t: .s ( -- ) cr depth for aft r@ pick . then next ."| $literal  <sp "  t;
+t: hide ( "name", -- : hide a given word from the search order )
+  token find 0= if not-found exit then nfa $80 literal toggle t;
 
 \ : [leave] rdrop rdrop rdrop ; hidden
 \ : leave ?compile compile [leave] ; immediate
@@ -1157,8 +1160,11 @@ t: +order dup>r -order get-order r> swap 1+ set-order t; ( wid -- )
 
 h: [forth] root-voc forth-wordlist  2 literal [set-order] t;
 t: editor decimal root-voc editor-voc 2 literal [set-order] t;
-
-h: .words space begin dup while dup .id space @address repeat drop cr t;
+h: not-hidden? nfa count nip $80 literal and 0= t;
+h: .words space 
+    begin 
+      dup 
+    while dup not-hidden? if dup .id space then @address repeat drop cr t;
 h: [words]
   get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat t;
 

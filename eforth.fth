@@ -494,7 +494,6 @@ virtual-machine-error: -throw
 : quit preset [ begin query ' eval catch ?error again ;
 : ok! _prompt ! ;
 
-\ @todo factor into get input and set input
 : evaluate ( a u -- )
   _prompt @ >r 0    ok!
   id      @ >r -1   id !
@@ -732,7 +731,6 @@ virtual-machine-error: -throw
 : validate ( cfa pwd -- nfa | 0 )
   tuck cfa <> if drop 0 exit else nfa exit then ; hidden
 
-( @todo Do this for every vocabulary loaded, and name assembly instruction )
 : name ( cfa -- nfa )
   address cells >r
   \ last

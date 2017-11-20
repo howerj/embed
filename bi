@@ -31,11 +31,17 @@ sed \
 STOPWORDS=`tempfile`;
 
 cat >> "${STOPWORDS}" <<STOP
+alu
+asm\[
+\]asm
 if
 then
 else
 for
 next
+exit
+a:
+a;
 :
 ;
 h:

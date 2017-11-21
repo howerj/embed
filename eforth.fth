@@ -602,6 +602,20 @@ virtual-machine-error: -throw
     swap ! exit
   then ; immediate
 
+: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
+ 	over $8 rshift xor    ( crc x )
+ 	dup  $4 rshift xor    ( crc x )
+ 	dup  $5 lshift xor    ( crc x )
+ 	dup  $c lshift xor    ( crc x )
+ 	swap $8 lshift xor ; hidden ( crc )
+
+: crc ( b u -- u : calculate ccitt-ffff CRC )
+	$ffff >r
+	begin
+		dup
+	while
+		over c@ r> swap ccitt >r 1 /string
+	repeat 2drop r> ;
 
 \ : [leave] rdrop rdrop rdrop ; hidden
 \ : leave ?compile compile [leave] ; immediate

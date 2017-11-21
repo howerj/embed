@@ -44,9 +44,14 @@ only forth definitions hex
 \    - Add references to eForth implementation guide
 \    - Add references to my project
 \    - Move diagrams describing the CPU architecture from the
-\    'readme.md' file to this one.
+\    'readme.md' file to this one. This could be added in an appendix
 \    - Document the Forth virtual machine, moving diagrams
 \    from the 'readme.md' file to here.
+\    - Compression routines would be a nice to have feature for reducing
+\    the saved image size. LZSS could be used, see:
+\    <https://oku.edu.mie-u.ac.jp/~okumura/compression/lzss.c>
+\    - Add a Built in Self Test that checks the length and the CRC in
+\    the header
 
 \ Document plan
 \ This program and document are a work in progress, it has been written
@@ -115,14 +120,26 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 : s! ! ;
 : dump-hex #target there 16 + dump ;
 : update-fence there fence ! ;
+: locations ( -- : list all words and locations in target dictionary )
+  target.1 @ 
+  begin 
+    dup 
+  while 
+    dup 
+    nfa count type space dup
+    cfa >body @ u. cr
+    $3fff and @ 
+  repeat drop ;
+
 : display ( -- : display metacompilation and target information )
   verbose 0= if exit then
   hex
   ." META COMPILATION COMPLETE" cr
-  verbose 2 = if 
+  verbose 1 u> if 
     dump-hex cr 
     ." TARGET DICTIONARY: " cr
-    words 
+    \ words 
+    locations
   then
   ." META: "       meta        . cr
   ." TARGET: "     target.1    . cr
@@ -130,21 +147,6 @@ variable header -1 header ! ( If true Headers in the target will be generated )
   ." HOST: "       here        . cr
   ." TARGET: "     there       . cr
   ." HEADER: "     #target 20 dump cr ;
-
-: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
- 	over $8  rshift xor   ( crc x )
- 	dup  $4  rshift xor   ( crc x )
- 	dup  $5  lshift xor   ( crc x )
- 	dup  $c  lshift xor   ( crc x )
- 	swap $8  lshift xor ; ( crc )
-
-: crc ( b u -- u : calculate ccitt-ffff CRC )
-	$ffff >r
-	begin
-		dup
-	while
-		over c@ r> swap ccitt >r 1 /string
-	repeat 2drop r> ;
 
 : checksum #target there crc ;
 
@@ -246,7 +248,7 @@ a: return ( -- : Compile a return into the target )
 : lookback there =cell - t@ ;
 : call? lookback $e000 and [a] #call = ;
 : call>goto there =cell - dup t@ $1fff and swap t! ;
-: fence? fence @ there =cell -  u> ; \ @note remove '=cell -' ???
+: fence? fence @ there =cell -  u> ;
 : safe? lookback $e000 and [a] #alu = lookback $001c and 0= and ;
 : alu>return there =cell - dup t@ [a] r->pc [a] r-1 swap t! ;
 
@@ -428,6 +430,10 @@ $4110 constant context     ( holds current context for search order )
 $4122 constant #tib        ( Current count of terminal input buffer )
 $4124 constant tib-buf     ( ... and address )
 $4126 constant tib-start   ( backup tib-buf value )
+\ $4280 constant pad-area    ( area for pad storage )
+
+\ $c    constant header-length ( location of length in header )
+\ $e    constant header-crc    ( location of CRC in header )
 
 ( ===                        Target Words                           === )
 \ With the assembler and meta compiler complete, we can now make our target
@@ -474,7 +480,9 @@ h: doConst r> @ t;
 0 tlocation _do_semi_colon    ( execution vector for ';' )
 0 tlocation current           ( WID to add definitions to )
 
-\ @todo move this to a different position / remove execution vectors here
+\ @todo move this to a different position / remove execution vectors here,
+\ this needs to be done in conjunction with changes to the assembler wordset,
+\ this should save space and make things less confusing.
 h: execute-location @ >r t;
 t: forth-wordlist _forth-wordlist t;
 t: words _words execute-location t;
@@ -552,11 +560,12 @@ $8       tconstant #vocs ( number of vocabularies in allowed )
 $400     tconstant b/buf ( size of a block )
 0        tvariable blk   ( current blk loaded, set in 'cold' )
 #version tconstant ver   ( eForth version )
-0 tvariable boot             ( -- : execute program at startup )
+0 tvariable boot         ( -- : execute program at startup )
+\ pad-area tconstant pad   ( pad variable - offset into temporary storage )
 
 \ === ASSEMBLY INSTRUCTIONS ===
 
-\ h: dup-@ dup @ t;            ( a -- a u )
+\ h: dup-@ dup @ t;          ( a -- a u )
 h: swap! swap ! t;           ( a u -- )
 h: [-1] -1 literal t;        ( -- -1 : space saving measure, push -1 )
 h: eof [-1] t;               ( -- : constant for End of File marker )
@@ -610,12 +619,10 @@ t: get-current current @ t;
 t: set-current current ! t;
 t: here cp @ t;               ( -- a )
 t: align here cp! t; ( -- )
+t: pad here pad-length + t; \ @todo use pad-area instead of 'here + pad-length'
 
 t: source #tib 2@ t;                    ( -- a u )
 t: source-id id @ t;                    ( -- 0 | -1 )
-\ @todo move pad area to somewhere after address $3fff
-t: pad here pad-length + t;             ( -- a )
-\ t: pad $4200 literal t;
 h: @execute @ ?dup if >r then t;        ( cfa -- )
 t: bl =bl t;                            ( -- c )
 t: within over- >r - r> u< t;          ( u lo hi -- f )
@@ -726,8 +733,8 @@ h: 1depth 1 literal ?ndepth t;
 \   >r dup 0< if r@ + then r> um/mod r>
 \   if swap negate swap exit then t;
 
-t: decimal $a literal base ! t;                       ( -- )
-t: hex     $10 literal base ! t;                       ( -- )
+t: decimal $a literal base ! t;              ( -- )
+t: hex     $10 literal base ! t;             ( -- )
 h: radix base @ dup 2 literal - $22 literal u>
   if hex $28 literal -throw exit then t;
 h: digit  9 literal over < 7 literal and + $30 literal + t; ( u -- c )
@@ -977,9 +984,9 @@ h: interpret ( ??? a -- ??? : The command/compiler loop )
 t: immediate last $4000 literal toggle t;
 h: do$ r> r@ r> count + aligned >r swap >r t; ( -- a )
 h: $"| do$ nop t; ( -- a : do string NB. nop to fool optimizer )
-h: ."| do$ print t; ( -- : print string )
+h: ."| do$ print t; ( -- : print string  )
 
-h: .ok command? if ."| $literal  ok  " space then cr t;
+h: .ok command? if ."| $literal  ok  " cr exit then t;
 h: ?depth sp@ sp0 u< if 4 literal -throw exit then t;
 h: eval
   begin
@@ -1008,12 +1015,29 @@ t: evaluate ( a u -- )
   r>  ok!
   throw t;
 
-t: random ( -- u : 16-bit xorshift PRNG )
+h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
+ 	over $8 literal rshift xor    ( crc x )
+ 	dup  $4 literal rshift xor    ( crc x )
+ 	dup  $5 literal lshift xor    ( crc x )
+ 	dup  $c literal lshift xor    ( crc x )
+ 	swap $8 literal lshift xor t; ( crc )
+
+t: crc ( b u -- u : calculate ccitt-ffff CRC )
+	$ffff literal >r
+	begin
+		dup
+	while
+		over c@ r> swap ccitt >r 1 literal /string
+	repeat 2drop r> t;
+
+t: random ( -- u : PRNG )
   \ seed @ ?dup 0= if $7 literal seed ! random exit then
-  seed @ 0= seed swap toggle seed @
-  dup $d literal lshift xor
-  dup $9 literal rshift xor
-  dup $7 literal lshift xor
+  seed @ 0= seed swap toggle seed @ 
+  0 literal ccitt
+  \ For 16-bit xorshift PRNG, comment "0 literal ccitt" and use:
+  \   dup $d literal lshift xor
+  \   dup $9 literal rshift xor
+  \   dup $7 literal lshift xor
   dup seed ! t;
 
 h: 5u.r 5 literal u.r t;
@@ -1086,10 +1110,9 @@ t: make
   find-cfa find-cfa make-callable
   state@
   if
-    tcall literal tcall literal compile ! 
-  else
-    swap! exit
-  then t; immediate
+    tcall literal tcall literal compile ! nop exit
+  then
+  swap! t; immediate
 t: .s ( -- ) cr depth for aft r@ pick . then next ."| $literal  <sp "  t;
 t: hide ( "name", -- : hide a given word from the search order )
   token find 0= if not-found exit then nfa $80 literal toggle t;
@@ -1219,9 +1242,21 @@ t: list
 
 \ ( ==================== Booting ======================================= )
 
+\ 'bist' checks the length field in the header matches 'here' and that the
+\ CRC in the header matches the CRC it calculates in the image, it has to
+\ zero the CRC field out first.
+\ h: bist ( -- : built in self test )
+\  header-length @ here xor if -2 literal (bye) then ( length check )
+\  header-crc @ 0 literal = if exit then ( exit if CRC was zero )
+\  header-crc @ 0 literal header-crc !   ( retrieve and zero CRC )
+\  0 literal here crc cr xor if -3 literal (bye) then t;
+
 t: cold
+   \  console  bist
    $10 literal block b/buf 0 literal fill
-   $12 literal retrieve sp0 sp! io! forth t;
+   $12 literal retrieve io! 
+   forth sp0 sp! t;
+
 t: hi hex cr ."| $literal eFORTH V " ver 0 literal u.r cr here . .free cr [ t;
 h: normal-running hi quit t;
 h: boot-sequence cold boot @execute bye t;
@@ -1333,6 +1368,10 @@ t: u update t;
 \ ( ==================== Block Editor ================================== )
 
 there           [t] cp t!
+[t]  .ok        [t] _prompt t!
+[t] accept      [t] _expect t!
+[t] rx?         [t] _key t!
+[t] tx!         [t] _emit t!
 [t] :           [t] _do_colon t!
 [t] ;           [t] _do_semi_colon t!
 [t] [forth]     [t] _forth t!
@@ -1345,4 +1384,9 @@ there    6 tcells t! \ Set Length First!
 checksum 7 tcells t! \ Calculate image CRC
 
 finished
+bye
 
+\ @note The appendix should go here, which should contain the VM source,
+\ and a description of the Virtual Machine. The file should also be prepared
+\ so it can be sent to a preprocessor that will convert this file to markdown,
+\ for viewing on the web.

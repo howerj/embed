@@ -159,7 +159,7 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 	}
 finished:
 	h->pc = pc; h->sp = sp; h->rp = rp; h->t = t;
-	return t;
+	return (int16_t)t;
 }
 
 int main(int argc, char **argv)

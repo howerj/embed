@@ -273,12 +273,6 @@ a: return ( -- : Compile a return into the target )
 : lookahead ( -- b u : parse a word, but leave it in the input stream )
   >in @ >r bl parse r> >in ! ;
 
-: t: ( "name", -- : creates a word in the target dictionary )
-  $f00d
-  lookahead
-  thead tcreate
-  there , does> @ [a] call ;
-
 \ The word 'h:' creates a headerless word in the target dictionary for
 \ space saving reasons and to declutter the target search order. Ideally 
 \ it would instead add the word to a different vocabulary, so it is still 
@@ -287,6 +281,9 @@ a: return ( -- : Compile a return into the target )
 : h: ( -- : create a word with no name in the target dictionary )
  $f00d
  tcreate there , does> @ [a] call ;
+
+: t: ( "name", -- : creates a word in the target dictionary )
+  lookahead thead h: ;
 
 : t;
    $f00d <> if abort" unstructured! " then
@@ -432,8 +429,8 @@ $4124 constant tib-buf     ( ... and address )
 $4126 constant tib-start   ( backup tib-buf value )
 \ $4280 constant pad-area    ( area for pad storage )
 
-\ $c    constant header-length ( location of length in header )
-\ $e    constant header-crc    ( location of CRC in header )
+ $c    constant header-length ( location of length in header )
+ $e    constant header-crc    ( location of CRC in header )
 
 ( ===                        Target Words                           === )
 \ With the assembler and meta compiler complete, we can now make our target
@@ -1245,14 +1242,14 @@ t: list
 \ 'bist' checks the length field in the header matches 'here' and that the
 \ CRC in the header matches the CRC it calculates in the image, it has to
 \ zero the CRC field out first.
-\ h: bist ( -- : built in self test )
-\  header-length @ here xor if -2 literal (bye) then ( length check )
-\  header-crc @ 0 literal = if exit then ( exit if CRC was zero )
-\  header-crc @ 0 literal header-crc !   ( retrieve and zero CRC )
-\  0 literal here crc cr xor if -3 literal (bye) then t;
+h: bist ( -- : built in self test )
+  header-length @ here xor if -2 literal (bye) then ( length check )
+  header-crc @ 0 literal = if exit then ( exit if CRC was zero )
+  header-crc @ 0 literal header-crc !   ( retrieve and zero CRC )
+  0 literal here crc xor if -3 literal (bye) then t;
 
 t: cold
-   \  console  bist
+   bist
    $10 literal block b/buf 0 literal fill
    $12 literal retrieve io! 
    forth sp0 sp! t;
@@ -1368,10 +1365,10 @@ t: u update t;
 \ ( ==================== Block Editor ================================== )
 
 there           [t] cp t!
-[t]  .ok        [t] _prompt t!
-[t] accept      [t] _expect t!
-[t] rx?         [t] _key t!
-[t] tx!         [t] _emit t!
+\ [t]  .ok        [t] _prompt t!
+\ [t] accept      [t] _expect t!
+\ [t] rx?         [t] _key t!
+\ [t] tx!         [t] _emit t!
 [t] :           [t] _do_colon t!
 [t] ;           [t] _do_semi_colon t!
 [t] [forth]     [t] _forth t!

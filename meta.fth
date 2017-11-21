@@ -323,6 +323,13 @@ a: return ( -- : Compile a return into the target )
   cfa >body @ ;
 : [u] [t] =cell + ; \ @warning only use on variables, not tlocations 
 
+\ xchange takes two vocabularies defined in the target by their variable
+\ names "name1" and "name2" and updates "name1" so it contains the previously
+\ defined words, and makes "name2" the vocabulary which subsequent definitions
+\ are added to.
+: xchange ( "name1", "name2", -- : exchange target vocabularies )
+  [last] [t] t! [t] t@ tlast s! ; 
+
 : literal [a] literal ;
 : begin  there update-fence ;
 : until  [a] ?branch ;
@@ -471,21 +478,7 @@ h: doConst r> @ t;
 0 tlocation assembler-voc     ( assembler vocabulary )
 0 tlocation _forth-wordlist   ( set at the end near the end of the file )
 0 tlocation _words            ( words execution vector )
-0 tlocation _forth            ( forth execution vector )
-0 tlocation _set-order        ( set-order execution vector )
-0 tlocation _do_colon         ( execution vector for ':' )
-0 tlocation _do_semi_colon    ( execution vector for ';' )
 0 tlocation current           ( WID to add definitions to )
-
-\ @todo move this to a different position / remove execution vectors here,
-\ this needs to be done in conjunction with changes to the assembler wordset,
-\ this should save space and make things less confusing.
-h: execute-location @ >r t;
-t: forth-wordlist _forth-wordlist t;
-t: words _words execute-location t;
-t: set-order _set-order execute-location t;
-t: forth _forth execute-location t;
-[last] [t] root-voc t! 0 tlast s!
 
 \ === ASSEMBLY INSTRUCTIONS ===
 \ @todo Instead of using an 'inline' bit, we could use the position in the
@@ -540,12 +533,8 @@ t: rdrop    rdrop    nop t; inline
 \ t: 2dup-xor 2dup-xor nop t; inline
 \ t: rxchg  rxchg    nop t; inline
 
-t: end-code forth _do_semi_colon execute-location t; immediate
-[last] [t] assembler-voc t!
 
-t: assembler root-voc assembler-voc 2 literal set-order t;
-t: ;code assembler t; immediate
-t: code _do_colon execute-location assembler t;
+[last] [t] assembler-voc t!
 
 $2       tconstant cell  ( size of a cell in bytes )
 $0       tvariable >in   ( Hold character pointer when parsing input )
@@ -1157,14 +1146,32 @@ t: get-order ( -- widn ... wid1 n : get the current search order )
   context - chars dup>r 1- dup 0< if $32 literal -throw exit then
   for aft dup-@ swap cell- then next @ r> t;
 
-h: [set-order] ( widn ... wid1 n -- : set the current search order )
-  dup [-1] = if drop root-voc 1 literal [set-order] exit then
+xchange _forth-wordlist root-voc
+
+h: execute-location @ >r t;
+t: forth-wordlist _forth-wordlist t;
+t: words _words execute-location t;
+
+t: set-order ( widn ... wid1 n -- : set the current search order )
+  dup [-1] = if drop root-voc 1 literal set-order exit then
   dup #vocs > if $31 literal -throw exit then
   context swap for aft tuck ! cell+ then next 0 literal swap! t;
 
-t: previous get-order swap drop 1- [set-order] t;
-t: also get-order over swap 1+ [set-order] t;
-t: only [-1] [set-order] t;
+t: forth root-voc forth-wordlist  2 literal set-order t;
+
+h: not-hidden? nfa count nip $80 literal and 0= t;
+h: .words space 
+    begin 
+      dup 
+    while dup not-hidden? if dup .id space then @address repeat drop cr t;
+h: [words]
+  get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat t;
+
+xchange root-voc _forth-wordlist
+
+t: previous get-order swap drop 1- set-order t;
+t: also get-order over swap 1+ set-order t;
+t: only [-1] set-order t;
 t: order get-order for aft . then next cr t;
 t: anonymous get-order 1+ here 1 literal cells allot swap set-order t;
 t: definitions context @ set-current t;
@@ -1178,15 +1185,14 @@ t: (order) ( w wid*n n -- wid*n w n )
 t: -order get-order (order) nip set-order t; ( wid -- )
 t: +order dup>r -order get-order r> swap 1+ set-order t; ( wid -- )
 
-h: [forth] root-voc forth-wordlist  2 literal [set-order] t;
-t: editor decimal root-voc editor-voc 2 literal [set-order] t;
-h: not-hidden? nfa count nip $80 literal and 0= t;
-h: .words space 
-    begin 
-      dup 
-    while dup not-hidden? if dup .id space then @address repeat drop cr t;
-h: [words]
-  get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat t;
+t: editor decimal root-voc editor-voc 2 literal set-order t;
+t: assembler root-voc assembler-voc 2 literal set-order t;
+t: ;code assembler t; immediate
+t: code : assembler t;
+
+xchange _forth-wordlist assembler-voc
+t: end-code forth ; t; immediate
+xchange assembler-voc _forth-wordlist
 
 \ ( ==================== Vocabulary Words ============================== )
 
@@ -1365,14 +1371,6 @@ t: u update t;
 \ ( ==================== Block Editor ================================== )
 
 there           [t] cp t!
-\ [t]  .ok        [t] _prompt t!
-\ [t] accept      [t] _expect t!
-\ [t] rx?         [t] _key t!
-\ [t] tx!         [t] _emit t!
-[t] :           [t] _do_colon t!
-[t] ;           [t] _do_semi_colon t!
-[t] [forth]     [t] _forth t!
-[t] [set-order] [t] _set-order t!
 [t] [words]     [t] _words t!
 [t] boot-sequence 2/ 0 t! ( set starting word )
 [t] normal-running [u] boot t!

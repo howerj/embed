@@ -268,7 +268,7 @@ a: return ( -- : Compile a return into the target )
   header @ 0= if 2drop exit then
   talign
   there [last] t, tlast ! 
-  there #target + pack$ count nip 1+ aligned tcp +! talign ;
+  there #target + pack$ c@ 1+ aligned tcp +! talign ;
 
 : lookahead ( -- b u : parse a word, but leave it in the input stream )
   >in @ >r bl parse r> >in ! ;
@@ -289,12 +289,6 @@ a: return ( -- : Compile a return into the target )
    $f00d <> if abort" unstructured! " then
    optimize if exit, else [a] return then ;
 
-\ @todo Change constant/variable method depending on optimization level
-\ @note A possible space saving measure in the metacompiler is to have
-\ a concept of words only defined in the target dictionary, these words
-\ could include things such as 'for' and 'next', and possible other
-\ immediate words, which are not called by other words.
-
 : fetch-xt @ dup 0= if abort" (null) " then ; ( a -- xt )
 
 : tconstant ( "name", n -- , Run Time: -- n )
@@ -304,7 +298,6 @@ a: return ( -- : Compile a return into the target )
   there tdoConst fetch-xt [a] call r> t, >r
   tcreate r> ,
   does> @ tbody t@ [a] literal ;
-  \ @ [a] call ;
 
 : tvariable ( "name", n -- , Run Time: -- a )
   >r
@@ -313,7 +306,6 @@ a: return ( -- : Compile a return into the target )
   there tdoVar fetch-xt [a] call r> t, >r
   tcreate r> ,
   does> @ tbody [a] literal ;
-  \ @ [a] call ;
 
 : tlocation ( "name", n -- : Reserve space in target for a memory location )
   there swap t, tcreate , does> @ [a] literal ;
@@ -338,7 +330,7 @@ a: return ( -- : Compile a return into the target )
 : then   begin 2/ over t@ or swap t! ;
 : else   skip swap then ;
 : while  if swap ;
-: repeat [a] branch then ;
+: repeat [a] branch then update-fence ;
 : again  [a] branch update-fence ;
 : aft    drop skip begin swap ;
 : constant tcreate , does> @ literal ;
@@ -434,10 +426,10 @@ $4110 constant context     ( holds current context for search order )
 $4122 constant #tib        ( Current count of terminal input buffer )
 $4124 constant tib-buf     ( ... and address )
 $4126 constant tib-start   ( backup tib-buf value )
-\ $4280 constant pad-area    ( area for pad storage )
+$4280 constant pad         ( area for pad storage )
 
- $c    constant header-length ( location of length in header )
- $e    constant header-crc    ( location of CRC in header )
+$c    constant header-length ( location of length in header )
+$e    constant header-crc    ( location of CRC in header )
 
 ( ===                        Target Words                           === )
 \ With the assembler and meta compiler complete, we can now make our target
@@ -477,7 +469,6 @@ h: doConst r> @ t;
 0 tlocation editor-voc        ( editor vocabulary )
 0 tlocation assembler-voc     ( assembler vocabulary )
 0 tlocation _forth-wordlist   ( set at the end near the end of the file )
-0 tlocation _words            ( words execution vector )
 0 tlocation current           ( WID to add definitions to )
 
 \ === ASSEMBLY INSTRUCTIONS ===
@@ -605,7 +596,6 @@ t: get-current current @ t;
 t: set-current current ! t;
 t: here cp @ t;               ( -- a )
 t: align here cp! t; ( -- )
-t: pad here pad-length + t; \ @todo use pad-area instead of 'here + pad-length'
 
 t: source #tib 2@ t;                    ( -- a u )
 t: source-id id @ t;                    ( -- 0 | -1 )
@@ -787,7 +777,7 @@ t: =string ( a1 u2 a1 u2 -- f : string equality )
   next 2drop [-1] t;
 
 t: nfa address cell+ t; ( pwd -- nfa : move to name field address)
-t: cfa nfa dup count nip + cell+ $fffe literal and t; ( pwd -- cfa )
+t: cfa nfa dup c@ + cell+ $fffe literal and t; ( pwd -- cfa )
 h: .id nfa print t; ( pwd -- : print out a word )
 h: logical 0= 0= t; ( n -- f )
 h: immediate? @ $4000 literal and logical t; ( pwd -- f )
@@ -947,7 +937,7 @@ h: not-found $d literal -throw t;
 \ @todo more words should have vectored execution, including:
 \ * interpret
 \ * actions on error condition in 'quit' loop
-\ * '[', ']' and 'literal'
+\ * 'literal'
 \ * 'abort'
 
 h: interpret ( ??? a -- ??? : The command/compiler loop )
@@ -976,7 +966,7 @@ h: .ok command? if ."| $literal  ok  " cr exit then t;
 h: ?depth sp@ sp0 u< if 4 literal -throw exit then t;
 h: eval
   begin
-    token dup count nip
+    token dup c@
   while
     interpret ?depth
   repeat drop _prompt @execute t;
@@ -1063,7 +1053,8 @@ t: [compile] ?compile find-cfa compile, t; immediate  ( -- ; <string> )
 t: compile  r> dup-@ , cell+ >r t; ( -- : Compile next compiled word )
 t: [char] ?compile char tcall literal t; immediate ( --, <string> : )
 h: ?quit command? if $38 literal -throw exit then t;
-t: ; ( ?quit ) ( ?compile ) ?check get-current ! =exit ,  [ t; immediate
+h: get-current! ?dup if get-current ! exit then t;
+t: ; ( ?quit ) ( ?compile ) ?check get-current! =exit ,  [ t; immediate
 t: : align here dup last-def !
     last , token ?nul ?unique count + cp! $cafe literal ] t;
 h: jumpz, chars $2000 literal or , t;
@@ -1087,7 +1078,7 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , t;
 t: does> ?compile compile doDoes nop t; immediate
 t: variable create 0 literal , t;
 t: constant create [t] doConst literal make-callable here cell- ! , t;
-\ t: :noname here $cafe literal ]  t;
+t: :noname here 0 literal $cafe literal ]  t;
 t: for ?compile =>r , here t; immediate
 t: next ?compile compile doNext , t; immediate
 t: aft ?compile drop here-0 jump, tcall begin swap t; immediate
@@ -1148,9 +1139,7 @@ t: get-order ( -- widn ... wid1 n : get the current search order )
 
 xchange _forth-wordlist root-voc
 
-h: execute-location @ >r t;
 t: forth-wordlist _forth-wordlist t;
-t: words _words execute-location t;
 
 t: set-order ( widn ... wid1 n -- : set the current search order )
   dup [-1] = if drop root-voc 1 literal set-order exit then
@@ -1159,12 +1148,14 @@ t: set-order ( widn ... wid1 n -- : set the current search order )
 
 t: forth root-voc forth-wordlist  2 literal set-order t;
 
-h: not-hidden? nfa count nip $80 literal and 0= t;
+\ The name fields length in a counted string is used to store a bit 
+\ indicating the word is hidden. This is the highest bit in the count byte.
+h: not-hidden? nfa c@ $80 literal and 0= t;
 h: .words space 
     begin 
       dup 
     while dup not-hidden? if dup .id space then @address repeat drop cr t;
-h: [words]
+t: words
   get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat t;
 
 xchange root-voc _forth-wordlist
@@ -1371,7 +1362,6 @@ t: u update t;
 \ ( ==================== Block Editor ================================== )
 
 there           [t] cp t!
-[t] [words]     [t] _words t!
 [t] boot-sequence 2/ 0 t! ( set starting word )
 [t] normal-running [u] boot t!
 

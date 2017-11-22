@@ -46,7 +46,7 @@ variable statep
 : iterate  newstate iterate-block generation ;
 : done?  key [char] q = ;
 : prompt  cr  ." press q to exit" cr ;
-: view  page lifeblk @ list prompt ;
+: view ( page ) lifeblk @ list prompt ;
 : initialize
   b/buf for aft lifeblk @ block r@ + random 1 and 
   if bl else [char] * then swap c! then next ;

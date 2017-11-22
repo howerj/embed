@@ -89,6 +89,7 @@ variable fence         ( Do not peephole optimize before this point )
 2    constant =cell    ( Target cell size )
 -1   constant optimize ( Turn optimizations on [-1] or off [0] )
 0    constant swap-endianess ( if true, swap the endianess )
+$4280 constant pad-area    ( area for pad storage )
 variable header -1 header ! ( If true Headers in the target will be generated )
 
 1   constant verbose  ( )
@@ -285,9 +286,8 @@ a: return ( -- : Compile a return into the target )
 : t: ( "name", -- : creates a word in the target dictionary )
   lookahead thead h: ;
 
-: t;
-   $f00d <> if abort" unstructured! " then
-   optimize if exit, else [a] return then ;
+: fallthrough; $f00d <> if abort" unstructured! " then ;
+: t; fallthrough; optimize if exit, else [a] return then ;
 
 : fetch-xt @ dup 0= if abort" (null) " then ; ( a -- xt )
 
@@ -401,7 +401,6 @@ $1b   constant =escape     ( escape character )
 
 $10   constant dump-width  ( number of columns for 'dump' )
 $50   constant tib-length  ( size of terminal input buffer )
-$50   constant pad-length  ( pad area begins HERE + pad-length )
 $1f   constant word-length ( maximum length of a word )
 
 $40   constant c/l ( characters per line in a block )
@@ -426,7 +425,7 @@ $4110 constant context     ( holds current context for search order )
 $4122 constant #tib        ( Current count of terminal input buffer )
 $4124 constant tib-buf     ( ... and address )
 $4126 constant tib-start   ( backup tib-buf value )
-$4280 constant pad         ( area for pad storage )
+\ $4280 == pad-area    
 
 $c    constant header-length ( location of length in header )
 $e    constant header-crc    ( location of CRC in header )
@@ -517,13 +516,16 @@ t: /mod     /mod     nop t; inline
 t: /        /        nop t; inline
 t: mod      mod      nop t; inline
 t: rdrop    rdrop    nop t; inline
-\ @todo investigate more special purpose instructions
+\ @todo investigate more special purpose instructions. A T->t 
+\ instruction for encoding special return stack manipulation words, 
+\ possibly using a fallthrough with a new instruction in the VM ALU decode,
+\ this would allow for the encoding of "swap >r" as a single instruction. 
+\ Perhaps statistics should be collected first with the trace i
 \ t: dup-@  dup-@    nop t; inline
 \ t: dup>r  dup>r    nop t; inline
 \ t: 2dup=  2dup=    nop t; inline
 \ t: 2dup-xor 2dup-xor nop t; inline
 \ t: rxchg  rxchg    nop t; inline
-
 
 [last] [t] assembler-voc t!
 
@@ -538,7 +540,7 @@ $400     tconstant b/buf ( size of a block )
 0        tvariable blk   ( current blk loaded, set in 'cold' )
 #version tconstant ver   ( eForth version )
 0 tvariable boot         ( -- : execute program at startup )
-\ pad-area tconstant pad   ( pad variable - offset into temporary storage )
+pad-area tconstant pad   ( pad variable - offset into temporary storage )
 
 \ === ASSEMBLY INSTRUCTIONS ===
 
@@ -559,8 +561,8 @@ h: over- over - t;           ( u u -- u u )
 h: over+ over + t;           ( u1 u2 -- u1 u1+2 )
 h: in! >in ! t;              ( u -- )
 h: in@ >in @ t;              ( -- u )
-t: aligned dup first-bit + t;   ( b -- a )
-h: cp! aligned cp ! t;               ( n -- )
+t: aligned dup first-bit + t; ( b -- a )
+h: cp! aligned cp ! t;       ( n -- )
 t: bye 0 literal (bye) t;    ( -- : leave the interpreter )
 t: cell- cell - t;           ( a -- a : adjust address to previous cell )
 t: cell+ cell + t;           ( a -- a : move address forward to next cell )
@@ -585,56 +587,56 @@ t: c@ dup-@ swap first-bit
       8 literal rshift exit
    then
    $ff literal and t; ( b -- c )
-t: c!                       ( c b -- )
+t: c!                       
   swap $ff literal and dup 8 literal lshift or swap
   swap over dup ( -2 and ) @ swap first-bit 0= $ff literal xor
-  >r over xor r> and xor swap ( -2 and ) ! t;
+  >r over xor r> and xor swap ! t;     ( c b -- )
+h: string@ over c@ t;                  ( b u -- b u c )
 t: 2! ( d a -- ) tuck ! cell+ ! t;     ( n n a -- )
 t: 2@ ( a -- d ) dup cell+ @ swap @ t; ( a -- n n )
-t: command? state@ 0= t;     ( -- f )
-t: get-current current @ t;
-t: set-current current ! t;
-t: here cp @ t;               ( -- a )
-t: align here cp! t; ( -- )
-
-t: source #tib 2@ t;                    ( -- a u )
-t: source-id id @ t;                    ( -- 0 | -1 )
-h: @execute @ ?dup if >r then t;        ( cfa -- )
-t: bl =bl t;                            ( -- c )
+t: command? state@ 0= t;               ( -- f )
+t: get-current current @ t;            ( -- wid )
+t: set-current current ! t;            ( wid -- )
+t: here cp @ t;                        ( -- a )
+t: align here cp! t;                   ( -- )
+t: source #tib 2@ t;                   ( -- a u )
+t: source-id id @ t;                   ( -- 0 | -1 )
+h: @execute @ ?dup if >r then t;       ( cfa -- )
+t: bl =bl t;                           ( -- c )
 t: within over- >r - r> u< t;          ( u lo hi -- f )
 \ t: dnegate invert >r invert 1 literal um+ r> + t; ( d -- d )
-t: abs dup 0< if negate exit then t;    ( n -- u )
-t: count dup 1+ swap c@ t;              ( cs -- b u )
-t: rot >r swap r> swap t;               ( n1 n2 n3 -- n2 n3 n1 )
-t: -rot swap >r swap r> t;              ( n1 n2 n3 -- n3 n1 n2 )
+t: abs dup 0< if negate exit then t;   ( n -- u )
+t: count dup 1+ swap c@ t;             ( cs -- b u )
+t: rot >r swap r> swap t;              ( n1 n2 n3 -- n2 n3 n1 )
+t: -rot swap >r swap r> t;             ( n1 n2 n3 -- n3 n1 n2 )
 \ @warning be careful with '2>r' and '2r>' as peephole optimizer can
 \ break these words. They should not be used before an 'exit' or a 't;'.
-\ h: 2>r r> swap >r swap >r >r t;         
 h: 2>r rxchg swap >r >r t;              ( u1 u2 --, R: -- u1 u2 )
-h: 2r> r> r> swap r> swap >r t;         ( -- u1 u2, R: u1 u2 -- )
+h: 2r> r> r> swap rxchg nop t; ( -- u1 u2, R: u1 u2 -- )
 h: doNext 2r> ?dup if 1- >r @ >r exit then cell+ >r t;
 [t] doNext tdoNext s!
-t: min 2dup < if drop exit then nip t; ( n n -- n )
-t: max 2dup > if drop exit then nip t; ( n n -- n )
+t: min 2dup < fallthrough;          ( n n -- n )
+h: mux if drop exit then nip t; ( n1 n2 b -- n : multiplex operation )
+t: max 2dup > mux t;                    ( n n -- n )
 h: >char $7f literal and dup $7f literal =bl within
-         if drop [char] _ then t;       ( c -- c )
+  if drop [char] _ then t;              ( c -- c )
 h: tib #tib cell+ @ t;                  ( -- a )
 \ h: echo _echo @execute t;             ( c -- )
 t: key _key @execute dup eof = if bye then t; ( -- c )
 t: allot cp +! t;                       ( n -- )
 t: /string over min rot over+ -rot - t; ( b u1 u2 -- b u : advance string u2 )
 h: +string 1 literal /string t;         ( b u -- b u : )
+h: @address @ fallthrough;              ( a -- a )
 h: address $3fff literal and t;         ( a -- a : mask off address bits )
-h: @address @ address t;                ( a -- a )
 h: last get-current @address t;         ( -- pwd )
 t: emit _emit @execute t;               ( c -- : write out a char )
-h: toggle over @ xor swap! t;           ( a u -- : xor value at addr with u )
 t: cr =cr emit =lf emit t;              ( -- )
 t: space =bl emit t;                    ( -- )
 h: depth sp@ sp0 - chars t;             ( -- u )
 h: vrelative cells sp@ swap - t;        ( -- u )
 t: pick  vrelative @ t;                 ( vn...v0 u -- vn...v0 vu )
-h: typist ( b u f -- : print a string )
+t: type 0 literal fallthrough;          ( b u -- )
+h: typist                               ( b u f -- : print a string )
   >r begin dup while
     swap count r@
     if
@@ -644,17 +646,16 @@ h: typist ( b u f -- : print a string )
     swap 1-
   repeat
   rdrop 2drop t;
-t: type 0 literal typist t;  ( b u -- )
+h: print count type t; ( b -- )
 h: $type [-1] typist t;
-h: print count type t;                ( b -- )
-h: decimal? $30 literal $3a literal within t; ( c -- f : decimal char? )
+h: decimal? [char] 0 [char] : within t; ( c -- f : decimal char? )
 h: lowercase? [char] a [char] { within t;   ( c -- f )
 h: uppercase? [char] A [char] [ within t;   ( c -- f )
-h: >lower ( c -- c : convert to lower case )
+h: >lower                                   ( c -- c : convert to lower case )
   dup uppercase? if =bl xor exit then t;
-h: nchars ( +n c -- : emit c n times )
+t: spaces =bl fallthrough;                  ( +n -- )
+h: nchars                                   ( +n c -- : emit c n times )
   swap 0 literal max for aft dup emit then next drop t;
-t: spaces =bl nchars t;                     ( +n -- )
 t: cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop t; ( b b u -- )
 t: fill swap for swap aft 2dup c! 1+ then next 2drop t; ( b u c -- )
 
@@ -670,15 +671,15 @@ t: throw
   ?dup if
     handler @ rp!
     r> handler !
-    r> swap >r
+    rxchg ( <-- r> swap >r )
     sp! drop r>
   then t;
 
 h: -throw negate throw t;  ( space saving measure )
 [t] -throw 2/ 2 t! 
 
+h: 1depth 1 literal fallthrough;
 h: ?ndepth depth 1- u> if 4 literal -throw exit then t;
-h: 1depth 1 literal ?ndepth t;
 
 \ h: um+ ( w w -- w carry )
 \   over over + >r
@@ -713,9 +714,9 @@ t: decimal $a literal base ! t;              ( -- )
 t: hex     $10 literal base ! t;             ( -- )
 h: radix base @ dup 2 literal - $22 literal u>
   if hex $28 literal -throw exit then t;
-h: digit  9 literal over < 7 literal and + $30 literal + t; ( u -- c )
+h: digit  9 literal over < 7 literal and + [char] 0 + t; ( u -- c )
 h: extract u/mod swap t;               ( n base -- n c )
-h: ?hold hld @ here u< if $11 literal -throw exit then t;  ( -- )
+h: ?hold hld @ pad $100 literal + u> if $11 literal -throw exit then t;  ( -- )
 t: hold  hld @ 1- dup hld ! ?hold c! t;      ( c -- )
 \ t: holds begin dup while 1- 2dup + c@ hold repeat 2drop t;
 t: sign  0< if [char] - hold exit then t;    ( n -- )
@@ -728,7 +729,7 @@ h: str ( n -- b u : convert a signed integer to a numeric string )
 h: adjust over- spaces type t;   ( b n n -- )
 t:  .r >r str r> adjust t;  ( n n : print n, right justified by +n )
 h: (u.) <# #s #> t;   ( u -- : )
-t: u.r >r (u.) r> adjust t; ( u +n -- : print u right justified by +n)
+t: u.r >r (u.) r> adjust t;    ( u +n -- : print u right justified by +n)
 t: u.  (u.) space type t;   ( u -- : print unsigned number )
 t:  . ( n -- print space, signed number )
    radix $a literal xor if u. exit then str space type t;
@@ -817,7 +818,7 @@ t: find ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
 h: numeric? ( char -- n|-1 : convert character in 0-9 a-z range to number )
   >lower
   dup lowercase? if $57 literal - exit then ( 97 = 'a', +10 as 'a' == 10 )
-  dup decimal?   if $30 literal - exit then ( 48 = '0' )
+  dup decimal?   if [char] 0 - exit then 
   drop [-1] t;
 
 h: digit? ( c -- f : is char a digit given base )
@@ -838,7 +839,6 @@ h: do-number ( n b u -- n b u : convert string )
     +string dup 0= ( advance string and test for end )
   until t;
 
-h: string@ over c@ t; ( b u -- b u c )
 h: negative?
    string@ $2D literal =
    if +string [-1] exit then
@@ -957,7 +957,8 @@ h: interpret ( ??? a -- ??? : The command/compiler loop )
     then
   then t;
 
-t: immediate last $4000 literal toggle t;
+t: immediate last $4000 literal fallthrough; ( -- : previous word immediate )
+h: toggle over @ xor swap! t;           ( a u -- : xor value at addr with u )
 h: do$ r> r@ r> count + aligned >r swap >r t; ( -- a )
 h: $"| do$ nop t; ( -- a : do string NB. nop to fool optimizer )
 h: ."| do$ print t; ( -- : print string  )
@@ -973,22 +974,13 @@ h: eval
 t: quit preset [ begin query [t] eval literal catch ?error again t;
 t: ok! _prompt ! t;
 
-\ @todo factor into get input and set input, or to use '2>r' and
-\ '2r>' more, to save space
+h: get-input source in@ id @ _prompt @ t; ( -- n1...n5 )
+h: set-input ok! id ! in! #tib 2! t;      ( n1...n5 -- )
 t: evaluate ( a u -- )
-  _prompt @ >r  
-  id      @ >r 
-  in@       >r 
-  source   2>r
-
-  0 literal  ok!
-  [-1]       id !
-  0 literal  in!
-  #tib 2! [t] eval literal catch
-
-  2r> #tib 2!
-  2r> id ! in! 
-  r>  ok!
+  get-input 2>r 2>r >r
+  0 literal [-1] 0 literal set-input
+  [t] eval literal catch
+  r> 2r> 2r> set-input
   throw t;
 
 h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
@@ -1003,18 +995,11 @@ t: crc ( b u -- u : calculate ccitt-ffff CRC )
 	begin
 		dup
 	while
-		over c@ r> swap ccitt >r 1 literal /string
+		string@ r> swap ccitt >r 1 literal /string
 	repeat 2drop r> t;
 
-t: random ( -- u : PRNG )
-  \ seed @ ?dup 0= if $7 literal seed ! random exit then
-  seed @ 0= seed swap toggle seed @ 
-  0 literal ccitt
-  \ For 16-bit xorshift PRNG, comment "0 literal ccitt" and use:
-  \   dup $d literal lshift xor
-  \   dup $9 literal rshift xor
-  \   dup $7 literal lshift xor
-  dup seed ! t;
+t: random ( -- u : pseudo random number )
+  seed @ 0= seed swap toggle seed @ 0 literal ccitt dup seed ! t; 
 
 h: 5u.r 5 literal u.r t;
 h: colon $3a literal emit t; ( -- )
@@ -1024,12 +1009,12 @@ h: colon $3a literal emit t; ( -- )
 
 \ ( ==================== Advanced I/O Control ========================== )
 
-\ h: pace 11 emit t;
+h: io! preset fallthrough;  ( -- : initialize I/O )
+h: console [t] rx? literal _key ! [t] tx! literal _emit ! fallthrough;
+h: hand [t] .ok  literal ( ' "drop" <-- was emit )  ( ' ktap ) fallthrough;
 h: xio  [t] accept literal _expect ! ( _tap ! ) ( _echo ! ) ok! t;
+\ h: pace 11 emit t;
 \ t: file [t] pace literal [t] drop literal [t] ktap literal xio t;
-h: hand [t] .ok  literal ( ' "drop" <-- was emit )  ( ' ktap ) xio t;
-h: console [t] rx? literal _key ! [t] tx! literal _emit ! hand t;
-t: io! console preset t; ( -- : initialize I/O )
 
 \ ( ==================== Advanced I/O Control ========================== )
 \
@@ -1064,8 +1049,8 @@ t: until ?compile jumpz,  t; immediate
 t: again ?compile jump, t; immediate
 h: here-0 here 0 literal t;
 t: if ?compile here-0 jumpz, t; immediate
+t: then ?compile fallthrough; immediate
 h: doThen  here chars over @ or swap! t;
-t: then ?compile doThen t; immediate
 t: else ?compile here-0 jump, swap doThen t; immediate
 t: while ?compile tcall if t; immediate
 t: repeat ?compile swap tcall again tcall then t; immediate
@@ -1240,8 +1225,8 @@ t: list
 \ CRC in the header matches the CRC it calculates in the image, it has to
 \ zero the CRC field out first.
 h: bist ( -- : built in self test )
-  header-length @ here xor if -2 literal (bye) then ( length check )
   header-crc @ 0 literal = if exit then ( exit if CRC was zero )
+  header-length @ here xor if -2 literal (bye) then ( length check )
   header-crc @ 0 literal header-crc !   ( retrieve and zero CRC )
   0 literal here crc xor if -3 literal (bye) then t;
 

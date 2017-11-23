@@ -219,10 +219,10 @@ The eForth model imposes extra semantics to certain areas of memory.
 | ------------- | ------ | ------------------------------ |
 | $0000         |   0    | Start of execution             |
 | $0002         |   0    | Trap Handler                   |
-| $0004-$EOD    |   0    | The dictionary                 |
-| $EOD-$PAD1    |   0    | Compilation and Numeric Output |
-| $PAD1-$PAD2   |   0    | Pad Area                       |
-| $PAD2-$3FFF   |   15   | End of dictionary              |
+| $0004-EOD     |   0    | The dictionary                 |
+| EOD-PAD1      |   ?    | Compilation and Numeric Output |
+| PAD1-PAD2     |   ?    | Pad Area                       |
+| PAD2-$3FFF    |   15   | End of dictionary              |
 | $4000         |   16   | Interpreter variable storage   |
 | $4400         |   17   | Start of variable stack        |
 | $4800-$FBFF   | 18-63  | Empty blocks for user data     |
@@ -300,15 +300,6 @@ This is a list of Error codes, not all of which are used by the application.
 the memory layout
 * Remove the compiler after a cross compiler has been made within the Forth
 interpreter, prepared images and the metacompiler would be provided instead.
-* More words and short phrases could potentially be encoded as single
-instructions with the right encoding, this should be investigated, particularly
-words that manipulate the return stack - there are many short phrases that
-involve them that could be folded into a single instruction, such as '&lt;r
-swap' or '@ &lt;r'. Also 'r> exit' could be possible merged into one
-instruction. 
-* A better disassembler, in the form of the 'see' word, would mean the source
-code would not have to be stored - but a word could be disassembled, modified
-and then recompiled.
 * To facilitate porting to microcontrollers the Forth could be made to be
 stored in a ROM, with initial variable values copied to RAM, the virtual
 machine would also have to be modified to map different parts of the address
@@ -340,9 +331,6 @@ with checks to make sure indices never go out of bounds.
 * Documentation could be extracted from the [meta.fth][] file, which should
 describe the entire system: The metacompiler, the target virtual machine,
 and how Forth works.
-* A cross assembler capable of producing 16-bit applications on [DOS][] for
-the [8086][] would be an interesting future application. 
-<https://github.com/benhoyt/third> could be used as a starting point.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

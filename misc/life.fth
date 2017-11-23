@@ -1,4 +1,3 @@
-
 0 ok!
 
 \ Conways Game of Life 
@@ -9,8 +8,6 @@
 \ ./forth eforth.blk ansi.fth life.fth /dev/stdin
 \ This requires an ANSI compliant terminal emulator
 
-decimal
-
 only forth anonymous definitions
 ( Add words to anonymous vocabulary )
 
@@ -18,10 +15,10 @@ variable stateblk
 variable lifeblk
 variable statep
 
-: wrapy  dup 0< if drop 15 then dup 15 > if drop 0 then ;
-: wrapx  dup 0< if drop 63 then dup 63 > if drop 0 then ;
+: wrapy  dup 0< if drop $f then dup $f > if drop 0 then ;
+: wrapx  dup 0< if drop $3f then dup $3f > if drop 0 then ;
 : wrap   wrapy swap wrapx swap ;
-: deceased?  wrap 64 * + lifeblk @ block + c@ bl = ;
+: deceased?  wrap $40 * + lifeblk @ block + c@ bl = ;
 : living?  deceased? 0= ;
 : (-1,-1)  2dup 1- swap 1- swap living? 1 and ;
 : (0,-1)  >r 2dup 1- living? 1 and r> + ;
@@ -40,8 +37,8 @@ variable statep
 : alive [char] * state! ; ( * )
 : dead  bl state! ;  ( space )
 : iterate-cell  2dup swap lives? if alive else dead then ;
-: iterate-row  0 begin dup 64 < while iterate-cell 1+ repeat drop ;
-: iterate-block  0 begin dup 16 < while iterate-row 1+ repeat drop ;
+: iterate-row  0 begin dup $40 < while iterate-cell 1+ repeat drop ;
+: iterate-block  0 begin dup $10 < while iterate-row 1+ repeat drop ;
 : generation  lifeblk @ stateblk @ lifeblk ! stateblk ! ;
 : iterate  newstate iterate-block generation ;
 : done?  key [char] q = ;
@@ -62,6 +59,7 @@ get-order -rot swap rot set-order definitions
   if initialize then 
   begin view iterate done? until ;
 
+: demo $20 -1 life ;
+
 only forth definitions
 
-hex

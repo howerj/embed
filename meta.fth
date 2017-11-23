@@ -50,21 +50,6 @@ only forth definitions hex
 \    - Compression routines would be a nice to have feature for reducing
 \    the saved image size. LZSS could be used, see:
 \    <https://oku.edu.mie-u.ac.jp/~okumura/compression/lzss.c>
-\    - Add a Built in Self Test that checks the length and the CRC in
-\    the header
-
-\ Document plan
-\ This program and document are a work in progress, it has been written
-\ as if the program has been complete, although it is far from it.
-\ The outline of the program/document is:
-\ * Introduction
-\ * Introduction to Forth
-\ * Design trade offs, philosophy of Forth
-\ * Dictionary layout
-\ * Reference virtual machine
-\ * The metacompiler, assembler
-\ * The eForth program
-\ * Conclusion
 
 ( ===                    Metacompilation wordset                    === )
 \ This section defines the metacompilation wordset as well as the
@@ -92,7 +77,7 @@ variable fence         ( Do not peephole optimize before this point )
 $4280 constant pad-area    ( area for pad storage )
 variable header -1 header ! ( If true Headers in the target will be generated )
 
-1   constant verbose  ( )
+1   constant verbose   ( verbosity level, higher is more verbose )
 #target #max 0 fill    ( Erase the target memory location )
 
 : ]asm assembler.1 +order ; immediate ( -- )
@@ -115,12 +100,13 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 : tc, there tc! 1 tcp +! ;
 : t,  there t!  =cell tcp +! ;
 : tallot tcp +! ;
-: $literal [char] " word count dup tc, 1- for count tc, next drop talign ;
+: update-fence there fence ! ;
+: $literal 
+  [char] " word count dup tc, 1- for count tc, next drop talign update-fence ;
 : tcells =cell * ;
 : tbody 1 tcells + ;
 : s! ! ;
 : dump-hex #target there 16 + dump ;
-: update-fence there fence ! ;
 : locations ( -- : list all words and locations in target dictionary )
   target.1 @ 
   begin 
@@ -246,18 +232,21 @@ a: return ( -- : Compile a return into the target )
 \ optimizations and merges the return instruction with the previous instruction
 \ if possible. 
 
-: lookback there =cell - t@ ;
+: previous there =cell - ;
+: lookback previous t@ ;
 : call? lookback $e000 and [a] #call = ;
-: call>goto there =cell - dup t@ $1fff and swap t! ;
-: fence? fence @ there =cell -  u> ;
+: call>goto previous dup t@ $1fff and swap t! ;
+: fence? fence @  previous u> ;
 : safe? lookback $e000 and [a] #alu = lookback $001c and 0= and ;
-: alu>return there =cell - dup t@ [a] r->pc [a] r-1 swap t! ;
+: alu>return previous dup t@ [a] r->pc [a] r-1 swap t! ;
 
-: exit,
+: exit-optimize
   fence? if [a] return exit then
   call?  if call>goto  exit then
   safe?  if alu>return exit then
   [a] return ;
+
+: exit, exit-optimize update-fence ;
 
 : inline    tlast @ t@ $8000 or tlast @ t! ;
 : immediate tlast @ t@ $4000 or tlast @ t! ;
@@ -280,8 +269,7 @@ a: return ( -- : Compile a return into the target )
 \ accessible to the programmer, but there is already very little room on the
 \ target.
 : h: ( -- : create a word with no name in the target dictionary )
- $f00d
- tcreate there , does> @ [a] call ;
+ $f00d tcreate there , update-fence does> @ [a] call ;
 
 : t: ( "name", -- : creates a word in the target dictionary )
   lookahead thead h: ;
@@ -351,7 +339,8 @@ a: return ( -- : Compile a return into the target )
 : swap    ]asm  #n       t->n   alu asm[ ;
 : nip     ]asm  #t       d-1    alu asm[ ;
 : drop    ]asm  #n       d-1    alu asm[ ;
-: exit    ]asm  #t       r->pc  r-1   alu asm[ ;
+\ : exit    ]asm  #t       r->pc  r-1   alu asm[ ;
+: exit exit, ;
 : >r      ]asm  #n       t->r   d-1   r+1   alu asm[ ;
 : r>      ]asm  #r       t->n   d+1   r-1   alu asm[ ;
 : r@      ]asm  #r       t->n   d+1   alu asm[ ;
@@ -438,7 +427,7 @@ $e    constant header-crc    ( location of CRC in header )
 
 target.1 +order         ( Add target word dictionary to search order )
 meta -order meta +order ( Reorder so 'meta' has a higher priority )
-forth-wordlist -order   ( Remove normal Forth words to prevent accidents )
+forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 
 \ The following 't,' sequence reserves space and partially populates the
 \ image header with file format information, based upon the PNG specification.
@@ -462,6 +451,7 @@ h: doConst r> @ t;
 
 [t] doVar tdoVar s!
 [t] doConst tdoConst s!
+
 
 0 tlocation cp                ( Dictionary Pointer: Set at end of file )
 0 tlocation root-voc          ( root vocabulary )
@@ -539,7 +529,7 @@ $8       tconstant #vocs ( number of vocabularies in allowed )
 $400     tconstant b/buf ( size of a block )
 0        tvariable blk   ( current blk loaded, set in 'cold' )
 #version tconstant ver   ( eForth version )
-0 tvariable boot         ( -- : execute program at startup )
+0        tvariable boot         ( -- : execute program at startup )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
 
 \ === ASSEMBLY INSTRUCTIONS ===
@@ -549,9 +539,10 @@ h: swap! swap ! t;           ( a u -- )
 h: [-1] -1 literal t;        ( -- -1 : space saving measure, push -1 )
 h: eof [-1] t;               ( -- : constant for End of File marker )
 h: 0x8000 $8000 literal t;   ( -- $8000 : space saving measure, push $8000 )
+h: 0x0000 $0000 literal t;   ( -- $0000 : space/optimization, push $0000 )
 t: 2drop drop drop t;        ( n n -- )
-h: drop-0 drop 0 literal t;  ( n -- 0 )
-h: 2drop-0 2drop 0 literal t; ( n n -- 0 )
+h: drop-0 drop 0x0000 t;  ( n -- 0 )
+h: 2drop-0 2drop 0x0000 t; ( n n -- 0 )
 h: state@ state @ t;         ( -- u )
 h: first-bit 1 literal and t; ( u -- u )
 t: 1+ 1 literal + t;         ( n -- n : increment a value  )
@@ -809,7 +800,7 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
       >r rot drop r> rdrop exit
     then
     cell+
-  repeat drop-0 r> 0 literal t;
+  repeat drop-0 r> 0x0000 t;
 
 t: search-wordlist searcher rot drop t; ( a wid -- pwd 1 | pwd -1 | a 0 )
 t: find ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
@@ -842,7 +833,7 @@ h: do-number ( n b u -- n b u : convert string )
 h: negative?
    string@ $2D literal =
    if +string [-1] exit then
-   0 literal t; ( b u -- f )
+   0x0000 t; ( b u -- f )
 
 h: base? ( b u -- )
   string@ $24 literal = ( $hex )
@@ -866,7 +857,7 @@ h: -trailing ( b u -- b u : remove trailing spaces )
     aft =bl over r@ + c@ <
       if r> 1+ exit then
     then
-  next 0 literal t;
+  next 0x0000 t;
 
 h: lookfor ( b u c -- b u : skip until _test succeeds )
   >r
@@ -932,13 +923,10 @@ t: literal ( n -- : write a literal into the dictionary )
 h: make-callable chars $4000 literal or t; ( cfa -- instruction )
 t: compile, make-callable , t; ( cfa -- : compile a code field address )
 h: $compile dup inline? if cfa @ , exit then cfa compile, t; ( pwd -- )
-h: not-found $d literal -throw t;
+h: not-found source type $d literal -throw t; ( -- : throw 'word not found' )
 
-\ @todo more words should have vectored execution, including:
-\ * interpret
-\ * actions on error condition in 'quit' loop
-\ * 'literal'
-\ * 'abort'
+\ @todo more words should have vectored execution
+\ such as: interpret, literal, abort, page, at-xy, ?error
 
 h: interpret ( ??? a -- ??? : The command/compiler loop )
   find ?dup if
@@ -948,14 +936,13 @@ h: interpret ( ??? a -- ??? : The command/compiler loop )
       $compile exit               ( <- compiling word )
     then
     drop cfa execute exit
-  else \ not a word
-    dup count number? if
-      nip
-      state@ if [t] literal tcompile, exit then
-    else
-      drop space print not-found exit
-    then
-  then t;
+  then 
+  \ not a word
+  dup count number? if
+    nip
+    state@ if [t] literal tcompile, exit then exit
+  then
+  ( drop space print ) not-found t;
 
 t: immediate last $4000 literal fallthrough; ( -- : previous word immediate )
 h: toggle over @ xor swap! t;           ( a u -- : xor value at addr with u )
@@ -984,22 +971,28 @@ t: evaluate ( a u -- )
   throw t;
 
 h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
- 	over $8 literal rshift xor    ( crc x )
- 	dup  $4 literal rshift xor    ( crc x )
- 	dup  $5 literal lshift xor    ( crc x )
- 	dup  $c literal lshift xor    ( crc x )
- 	swap $8 literal lshift xor t; ( crc )
+  over $8 literal rshift xor    ( crc x )
+  dup  $4 literal rshift xor    ( crc x )
+  dup  $5 literal lshift xor    ( crc x )
+  dup  $c literal lshift xor    ( crc x )
+  swap $8 literal lshift xor t; ( crc )
 
 t: crc ( b u -- u : calculate ccitt-ffff CRC )
-	$ffff literal >r
-	begin
-		dup
-	while
-		string@ r> swap ccitt >r 1 literal /string
-	repeat 2drop r> t;
+  $ffff literal >r
+  begin
+    dup
+  while
+   string@ r> swap ccitt >r 1 literal /string
+  repeat 2drop r> t;
 
 t: random ( -- u : pseudo random number )
   seed @ 0= seed swap toggle seed @ 0 literal ccitt dup seed ! t; 
+
+\ h: not-implemented 15 literal -throw t;
+\ [t] not-implemented tvariable =page
+\ [t] not-implemented tvariable =at-xy
+\ t: page =page @execute t;   ( -- : page screen )
+\ t: at-xy =at-xy @execute t; ( x y -- : set cursor position )
 
 h: 5u.r 5 literal u.r t;
 h: colon $3a literal emit t; ( -- )
@@ -1007,7 +1000,7 @@ h: colon $3a literal emit t; ( -- )
 \ t: d. base @ >r decimal  . r> base ! t;
 \ t: h. base @ >r hex     u. r> base ! t;
 
-\ ( ==================== Advanced I/O Control ========================== )
+\ ## I/O Control 
 
 h: io! preset fallthrough;  ( -- : initialize I/O )
 h: console [t] rx? literal _key ! [t] tx! literal _emit ! fallthrough;
@@ -1016,9 +1009,7 @@ h: xio  [t] accept literal _expect ! ( _tap ! ) ( _echo ! ) ok! t;
 \ h: pace 11 emit t;
 \ t: file [t] pace literal [t] drop literal [t] ktap literal xio t;
 
-\ ( ==================== Advanced I/O Control ========================== )
-\
-\ ( ==================== Control Structures ============================ )
+\ ## Control Structures
 
 h: ?check ( $cafe -- : check for magic number on the stack )
    $cafe literal <> if $16 literal -throw exit then t;
@@ -1037,17 +1028,17 @@ t: [compile] ?compile find-cfa compile, t; immediate  ( -- ; <string> )
 \ NB. 'compile' only works for words, instructions, and numbers below $8000
 t: compile  r> dup-@ , cell+ >r t; ( -- : Compile next compiled word )
 t: [char] ?compile char tcall literal t; immediate ( --, <string> : )
-h: ?quit command? if $38 literal -throw exit then t;
+\ h: ?quit command? if $38 literal -throw exit then t;
+t: ; ( ?quit ) ?compile ?check =exit , [ fallthrough; immediate
 h: get-current! ?dup if get-current ! exit then t;
-t: ; ( ?quit ) ( ?compile ) ?check get-current! =exit ,  [ t; immediate
 t: : align here dup last-def !
     last , token ?nul ?unique count + cp! $cafe literal ] t;
-h: jumpz, chars $2000 literal or , t;
-h: jump, chars ( $0000 literal or ) , t;
 t: begin ?compile here  t; immediate
-t: until ?compile jumpz,  t; immediate
-t: again ?compile jump, t; immediate
-h: here-0 here 0 literal t;
+t: until ?compile fallthrough; immediate
+h: jumpz, chars $2000 literal or , t;
+t: again ?compile fallthrough; immediate
+h: jump, chars ( $0000 literal or ) , t;
+h: here-0 here 0x0000 t;
 t: if ?compile here-0 jumpz, t; immediate
 t: then ?compile fallthrough; immediate
 h: doThen  here chars over @ or swap! t;
@@ -1075,35 +1066,11 @@ t: make
     tcall literal tcall literal compile ! nop exit
   then
   swap! t; immediate
-t: .s ( -- ) cr depth for aft r@ pick . then next ."| $literal  <sp "  t;
 t: hide ( "name", -- : hide a given word from the search order )
   token find 0= if not-found exit then nfa $80 literal toggle t;
 
-\ : [leave] rdrop rdrop rdrop ; hidden
-\ : leave ?compile compile [leave] ; immediate
-\ : [do] r> dup>r swap rot 2>r cell+ >r ; hidden
-\ : do ?compile compile [do] 0 , here ; immediate
-\ : [loop]
-\     2r> 1+ r> 2dup <> if 2>r @ >r exit then
-\     >r 1- >r cell+ >r ; hidden
-\ : [unloop] r> rdrop rdrop rdrop >r ; hidden
-\ : loop compile [loop] dup ,
-\    compile [unloop] cell- here chars swap! ; immediate
-\ : [i] 2r> tuck 2>r nop ; hidden
-\ : i ?compile compile [i] ; immediate
-\ : [?do]
-\    2dup <> if
-\      r> dup>r swap rot 2>r cell+ >r exit
-\   then 2drop exit ; hidden
-\ : ?do  ?compile compile [?do] 0 , here ; immediate
+\ ## Strings 
 
-\ ( evaluate instruction )
-\ : ex [ here 2 cells + ] literal ! [ 0 , ] ;
-\
-\ ( ==================== Control Structures ============================ )
-\
-\ ( ==================== Strings ======================================= )
-\
 h: $,' [char] " word count + cp! t; ( -- )
 t: $"  ?compile compile $"| $,' t; immediate         ( -- ; <string> )
 t: ."  ?compile compile ."| $,' t; immediate         ( -- ; <string> )
@@ -1111,7 +1078,7 @@ t: abort [-1] (bye) t;
 h: {abort} do$ print cr abort t;
 t: abort" ?compile compile {abort} $,' t; immediate \ "
 
-\ ( ==================== Vocabulary Words ============================== )
+\ ## Vocabulary Words 
 
 h: find-empty-cell begin dup-@ while cell+ repeat t; ( a -- a )
 
@@ -1170,12 +1137,8 @@ xchange _forth-wordlist assembler-voc
 t: end-code forth ; t; immediate
 xchange assembler-voc _forth-wordlist
 
-\ ( ==================== Vocabulary Words ============================== )
+\ ## Block Word Set
 
-\ ( ==================== Strings ======================================= )
-\
-\ ( ==================== Block Word Set ================================ )
-\
 t: update [-1] block-dirty ! t;          ( -- )
 h: blk-@ blk @ t;
 h: +block blk-@ + t;               ( -- )
@@ -1217,9 +1180,8 @@ t: list
 \    dup 5u.r space pipe space dup 0 literal .line cr 1+
 \  next drop t;
 
-\ ( ==================== Block Word Set ================================ )
 
-\ ( ==================== Booting ======================================= )
+\ ## Booting
 
 \ 'bist' checks the length field in the header matches 'here' and that the
 \ CRC in the header matches the CRC it calculates in the image, it has to
@@ -1240,9 +1202,7 @@ t: hi hex cr ."| $literal eFORTH V " ver 0 literal u.r cr here . .free cr [ t;
 h: normal-running hi quit t;
 h: boot-sequence cold boot @execute bye t;
 
-\ ( ==================== Booting ======================================= )
-
-\ ( ==================== See =========================================== )
+\ ## See : The Forth Disassembler
 
 \ @warning This disassembler is experimental, and not liable to work
 
@@ -1263,16 +1223,15 @@ h: name ( cfa -- nfa )
 
 h: .name name ?dup 0= if $"| $literal ??? " then print t;
 
-h: .instruction ( instruction -- masked )
-  dup 0x8000 and
-    if drop 0x8000 ."| $literal LIT " exit then
-  dup $6000 literal and $6000 literal =
-    if drop $6000 literal ."| $literal ALU " exit then
-  dup $6000 literal and $4000 literal =
-    if drop $4000 literal ."| $literal CAL " exit then
-      $6000 literal and $2000 literal =
-    if      $2000 literal ."| $literal BRN " exit then
-  0 literal ."| $literal BRZ " nop t;
+h: ?instruction ( i m e -- i 0 | e -1 )
+   >r over and r> tuck = if nip [-1] exit then drop-0 t;
+
+h: .instruction
+   0x8000        0x8000        ?instruction if ."| $literal LIT " exit then
+   $6000 literal $6000 literal ?instruction if ."| $literal ALU " exit then
+   $6000 literal $4000 literal ?instruction if ."| $literal CAL " exit then
+   $6000 literal $2000 literal ?instruction if ."| $literal BRZ " exit then
+   drop 0 literal ."| $literal BRN " t;
 
 t: decompile ( u -- : decompile instruction )
    dup .instruction $4000 literal =
@@ -1286,6 +1245,17 @@ h: decompiler ( previous current -- : decompile starting at address )
      dup 5u.r space decompile cr cell+
    repeat rdrop drop t;
 
+\ 'see' is the Forth disassembler, it takes a word and (attempts) to 
+\ turn it back into readable Forth source code. The disassembler is only
+\ a few hundred bytes in size, which is a testament to the brevity achievable
+\ with Forth.
+\ 
+\ If the word 'see' was good enough we could potentially dispense with the
+\ source code entirely: the entire dictionary could be disassembled and saved
+\ to disk, modified, then recompiled yielding a modified Forth. Although 
+\ comments would not be present, meaning this would be more of an intellectual
+\ exercise than of any utility.
+
 t: see ( --, <string> : decompile a word )
   token finder 0= if not-found exit then
   swap 2dup= if drop here then >r
@@ -1294,6 +1264,9 @@ t: see ( --, <string> : decompile a word )
   cfa r> decompiler space $3b literal emit
   dup inline?    if ."| $literal  inline  " then
       immediate? if ."| $literal  immediate  " then cr t;
+
+
+t: .s ( -- ) cr depth for aft r@ pick . then next ."| $literal  <sp "  t;
 
 h: dm+ chars for aft dup-@ space 5u.r cell+ then next t; ( a u -- a )
 \ h: dc+ chars for aft dup-@ space decompile cell+ then next t; ( a u -- a )
@@ -1311,12 +1284,10 @@ t: dump ( a u -- )
     then
   next drop t;
 
-\ ( ==================== See =========================================== )
-
 [last] [t] _forth-wordlist t!
 [t] _forth-wordlist [t] current t!
 
-\ ( ==================== Block Editor ================================== )
+\ ## Block Editor
 
 0 tlast s!
 h: [block] blk-@ block t;
@@ -1344,7 +1315,7 @@ t: u update t;
 \ t: sw 2dup y [line] swap [line] swap c/l cmove c t;
 [last] [t] editor-voc t! 0 tlast s!
 
-\ ( ==================== Block Editor ================================== )
+\ ## Final Touches
 
 there           [t] cp t!
 [t] boot-sequence 2/ 0 t! ( set starting word )
@@ -1356,7 +1327,11 @@ checksum 7 tcells t! \ Calculate image CRC
 finished
 bye
 
+\ ## APPENDIX
+
 \ @note The appendix should go here, which should contain the VM source,
 \ and a description of the Virtual Machine. The file should also be prepared
 \ so it can be sent to a preprocessor that will convert this file to markdown,
 \ for viewing on the web.
+
+

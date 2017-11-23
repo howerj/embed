@@ -8,7 +8,7 @@
 # diminishes the 'n' is in 'n-gram'.
 set -eu;
 
-INPUT=meta.fth
+INPUT=meta.blk
 DATA=`tempfile`;
 
 # Strip data

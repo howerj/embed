@@ -121,16 +121,16 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 : display ( -- : display metacompilation and target information )
   verbose 0= if exit then
   hex
-  ." META COMPILATION COMPLETE" cr
+  ." COMPILATION COMPLETE" cr
   verbose 1 u> if 
     dump-hex cr 
     ." TARGET DICTIONARY: " cr
     \ words 
     locations
   then
-  ." META: "       meta        . cr
-  ." TARGET: "     target.1    . cr
-  ." ASSEMBLER: "  assembler.1 . cr
+  \ ." META: "       meta        . cr
+  \ ." TARGET: "     target.1    . cr
+  \ ." ASSEMBLER: "  assembler.1 . cr
   ." HOST: "       here        . cr
   ." TARGET: "     there       . cr
   ." HEADER: "     #target 20 dump cr ;
@@ -459,6 +459,8 @@ h: doConst r> @ t;
 0 tlocation assembler-voc     ( assembler vocabulary )
 0 tlocation _forth-wordlist   ( set at the end near the end of the file )
 0 tlocation current           ( WID to add definitions to )
+0 tlocation inline-start
+0 tlocation inline-end
 
 \ === ASSEMBLY INSTRUCTIONS ===
 \ @todo Instead of using an 'inline' bit, we could use the position in the
@@ -466,46 +468,50 @@ h: doConst r> @ t;
 \ also be used for looking up assembler instructions. This would free a bit
 \ for other use, like compile only words.
 
-t: nop      nop      nop t; inline
-t: dup      dup      nop t; inline
-t: over     over     nop t; inline
-t: invert   invert   nop t; inline
-t: um+      um+      nop t; inline
-t: +        +        nop t; inline
-t: um*      um*      nop t; inline
-t: *        *        nop t; inline
-t: swap     swap     nop t; inline
-t: nip      nip      nop t; inline
-t: drop     drop     nop t; inline
-t: exit     exit     nop t; inline
+t: nop      nop      t;
+t: dup      dup      t;
+t: over     over     t;
+t: invert   invert   t;
+t: um+      um+      t;
+t: +        +        t;
+t: um*      um*      t;
+t: *        *        t;
+t: swap     swap     t;
+t: nip      nip      t;
+t: drop     drop     t;
+t: @        @        t;
+t: !        !        t;
+t: rshift   rshift   t;
+t: lshift   lshift   t;
+t: =        =        t;
+t: u<       u<       t;
+t: <        <        t;
+t: and      and      t;
+t: xor      xor      t;
+t: or       or       t;
+t: sp@      sp@      t;
+t: sp!      sp!      t;
+t: 1-       1-       t;
+t: 0=       0=       t;
+t: (bye)    (bye)    t;
+t: rx?      rx?      t;
+t: tx!      tx!      t;
+t: (save)   (save)   t;
+t: u/mod    u/mod    t;
+t: /mod     /mod     t;
+t: /        /        t;
+t: mod      mod      t;
+
+there [t] inline-start t!
+t: rp@      rp@      nop t; inline ( compile-only )
+t: rp!      rp!      nop t; inline ( compile-only )
+t: exit     exit     nop t; inline ( compile-only )
 t: >r       >r       nop t; inline ( compile-only )
 t: r>       r>       nop t; inline ( compile-only )
 t: r@       r@       nop t; inline ( compile-only )
-t: @        @        nop t; inline
-t: !        !        nop t; inline
-t: rshift   rshift   nop t; inline
-t: lshift   lshift   nop t; inline
-t: =        =        nop t; inline
-t: u<       u<       nop t; inline
-t: <        <        nop t; inline
-t: and      and      nop t; inline
-t: xor      xor      nop t; inline
-t: or       or       nop t; inline
-t: sp@      sp@      nop t; inline
-t: sp!      sp!      nop t; inline
-t: 1-       1-       nop t; inline
-t: rp@      rp@      nop t; inline
-t: rp!      rp!      nop t; inline
-t: 0=       0=       nop t; inline
-t: (bye)    (bye)    nop t; inline
-t: rx?      rx?      nop t; inline
-t: tx!      tx!      nop t; inline
-t: (save)   (save)   nop t; inline
-t: u/mod    u/mod    nop t; inline
-t: /mod     /mod     nop t; inline
-t: /        /        nop t; inline
-t: mod      mod      nop t; inline
-t: rdrop    rdrop    nop t; inline
+t: rdrop    rdrop    nop t; inline ( compile-only )
+there [t] inline-end t!
+
 \ @todo investigate more special purpose instructions. A T->t 
 \ instruction for encoding special return stack manipulation words, 
 \ possibly using a fallthrough with a new instruction in the VM ALU decode,
@@ -553,7 +559,6 @@ h: over+ over + t;           ( u1 u2 -- u1 u1+2 )
 h: in! >in ! t;              ( u -- )
 h: in@ >in @ t;              ( -- u )
 t: aligned dup first-bit + t; ( b -- a )
-h: cp! aligned cp ! t;       ( n -- )
 t: bye 0 literal (bye) t;    ( -- : leave the interpreter )
 t: cell- cell - t;           ( a -- a : adjust address to previous cell )
 t: cell+ cell + t;           ( a -- a : move address forward to next cell )
@@ -589,7 +594,8 @@ t: command? state@ 0= t;               ( -- f )
 t: get-current current @ t;            ( -- wid )
 t: set-current current ! t;            ( wid -- )
 t: here cp @ t;                        ( -- a )
-t: align here cp! t;                   ( -- )
+t: align here fallthrough;             ( -- )
+h: cp! aligned cp ! t;                 ( n -- )
 t: source #tib 2@ t;                   ( -- a u )
 t: source-id id @ t;                   ( -- 0 | -1 )
 h: @execute @ ?dup if >r then t;       ( cfa -- )
@@ -650,6 +656,9 @@ h: nchars                                   ( +n c -- : emit c n times )
 t: cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop t; ( b b u -- )
 t: fill swap for swap aft 2dup c! 1+ then next 2drop t; ( b u c -- )
 
+\ t: even first-bit 0= t;
+\ t: odd even 0= t;
+
 t: catch
   sp@ >r
   handler @ >r
@@ -707,8 +716,8 @@ h: radix base @ dup 2 literal - $22 literal u>
   if hex $28 literal -throw exit then t;
 h: digit  9 literal over < 7 literal and + [char] 0 + t; ( u -- c )
 h: extract u/mod swap t;               ( n base -- n c )
+t: hold  hld @ 1- dup hld ! c! fallthrough;  ( c -- )
 h: ?hold hld @ pad $100 literal + u> if $11 literal -throw exit then t;  ( -- )
-t: hold  hld @ 1- dup hld ! ?hold c! t;      ( c -- )
 \ t: holds begin dup while 1- 2dup + c@ hold repeat 2drop t;
 t: sign  0< if [char] - hold exit then t;    ( n -- )
 t: #>  drop hld @ pad over- t;               ( w -- b u )
@@ -773,7 +782,9 @@ t: cfa nfa dup c@ + cell+ $fffe literal and t; ( pwd -- cfa )
 h: .id nfa print t; ( pwd -- : print out a word )
 h: logical 0= 0= t; ( n -- f )
 h: immediate? @ $4000 literal and logical t; ( pwd -- f )
-h: inline?    @ 0x8000        and logical t; ( pwd -- f )
+\ @todo Use the new inline mechanism
+h: inline? inline-start @ inline-end @ within t;
+  \ @ 0x8000        and logical t; ( pwd -- f )
 
 h: searcher ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
   swap >r dup
@@ -1134,6 +1145,8 @@ t: ;code assembler t; immediate
 t: code : assembler t;
 
 xchange _forth-wordlist assembler-voc
+\ @todo move inline-able words here, or deal with them in another way,
+\ such as by putting them in a certain section
 t: end-code forth ; t; immediate
 xchange assembler-voc _forth-wordlist
 

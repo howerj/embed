@@ -305,9 +305,6 @@ stored in a ROM, with initial variable values copied to RAM, the virtual
 machine would also have to be modified to map different parts of the address
 space into RAM and ROM. This would allow the system to require very little
 (~2-4KiB) of RAM for a usable system, with a 6KiB ROM.
-* The major things that have not been implemented are; the locals wordset, the
-file access wordset and words for performing tests. These words may or may
-not be implemented at a later date.
 * Relative jumps could be used instead of absolute jumps in the code, this
 would make relocation easier.
 * Save and load all state to disk, not just the core. The current system also
@@ -319,9 +316,6 @@ into the generated object. Other information to include would be a CRC and
 length information. See <http://www.fadden.com/tech/file-formats.html>,
 and <https://stackoverflow.com/questions/323604>.
 * Improve the command line argument passing in [forth.c][].
-* Simplify, or make a barebones version of, [forth.c][] designed to be as 
-simple as possible. Perhaps fread/fwrite and a swap routine based on the 
-endianess of the processor would be smaller than the current solution.
 * On the Windows platform the input and output streams should be reopened in
 binary mode.
 * More assertions and range checks should be added to the interpreter, for

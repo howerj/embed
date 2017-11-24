@@ -210,7 +210,6 @@ performed by three instructions.
 The interpreter is based on eForth by C. H. Ting, with some modifications
 to the model.
 
-
 ## eForth Memory model
 
 The eForth model imposes extra semantics to certain areas of memory.
@@ -232,68 +231,67 @@ The eForth model imposes extra semantics to certain areas of memory.
 
 This is a list of Error codes, not all of which are used by the application.
 
-@todo include hex values for this lookup table
+| Hex  | Dec  |  Message                                      |
+| ---- | ---- | --------------------------------------------- |
+| FFFF |  -1  | ABORT                                         |
+| FFFE |  -2  | ABORT"                                        |
+| FFFD |  -3  | stack overflow                                |
+| FFFC |  -4  | stack underflow                               |
+| FFFB |  -5  | return stack overflow                         |
+| FFFA |  -6  | return stack underflow                        |
+| FFF9 |  -7  | do-loops nested too deeply during execution   |
+| FFF8 |  -8  | dictionary overflow                           |
+| FFF7 |  -9  | invalid memory address                        |
+| FFF6 | -10  | division by zero                              |
+| FFF5 | -11  | result out of range                           |
+| FFF4 | -12  | argument type mismatch                        |
+| FFF3 | -13  | undefined word                                |
+| FFF2 | -14  | interpreting a compile-only word              |
+| FFF1 | -15  | invalid FORGET                                |
+| FFF0 | -16  | attempt to use zero-length string as a name   |
+| FFEF | -17  | pictured numeric output string overflow       |
+| FFEE | -18  | parsed string overflow                        |
+| FFED | -19  | definition name too long                      |
+| FFEC | -20  | write to a read-only location                 |
+| FFEB | -21  | unsupported operation                         |
+| FFEA | -22  | control structure mismatch                    |
+| FFE9 | -23  | address alignment exception                   |
+| FFE8 | -24  | invalid numeric argument                      |
+| FFE7 | -25  | return stack imbalance                        |
+| FFE6 | -26  | loop parameters unavailable                   |
+| FFE5 | -27  | invalid recursion                             |
+| FFE4 | -28  | user interrupt                                |
+| FFE3 | -29  | compiler nesting                              |
+| FFE2 | -30  | obsolescent feature                           |
+| FFE1 | -31  | &gt;BODY used on non-CREATEd definition       |
+| FFE0 | -32  | invalid name argument (e.g., TO xxx)          |
+| FFDF | -33  | block read exception                          |
+| FFDE | -34  | block write exception                         |
+| FFDD | -35  | invalid block number                          |
+| FFDC | -36  | invalid file position                         |
+| FFDB | -37  | file I/O exception                            |
+| FFDA | -38  | non-existent file                             |
+| FFD9 | -39  | unexpected end of file                        |
+| FFD8 | -40  | invalid BASE for floating point conversion    |
+| FFD7 | -41  | loss of precision                             |
+| FFD6 | -42  | floating-point divide by zero                 |
+| FFD5 | -43  | floating-point result out of range            |
+| FFD4 | -44  | floating-point stack overflow                 |
+| FFD3 | -45  | floating-point stack underflow                |
+| FFD2 | -46  | floating-point invalid argument               |
+| FFD1 | -47  | compilation word list deleted                 |
+| FFD0 | -48  | invalid POSTPONE                              |
+| FFCF | -49  | search-order overflow                         |
+| FFCE | -50  | search-order underflow                        |
+| FFCD | -51  | compilation word list changed                 |
+| FFCC | -52  | control-flow stack overflow                   |
+| FFCB | -53  | exception stack overflow                      |
+| FFCA | -54  | floating-point underflow                      |
+| FFC9 | -55  | floating-point unidentified fault             |
+| FFC8 | -56  | QUIT                                          |
+| FFC7 | -57  | exception in sending or receiving a character |
+| FFC6 | -58  | [IF], [ELSE], or [THEN] exception             |
 
-| Code |  Message                                      |
-| ---- | --------------------------------------------- |
-|  -1  | ABORT                                         |
-|  -2  | ABORT"                                        |
-|  -3  | stack overflow                                |
-|  -4  | stack underflow                               |
-|  -5  | return stack overflow                         |
-|  -6  | return stack underflow                        |
-|  -7  | do-loops nested too deeply during execution   |
-|  -8  | dictionary overflow                           |
-|  -9  | invalid memory address                        |
-| -10  | division by zero                              |
-| -11  | result out of range                           |
-| -12  | argument type mismatch                        |
-| -13  | undefined word                                |
-| -14  | interpreting a compile-only word              |
-| -15  | invalid FORGET                                |
-| -16  | attempt to use zero-length string as a name   |
-| -17  | pictured numeric output string overflow       |
-| -18  | parsed string overflow                        |
-| -19  | definition name too long                      |
-| -20  | write to a read-only location                 |
-| -21  | unsupported operation                         |
-| -22  | control structure mismatch                    |
-| -23  | address alignment exception                   |
-| -24  | invalid numeric argument                      |
-| -25  | return stack imbalance                        |
-| -26  | loop parameters unavailable                   |
-| -27  | invalid recursion                             |
-| -28  | user interrupt                                |
-| -29  | compiler nesting                              |
-| -30  | obsolescent feature                           |
-| -31  | &gt;BODY used on non-CREATEd definition       |
-| -32  | invalid name argument (e.g., TO xxx)          |
-| -33  | block read exception                          |
-| -34  | block write exception                         |
-| -35  | invalid block number                          |
-| -36  | invalid file position                         |
-| -37  | file I/O exception                            |
-| -38  | non-existent file                             |
-| -39  | unexpected end of file                        |
-| -40  | invalid BASE for floating point conversion    |
-| -41  | loss of precision                             |
-| -42  | floating-point divide by zero                 |
-| -43  | floating-point result out of range            |
-| -44  | floating-point stack overflow                 |
-| -45  | floating-point stack underflow                |
-| -46  | floating-point invalid argument               |
-| -47  | compilation word list deleted                 |
-| -48  | invalid POSTPONE                              |
-| -49  | search-order overflow                         |
-| -50  | search-order underflow                        |
-| -51  | compilation word list changed                 |
-| -52  | control-flow stack overflow                   |
-| -53  | exception stack overflow                      |
-| -54  | floating-point underflow                      |
-| -55  | floating-point unidentified fault             |
-| -56  | QUIT                                          |
-| -57  | exception in sending or receiving a character |
-| -58  | [IF], [ELSE], or [THEN] exception             |
 
 ## To Do / Wish List
 

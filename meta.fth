@@ -431,15 +431,12 @@ h: doConst r> @ t;
 [t] doVar tdoVar s!
 [t] doConst tdoConst s!
 
-
 0 tlocation cp                ( Dictionary Pointer: Set at end of file )
 0 tlocation root-voc          ( root vocabulary )
 0 tlocation editor-voc        ( editor vocabulary )
 0 tlocation assembler-voc     ( assembler vocabulary )
 0 tlocation _forth-wordlist   ( set at the end near the end of the file )
 0 tlocation current           ( WID to add definitions to )
-0 tlocation inline-start      ( Start of inlineable word section )
-0 tlocation inline-end        ( End of inlineable word section )
 
 \ === ASSEMBLY INSTRUCTIONS ===
 t: nop      nop      t;
@@ -476,7 +473,7 @@ t: /mod     /mod     t;
 t: /        /        t;
 t: mod      mod      t;
 
-there [t] inline-start t!
+there constant inline-start 
 t: rp@      rp@      nop t; compile-only
 t: rp!      rp!      nop t; compile-only
 t: exit     exit     nop t; compile-only
@@ -484,18 +481,7 @@ t: >r       >r       nop t; compile-only
 t: r>       r>       nop t; compile-only
 t: r@       r@       nop t; compile-only
 t: rdrop    rdrop    nop t; compile-only 
-there [t] inline-end t!
-
-\ @todo investigate more special purpose instructions. A T->t 
-\ instruction for encoding special return stack manipulation words, 
-\ possibly using a fallthrough with a new instruction in the VM ALU decode,
-\ this would allow for the encoding of "swap >r" as a single instruction. 
-\ Perhaps statistics should be collected first with the trace i
-\ t: dup-@  dup-@    nop t; inline
-\ t: dup>r  dup>r    nop t; inline
-\ t: 2dup=  2dup=    nop t; inline
-\ t: 2dup-xor 2dup-xor nop t; inline
-\ t: rxchg  rxchg    nop t; inline
+there constant inline-end 
 
 [last] [t] assembler-voc t!
 
@@ -757,7 +743,7 @@ h: .id nfa print t; ( pwd -- : print out a word )
 h: logical 0= 0= t; ( n -- f )
 h: immediate? @ $4000 literal and logical t; ( pwd -- f )
 h: compile-only? @ 0x8000 and logical t; ( pwd -- f )
-h: inline? inline-start @ inline-end @ within t;
+h: inline? inline-start inline-end within t;
 
 h: searcher ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
   swap >r dup
@@ -1255,7 +1241,6 @@ t: see ( --, <string> : decompile a word )
   dup compile-only? if ."| $literal  compile-only  " then 
   dup inline?       if ."| $literal  inline  "       then
       immediate?    if ."| $literal  immediate  "    then cr t;
-
 
 t: .s ( -- ) cr depth for aft r@ pick . then next ."| $literal  <sp "  t;
 

@@ -2,6 +2,11 @@ CFLAGS=-O2 -std=c99 -Wall -Wextra
 CC=gcc
 EXE=
 DF=
+EFORTH=eforth.blk
+META=meta1.blk
+XX=meta2.blk
+
+
 .PHONY: all clean run cross cross-run double-cross default static
 
 default: all
@@ -11,40 +16,32 @@ DF=
 EXE=.exe
 .PHONY: forth compiler
 forth:  ${FORTH}
-compiler: ${COMPILER}
 else # assume unixen
 DF=./
 EXE=
 endif
 
 FORTH=forth${EXE}
-COMPILER=compiler${EXE}
 
-all: ${FORTH} eforth.blk
-
-${COMPILER}: compiler.c
-	${CC} ${CFLAGS} $< -o $@
+all: ${FORTH}
 
 ${FORTH}: forth.c
 	${CC} ${CFLAGS} $< -o $@
 
-%.blk: ${COMPILER} %.fth
-	${DF}$^ $@
+run: ${FORTH} ${EFORTH}
+	${DF}${FORTH} i ${EFORTH} new.blk
 
-run: ${FORTH} eforth.blk
-	${DF}${FORTH} i eforth.blk new.blk
+${META}: ${FORTH} ${EFORTH} meta.fth
+	${DF}${FORTH} f ${EFORTH} ${META} meta.fth
 
-meta.blk: ${FORTH} eforth.blk meta.fth
-	${DF}${FORTH} f eforth.blk meta.blk meta.fth
-
-cross: meta.blk
+cross: ${META}
 
 cross-run: cross
-	${DF}${FORTH} i meta.blk meta.blk
+	${DF}${FORTH} i ${META} ${META}
 
 double-cross: cross
-	${DF}${FORTH} f meta.blk xx.blk meta.fth
-	cmp meta.blk xx.blk
+	${DF}${FORTH} f ${META} ${XX} meta.fth
+	cmp ${META} ${XX}
 
 tron: CFLAGS+=-DTRON
 tron: ${FORTH}
@@ -55,4 +52,4 @@ static: ${FORTH}
 	strip ${FORTH}
 
 clean:
-	rm -fv ${COMPILER} ${FORTH} *.blk
+	rm -fv ${COMPILER} ${FORTH} ${META} ${XX}

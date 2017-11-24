@@ -96,13 +96,12 @@ int forth(forth_t *h, FILE *in, FILE *out, char *block)
 	}
 finished:
 	h->pc = pc; h->sp = sp; h->rp = rp; h->t = t;
-	return t;
+	return (int16_t)t;
 }
 
 int main(int argc, char **argv)
 {
 	static forth_t h;
-	memset(h.core, 0, 65536);
 	if(argc < 2)
 		return -1;
 	load(&h, argv[1]);

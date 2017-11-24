@@ -232,6 +232,7 @@ The eForth model imposes extra semantics to certain areas of memory.
 
 This is a list of Error codes, not all of which are used by the application.
 
+@todo include hex values for this lookup table
 
 | Code |  Message                                      |
 | ---- | --------------------------------------------- |
@@ -306,7 +307,20 @@ machine would also have to be modified to map different parts of the address
 space into RAM and ROM. This would allow the system to require very little
 (~2-4KiB) of RAM for a usable system, with a 6KiB ROM.
 * Relative jumps could be used instead of absolute jumps in the code, this
-would make relocation easier.
+would make relocation easier, and could make all code position independent. It
+may also make the resulting code easier to compress, especially if the 
+majority of jumps are to near locations. Perhaps relative addressing should
+only be used for branches and not calls, or vice versa.
+* Different ways of compressing the core file, and image self extractions,
+should be investigated; [LZSS][], [Run Length Encoding][], [Huffman][] and 
+[Adaptive Huffman][] encoding could be implemented in Forth and in the 
+meta-compiler so an image can be self-extracted on the fly.
+* Routines written in Forth for memory allocation, a soft floating point
+library, and a 16-bit metacompiler for the [8086][]/[DOS][] would be useful.
+* A method for obfuscating the produced image could be made, perhaps by
+xoring the image with a known constant. A trivial obfuscation, obviously. Or
+'encrypting' against the output of a Pseudo Random Number Generator for extra 
+marks.
 * Save and load all state to disk, not just the core. The current system also
 does not embed format information into the binary files, which means the
 generated object files is indistinguishable from other binary formats.
@@ -339,3 +353,7 @@ and how Forth works.
 [meta.fth]: meta.fth
 [DOS]: https://en.wikipedia.org/wiki/DOS
 [8086]: https://en.wikipedia.org/wiki/Intel_8086
+[LZSS]: https://en.wikipedia.org/wiki/Lempel%E2%80%93Ziv%E2%80%93Storer%E2%80%93Szymanski
+[Run Length Encoding]: https://en.wikipedia.org/wiki/Run-length_encoding
+[Huffman]: https://en.wikipedia.org/wiki/Huffman_coding
+[Adaptive Huffman]: https://en.wikipedia.org/wiki/Adaptive_Huffman_coding

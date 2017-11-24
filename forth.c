@@ -33,6 +33,7 @@ static FILE *fopen_or_die(const char *file, const char *mode)
 {
 	FILE *f = NULL;
 	errno = 0;
+	assert(file && mode);
 	if(!(f = fopen(file, mode))) {
 		fprintf(stderr, "failed to open file '%s' (mode %s): %s\n", file, mode, strerror(errno));
 		exit(EXIT_FAILURE);
@@ -42,6 +43,7 @@ static FILE *fopen_or_die(const char *file, const char *mode)
 
 static int binary_memory_load(FILE *input, uw_t *p, const size_t length)
 {
+	assert(input && p && length <= 0x8000);
 	for(size_t i = 0; i < length; i++) {
 		const int r1 = fgetc(input);
 		const int r2 = fgetc(input);
@@ -54,6 +56,7 @@ static int binary_memory_load(FILE *input, uw_t *p, const size_t length)
 
 static int binary_memory_save(FILE *output, uw_t *p, const size_t start, const size_t length)
 {
+	assert(output && p && ((start + length) < 0x8000 || (start > length)));
 	for(size_t i = start; i < length; i++) {
 		errno = 0;
 		const int r1 = fputc((p[i])       & 0xff, output);
@@ -166,7 +169,6 @@ int main(int argc, char **argv)
 {
 	static forth_t h;
 	int interactive = 0;
-	memset(h.core, 0, CORE);
 	if(argc < 4)
 		goto fail;
 	if(!strcmp(argv[1], "i"))

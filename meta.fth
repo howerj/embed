@@ -7,42 +7,14 @@
 \ Project site: <https://github.com/howerj/embed>
 
 only forth definitions hex
-\ This file contains a metacompiler (also more commonly know as a cross-
-\ compiler) and a program to be cross compiled. The cross compiler targets
-\ a stack based virtual machine designed to run Forth. The cross compiled
-\ program is a Forth interpreter. The file also contains a tutorial about
-\ how to make a cross compiler in Forth, as well as how to make a working
-\ Forth interpreter.
-
-\ The workings of a metacompiler may seem complex, and to understand
-\ this tutorial a reasonable understanding of Forth is required, but in
-\ actuality the cross compiler is quite simple. The cross compiled program
-\ itself is more complex. An understanding of Forth vocabularies is required,
-\ which are often glossed over in tutorials, Forth vocabularies are how
-\ Forth programmers manage which words go into which namespaces and allow
-\ words that are no longer needed to be hidden.
-
-\ The virtual machine that is targeted is suited to building a Forth
-\ system but not much else, a more practical Forth virtual machine would
-\ concentrate on efficiency and functionality (providing a Foreign Function
-\ Interface, and file access words, for example). It is meant to be as
-\ simple as possible and no simpler. It will be referred to as the 'Embed
-\ virtual machine', or as 'the virtual machine'.
-
-\ The metacompiler is based upon one targeting the J1 CPU, available
-\ here <https://github.com/samawati/j1eforth>. The J1 CPU is a "Soft Core"
-\ CPU written in Verilog, designed to be run on an FPGA. The J1 CPU is
-\ well known in the Forth community, I have made my version written in
-\ VHDL called the H2, available at <https://github.com/howerj/forth-cpu>.
-\ The original cross compiler, written in C, targeting the Embed
-\ virtual machine, was taken and modified from the H2 Project.
+\ References
+\ * 'The Zen of eForth' by C. H. Ting
+\ * <https://github.com/samawati/j1eforth>
+\ * <https://github.com/howerj/forth-cpu>
+\ * <https://github.com/howerj/embed> (This project)
 
 \ NOTES/TO DO:
-\ * Instead of having a bit for whether a word is an inlineable word,
-\ inlineable words could instead be part of a special vocabulary.
 \ * Add more references, and turn this program into a literate file.
-\    - Add references to eForth implementation guide
-\    - Add references to my project
 \    - Move diagrams describing the CPU architecture from the
 \    'readme.md' file to this one. This could be added in an appendix
 \    - Document the Forth virtual machine, moving diagrams
@@ -50,6 +22,13 @@ only forth definitions hex
 \    - Compression routines would be a nice to have feature for reducing
 \    the saved image size. LZSS could be used, see:
 \    <https://oku.edu.mie-u.ac.jp/~okumura/compression/lzss.c>
+\    Adaptive Huffman encoding performs even better.
+\    - Talk about and write about:
+\      - Potential additions
+\      - The philosophy of Forth
+\      - How the meta compiler words
+\      - Implementing allocation routines, and floating point routines
+\      - Compression and the similarity of Forth Factoring and LZW compression
 
 ( ===                    Metacompilation wordset                    === )
 \ This section defines the metacompilation wordset as well as the
@@ -248,7 +227,7 @@ a: return ( -- : Compile a return into the target )
 
 : exit, exit-optimize update-fence ;
 
-: inline    tlast @ t@ $8000 or tlast @ t! ;
+: compile-only tlast @ t@ $8000 or tlast @ t! ;
 : immediate tlast @ t@ $4000 or tlast @ t! ;
 
 \ create a word in the metacompilers dictionary, not the targets
@@ -444,7 +423,7 @@ $0a1a    t, \  $A: ^Z   '\n'
 0        t, \  $C: For Length
 0        t, \  $E: For CRC
 $0001    t, \ $10: Endianess check
-#version t, \ $11: Version information
+#version t, \ $12: Version information
 
 h: doVar   r> t;
 h: doConst r> @ t;
@@ -459,15 +438,10 @@ h: doConst r> @ t;
 0 tlocation assembler-voc     ( assembler vocabulary )
 0 tlocation _forth-wordlist   ( set at the end near the end of the file )
 0 tlocation current           ( WID to add definitions to )
-0 tlocation inline-start
-0 tlocation inline-end
+0 tlocation inline-start      ( Start of inlineable word section )
+0 tlocation inline-end        ( End of inlineable word section )
 
 \ === ASSEMBLY INSTRUCTIONS ===
-\ @todo Instead of using an 'inline' bit, we could use the position in the
-\ dictionary to dictate whether or not to inline an instruction, this could
-\ also be used for looking up assembler instructions. This would free a bit
-\ for other use, like compile only words.
-
 t: nop      nop      t;
 t: dup      dup      t;
 t: over     over     t;
@@ -503,13 +477,13 @@ t: /        /        t;
 t: mod      mod      t;
 
 there [t] inline-start t!
-t: rp@      rp@      nop t; inline ( compile-only )
-t: rp!      rp!      nop t; inline ( compile-only )
-t: exit     exit     nop t; inline ( compile-only )
-t: >r       >r       nop t; inline ( compile-only )
-t: r>       r>       nop t; inline ( compile-only )
-t: r@       r@       nop t; inline ( compile-only )
-t: rdrop    rdrop    nop t; inline ( compile-only )
+t: rp@      rp@      nop t; compile-only
+t: rp!      rp!      nop t; compile-only
+t: exit     exit     nop t; compile-only
+t: >r       >r       nop t; compile-only
+t: r>       r>       nop t; compile-only
+t: r@       r@       nop t; compile-only
+t: rdrop    rdrop    nop t; compile-only 
 there [t] inline-end t!
 
 \ @todo investigate more special purpose instructions. A T->t 
@@ -782,9 +756,8 @@ t: cfa nfa dup c@ + cell+ $fffe literal and t; ( pwd -- cfa )
 h: .id nfa print t; ( pwd -- : print out a word )
 h: logical 0= 0= t; ( n -- f )
 h: immediate? @ $4000 literal and logical t; ( pwd -- f )
-\ @todo Use the new inline mechanism
+h: compile-only? @ 0x8000 and logical t; ( pwd -- f )
 h: inline? inline-start @ inline-end @ within t;
-  \ @ 0x8000        and logical t; ( pwd -- f )
 
 h: searcher ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
   swap >r dup
@@ -870,6 +843,8 @@ h: -trailing ( b u -- b u : remove trailing spaces )
     then
   next 0x0000 t;
 
+\ @todo rewrite so 'lookfor' does not use vectored word execution
+
 h: lookfor ( b u c -- b u : skip until _test succeeds )
   >r
   begin
@@ -921,15 +896,13 @@ h: ?dictionary dup $3f00 literal u> if 8 literal -throw exit then t;
 t: , here dup cell+ ?dictionary cp! ! t; ( u -- )
 t: c, here ?dictionary c! cp 1+! t; ( c -- : store 'c' in the dictionary )
 h: doLit 0x8000 or , t;
-h: ?compile command? if $e literal -throw exit then t;
 t: literal ( n -- : write a literal into the dictionary )
-  ?compile
   dup 0x8000 and ( n > $7fff ? )
   if
     invert doLit =invert , exit ( store inversion of n the invert it )
   then
   doLit ( turn into literal, write into dictionary )
-  t; immediate
+  t; compile-only immediate
 
 h: make-callable chars $4000 literal or t; ( cfa -- instruction )
 t: compile, make-callable , t; ( cfa -- : compile a code field address )
@@ -939,6 +912,7 @@ h: not-found source type $d literal -throw t; ( -- : throw 'word not found' )
 \ @todo more words should have vectored execution
 \ such as: interpret, literal, abort, page, at-xy, ?error
 
+h: ?compile dup compile-only? if source type $e literal -throw exit then t;
 h: interpret ( ??? a -- ??? : The command/compiler loop )
   find ?dup if
     state@
@@ -946,7 +920,7 @@ h: interpret ( ??? a -- ??? : The command/compiler loop )
       0> if cfa execute exit then ( <- immediate word )
       $compile exit               ( <- compiling word )
     then
-    drop cfa execute exit
+    drop ?compile cfa execute exit
   then 
   \ not a word
   dup count number? if
@@ -1035,40 +1009,40 @@ h: ?nul ( b -- : check for zero length strings )
    count 0= if $a literal -throw exit then 1- t;
 h: find-cfa token find if cfa exit then not-found t;
 t: ' find-cfa state@ if tcall literal exit then t; immediate
-t: [compile] ?compile find-cfa compile, t; immediate  ( -- ; <string> )
+t: [compile] find-cfa compile, t; immediate compile-only  ( -- ; <string> )
 \ NB. 'compile' only works for words, instructions, and numbers below $8000
 t: compile  r> dup-@ , cell+ >r t; ( -- : Compile next compiled word )
-t: [char] ?compile char tcall literal t; immediate ( --, <string> : )
+t: [char] char tcall literal t; immediate compile-only ( --, <string> : )
 \ h: ?quit command? if $38 literal -throw exit then t;
-t: ; ( ?quit ) ?compile ?check =exit , [ fallthrough; immediate
+t: ; ( ?quit ) ?check =exit , [ fallthrough; immediate compile-only
 h: get-current! ?dup if get-current ! exit then t;
 t: : align here dup last-def !
     last , token ?nul ?unique count + cp! $cafe literal ] t;
-t: begin ?compile here  t; immediate
-t: until ?compile fallthrough; immediate
+t: begin here  t; immediate compile-only
+t: until fallthrough; immediate compile-only
 h: jumpz, chars $2000 literal or , t;
-t: again ?compile fallthrough; immediate
+t: again fallthrough; immediate compile-only
 h: jump, chars ( $0000 literal or ) , t;
 h: here-0 here 0x0000 t;
-t: if ?compile here-0 jumpz, t; immediate
-t: then ?compile fallthrough; immediate
+t: if here-0 jumpz, t; immediate compile-only
+t: then fallthrough; immediate compile-only
 h: doThen  here chars over @ or swap! t;
-t: else ?compile here-0 jump, swap doThen t; immediate
-t: while ?compile tcall if t; immediate
-t: repeat ?compile swap tcall again tcall then t; immediate
+t: else here-0 jump, swap doThen t; immediate compile-only
+t: while tcall if t; immediate compile-only
+t: repeat swap tcall again tcall then t; immediate compile-only
 h: last-cfa last-def @ cfa t;  ( -- u )
-t: recurse ?compile last-cfa compile, t; immediate
-t: tail ?compile last-cfa jump, t; immediate
+t: recurse last-cfa compile, t; immediate compile-only
+t: tail last-cfa jump, t; immediate compile-only
 t: create tcall : drop compile doVar get-current ! [ t;
 t: >body cell+ t;
 h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , t;
-t: does> ?compile compile doDoes nop t; immediate
+t: does> compile doDoes nop t; immediate compile-only
 t: variable create 0 literal , t;
 t: constant create [t] doConst literal make-callable here cell- ! , t;
 t: :noname here 0 literal $cafe literal ]  t;
-t: for ?compile =>r , here t; immediate
-t: next ?compile compile doNext , t; immediate
-t: aft ?compile drop here-0 jump, tcall begin swap t; immediate
+t: for =>r , here t; immediate compile-only
+t: next compile doNext , t; immediate compile-only
+t: aft drop here-0 jump, tcall begin swap t; immediate compile-only
 t: doer create =exit last-cfa ! =exit ,  t;
 t: make
   find-cfa find-cfa make-callable
@@ -1083,11 +1057,11 @@ t: hide ( "name", -- : hide a given word from the search order )
 \ ## Strings 
 
 h: $,' [char] " word count + cp! t; ( -- )
-t: $"  ?compile compile $"| $,' t; immediate         ( -- ; <string> )
-t: ."  ?compile compile ."| $,' t; immediate         ( -- ; <string> )
+t: $"  compile $"| $,' t; immediate compile-only ( -- ; <string> )
+t: ."  compile ."| $,' t; immediate compile-only ( -- ; <string> )
 t: abort [-1] (bye) t;
 h: {abort} do$ print cr abort t;
-t: abort" ?compile compile {abort} $,' t; immediate \ "
+t: abort" compile {abort} $,' t; immediate compile-only \ "
 
 \ ## Vocabulary Words 
 
@@ -1145,8 +1119,6 @@ t: ;code assembler t; immediate
 t: code : assembler t;
 
 xchange _forth-wordlist assembler-voc
-\ @todo move inline-able words here, or deal with them in another way,
-\ such as by putting them in a certain section
 t: end-code forth ; t; immediate
 xchange assembler-voc _forth-wordlist
 
@@ -1199,14 +1171,14 @@ t: list
 \ 'bist' checks the length field in the header matches 'here' and that the
 \ CRC in the header matches the CRC it calculates in the image, it has to
 \ zero the CRC field out first.
-h: bist ( -- : built in self test )
-  header-crc @ 0 literal = if exit then ( exit if CRC was zero )
-  header-length @ here xor if -2 literal (bye) then ( length check )
+h: bist ( -- u : built in self test )
+  header-crc @ 0 literal = if 0x0000 exit then ( exit if CRC was zero )
+  header-length @ here xor if 2 literal exit then ( length check )
   header-crc @ 0 literal header-crc !   ( retrieve and zero CRC )
-  0 literal here crc xor if -3 literal (bye) then t;
+  0 literal here crc xor if 3 literal exit then 0x0000 t;
 
 t: cold
-   bist
+   bist ?dup if negate (bye) exit then
    $10 literal block b/buf 0 literal fill
    $12 literal retrieve io! 
    forth sp0 sp! t;
@@ -1218,6 +1190,11 @@ h: boot-sequence cold boot @execute bye t;
 \ ## See : The Forth Disassembler
 
 \ @warning This disassembler is experimental, and not liable to work
+\ @todo improve this with better output and exit detection.
+\ 'see' could be improved with a word that detects when the end of a
+\ word actually occurs, and with a disassembler for instructions. The output
+\ could also be better formatted, or optionally made to be more or less
+\ verbose.
 
 h: validate tuck cfa <> if drop-0 exit then nfa t; ( cfa pwd -- nfa | 0 )
 
@@ -1275,8 +1252,9 @@ t: see ( --, <string> : decompile a word )
   cr colon space dup .id space dup
   cr
   cfa r> decompiler space $3b literal emit
-  dup inline?    if ."| $literal  inline  " then
-      immediate? if ."| $literal  immediate  " then cr t;
+  dup compile-only? if ."| $literal  compile-only  " then 
+  dup inline?       if ."| $literal  inline  "       then
+      immediate?    if ."| $literal  immediate  "    then cr t;
 
 
 t: .s ( -- ) cr depth for aft r@ pick . then next ."| $literal  <sp "  t;

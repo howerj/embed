@@ -11,12 +11,17 @@
 
 \ # Introduction
 
-\ This document does not intend to be a description of how to program in
-\ Forth, but instead on how a Forth interpreter is put together with a
-\ cross compiler written in Forth. The cross-compiled Forth image when
-\ interpreted is capable of reading this file and producing another image,
-\ ad infinitum. A Forth programmer of intermediate skill should be able to
-\ understand this program.
+\ @todo Complete the introduction
+\ - Describe where the Forth came from (from a VHDL CPU project, eForth, ...)
+\ - Philosophy of Forth
+\ - What a meta compiler is
+\ - Purpose of this document
+\ - A little bit about Forth, a simple introduction
+\ - How Vocabularies work
+
+\ The project, documentation and Forth images are under an MIT license,
+\ <https://github.com/howerj/embed/blob/master/LICENSE> and the
+\ repository is available at <https://github.com/howerj/embed/>.
 
 \ The document is structured in roughly the following order:
 \ 1.  The metacompiler
@@ -32,16 +37,22 @@
 \ 11. Finishing
 \ 12. APPENDIX
 
-\ This document is itself a Forth program, all the explanatory text is a Forth
-\ comment. The file should eventually be fed through a processor to turn it
-\ into a Markdown file (See: <https://daringfireball.net/projects/markdown/>),
-\ for further processing.
+\ What you are reading is itself a Forth program, all the explanatory text is
+\ are Forth comments. The file should eventually be fed through a preprocessor 
+\ to turn it into a Markdown file for further processing.
+\ See <https://daringfireball.net/projects/markdown/> for more information
+\ about Markdown.
+
+\ Many Forths are written in an assembly language, especially the ones geared
+\ towards microcontrollers, although it is more common for new Forth
+\ interpreters to be written in C. A metacompiler is a Cross Compiler
+\ <https://en.wikipedia.org/wiki/Cross_compiler> written in Forth.
 
 \ References
 \ * 'The Zen of eForth' by C. H. Ting
-\ * <https://github.com/howerj/forth-cpu>
 \ * <https://github.com/howerj/embed> (This project)
 \ * <https://github.com/howerj/libforth>
+\ * <https://github.com/howerj/forth-cpu>
 \ Jones Forth:
 \ * <https://rwmj.wordpress.com/2010/08/07/jonesforth-git-repository/>
 \ * <https://github.com/AlexandreAbreu/jonesforth>
@@ -51,10 +62,21 @@
 \ * <https://github.com/jamesbowman/j1>
 \ * <https://github.com/samawati/j1eforth>
 
+\ The Virtual Machine is specifically designed to execute Forth, it is a stack
+\ machine that allows many Forth words to be encoded in one instruction but
+\ does not contain any high level Forth words, just words like '@', 'r>' and
+\ a few basic words for I/O. A full description of the virtual machine is
+\ in the appendix.
+
 \ ## Metacompilation wordset
 \ This section defines the metacompilation wordset as well as the
 \ assembler. The metacompiler, or cross compiler, requires some assembly
 \ instructions to be defined so the two word sets are interlinked. 
+\ 
+\ A clear understanding of how Forth vocabularies work is needed before
+\ proceeding with the tutorial. Vocabularies are the way Forth manages
+\ namespaces and are generally talked about that much, they are especially
+\ useful (in fact pretty much required) for writing a metacompiler.
 
 only forth definitions hex
 variable meta       ( Metacompilation vocabulary )
@@ -1632,6 +1654,14 @@ and how Forth works.
      - How the meta compiler words
      - Implementing allocation routines, and floating point routines
      - Compression and the similarity of Forth Factoring and LZW compression
+* This Forth needs a series of unit tests to make sure the basic functionality
+of all the words is correct
+* This Forth lacks a version of 'FORGET', as well as 'MARKER', which is
+unfortunate, as they are useful.
+* One possible exercise would be to reduce the image size to its absoluate
+minimum, by removing unneeded functionality for the metacompilation process,
+such as the block editor, and 'see', as well as any words not actually used
+in the metacompilation process.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

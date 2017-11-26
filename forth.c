@@ -93,10 +93,9 @@ int save(forth_t *h, const char *name, size_t start, size_t length)
 int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
 	static const uw_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
-	register uw_t pc = h->pc, t = h->t, rp = h->rp, sp = h->sp;
-	register ud_t d;
 	assert(h && in && out);
-	uw_t *m = h->core;
+	uw_t pc = h->pc, t = h->t, rp = h->rp, sp = h->sp, *m = h->core;
+	ud_t d;
 	for(;;) {
 		const uw_t instruction = m[pc];
 		TRACE(pc, instruction, sp, rp);

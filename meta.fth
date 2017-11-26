@@ -157,7 +157,7 @@ variable header -1 header ! ( If true Headers in the target will be generated )
   ." TARGET: "     there       . cr
   ." HEADER: "     #target 20 dump cr ;
 
-: checksum #target there crc ;
+: checksum #target there crc ; ( -- u : calculate CRC of target image )
 
 : save-hex ( -- : save target binary to file )
    #target #target there + (save) throw ;
@@ -174,41 +174,49 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 
 : asm[ assembler.1 -order ; immediate ( -- )
 
-a: #branch  $0000 a;
-a: #?branch $2000 a;
-a: #call    $4000 a;
-a: #alu     $6000 a;
-a: #literal $8000 a;
+\ There are five types of instructions, which are differentiated from each
+\ other by the top bits of the instruction. 
+
+a: #literal $8000 a; ( literal instruction - top bit set )
+a: #alu     $6000 a; ( ALU instruction, further encoding below... )
+a: #call    $4000 a; ( function call instruction )
+a: #?branch $2000 a; ( branch if zero instruction )
+a: #branch  $0000 a; ( unconditional branch )
+
+\ An ALU instruction has a more complex encoding which can be seen in the table
+\ in the appendix, it consists of a few flags for moving values to different
+\ registers before and after the ALU operation to perform, an ALU operation,
+\ and a return and variable stack increment/decrement.
 
 \ ALU Operations
-a: #t      0000 a;
-a: #n      0100 a;
-a: #r      0200 a;
-a: #[t]    0300 a;
-a: #n->[t] 0400 a;
-a: #t+n    0500 a;
-a: #t*n    0600 a;
-a: #t&n    0700 a;
-a: #t|n    0800 a;
-a: #t^n    0900 a;
-a: #~t     0a00 a;
-a: #t-1    0b00 a;
-a: #t==0   0c00 a;
-a: #t==n   0d00 a;
-a: #nu<t   0e00 a;
-a: #n<t    0f00 a;
-a: #n>>t   1000 a;
-a: #n<<t   1100 a;
-a: #sp@    1200 a;
-a: #rp@    1300 a;
-a: #sp!    1400 a;
-a: #rp!    1500 a;
-a: #save   1600 a;
-a: #tx     1700 a;
-a: #rx     1800 a;
-a: #u/mod  1900 a;
-a: #/mod   1a00 a;
-a: #bye    1b00 a;
+a: #t      0000 a; ( T = t )
+a: #n      0100 a; ( T = n )
+a: #r      0200 a; ( T = Top of Return Stack )
+a: #[t]    0300 a; ( T = memory[t] )
+a: #n->[t] 0400 a; ( memory[t] = n )
+a: #t+n    0500 a; ( n = n+t, T = carry )
+a: #t*n    0600 a; ( n = n*t, T = upper bits of multiplication )
+a: #t&n    0700 a; ( T = T and N )
+a: #t|n    0800 a; ( T = T  or N )
+a: #t^n    0900 a; ( T = T xor N )
+a: #~t     0a00 a; ( Invert T )
+a: #t-1    0b00 a; ( T == t - 1 )
+a: #t==0   0c00 a; ( T == 0? )
+a: #t==n   0d00 a; ( T = n == t? )
+a: #nu<t   0e00 a; ( T = n < t )
+a: #n<t    0f00 a; ( T = n < t, signed version )
+a: #n>>t   1000 a; ( T = n right shift by t places )
+a: #n<<t   1100 a; ( T = n left  shift by t places )
+a: #sp@    1200 a; ( T = variable stack depth )
+a: #rp@    1300 a; ( T = return stack depth )
+a: #sp!    1400 a; ( set variable stack depth )
+a: #rp!    1500 a; ( set return stack depth )
+a: #save   1600 a; ( Save memory disk: n = start, T = end, T' = error )
+a: #tx     1700 a; ( Transmit Byte: t = byte, T' = error )
+a: #rx     1800 a; ( Block until byte received, T = byte/error )
+a: #u/mod  1900 a; ( Remainder/Divide: )
+a: #/mod   1a00 a; ( Signed Remainder/Divide: )
+a: #bye    1b00 a; ( Exit Interpreter )
 
 \ The Stack Delta Operations occur after the ALU operations have been executed.
 \ They affect either the Return or the Variable Stack. An ALU instruction
@@ -296,6 +304,7 @@ a: return ( -- : Compile a return into the target )
 : t: ( "name", -- : creates a word in the target dictionary )
   lookahead thead h: ;
 
+\ @warning: Only use 'fallthrough' to fallthrough to words defined with 'h:'.
 : fallthrough; $f00d <> if abort" unstructured! " then ;
 : t; fallthrough; optimize if exit, else [a] return then ;
 
@@ -332,24 +341,32 @@ a: return ( -- : Compile a return into the target )
 : xchange ( "name1", "name2", -- : exchange target vocabularies )
   [last] [t] t! [t] t@ tlast s! ; 
 
-: literal [a] literal ;
-: begin  there update-fence ;
-: until  [a] ?branch ;
-: if     there update-fence 0 [a] ?branch  ;
-: skip   there update-fence 0 [a] branch ;
-: then   begin 2/ over t@ or swap t! ;
-: else   skip swap then ;
-: while  if swap ;
-: repeat [a] branch then update-fence ;
-: again  [a] branch update-fence ;
-: aft    drop skip begin swap ;
-: constant tcreate , does> @ literal ;
-: [char] char literal ;
-: tcompile, [a] call ;
-: tcall [t] tcompile, ;
-: next tdoNext fetch-xt [a] call t, update-fence ;
+\ These words implement the basic control structures needed to make 
+\ applications in the metacompiled program, they are no immediate words
+\ and they do not need to be, 't:' and 't;' do not change the interpreter
+\ state, once the actual metacompilation begins everything is command mode.
+: literal [a] literal ;                      ( u -- )
+: begin  there update-fence ;                ( -- a )
+: until  [a] ?branch ;                       ( a -- )
+: if     there update-fence 0 [a] ?branch  ; ( -- a )
+: skip   there update-fence 0 [a] branch ;   ( -- a )
+: then   begin 2/ over t@ or swap t! ;       ( a -- )
+: else   skip swap then ;                    ( a -- a )
+: while  if swap ;                           ( a -- a a )
+: repeat [a] branch then update-fence ;      ( a -- )
+: again  [a] branch update-fence ;           ( a -- )
+: aft    drop skip begin swap ;              ( a -- a )
+: constant tcreate , does> @ literal ;       ( "name", a -- )
+: [char] char literal ;                      ( "name" )
+: tcompile, [a] call ;                       ( a -- )
+: tcall [t] tcompile, ;                      ( "name", -- )
+: next tdoNext fetch-xt [a] call t, update-fence ; ( a -- )
+: exit exit, ;                               ( -- )
 
-\ Instructions
+\ The following section adds the words implementable in assembly to the
+\ metacompiler, when one of these words is used in the metacompiled program
+\ it will be implemented in assembly.
+
 : nop     ]asm  #t       alu asm[ ;
 : dup     ]asm  #t       t->n   d+1   alu asm[ ;
 : over    ]asm  #n       t->n   d+1   alu asm[ ;
@@ -361,8 +378,6 @@ a: return ( -- : Compile a return into the target )
 : swap    ]asm  #n       t->n   alu asm[ ;
 : nip     ]asm  #t       d-1    alu asm[ ;
 : drop    ]asm  #n       d-1    alu asm[ ;
-\ : exit    ]asm  #t       r->pc  r-1   alu asm[ ;
-: exit exit, ;
 : >r      ]asm  #n       t->r   d-1   r+1   alu asm[ ;
 : r>      ]asm  #r       t->n   d+1   r-1   alu asm[ ;
 : r@      ]asm  #r       t->n   d+1   alu asm[ ;
@@ -391,15 +406,16 @@ a: return ( -- : Compile a return into the target )
 : /       ]asm  #u/mod   d-1    alu asm[ ;
 : mod     ]asm  #u/mod   n->t   d-1   alu asm[ ;
 : rdrop   ]asm  #t       r-1    alu asm[ ;
-\ Special instructions
+\ Some words can be implemented in a single instruction which have no
+\ analogue within Forth.
 : dup-@   ]asm  #[t]     t->n   d+1 alu asm[ ;
 : dup>r   ]asm  #t       t->r   r+1 alu asm[ ;
 : 2dup=   ]asm  #t==n    t->n   d+1 alu asm[ ;
 : 2dup-xor ]asm #t^n     t->n   d+1 alu asm[ ;
 : rxchg   ]asm  #r       t->r       alu asm[ ;
 
+\ 'for' needs the new definition of '>r' to work correctly.
 : for >r begin ;
-\ : next r@ while r> 1- >r repeat r> drop ;
 
 ]asm #~t              ALU asm[ constant =invert ( invert instruction )
 ]asm #t  r->pc    r-1 ALU asm[ constant =exit   ( return/exit instruction )
@@ -414,10 +430,10 @@ $10   constant dump-width  ( number of columns for 'dump' )
 $50   constant tib-length  ( size of terminal input buffer )
 $1f   constant word-length ( maximum length of a word )
 
-$40   constant c/l ( characters per line in a block )
-$10   constant l/b ( lines in a block )
-$4400 constant sp0 ( start of variable stack )
-$7fff constant rp0 ( start of return stack )
+$40   constant c/l         ( characters per line in a block )
+$10   constant l/b         ( lines in a block )
+$4400 constant sp0         ( start of variable stack )
+$7fff constant rp0         ( start of return stack )
 
 ( Volatile variables )
 $4000 constant _test       ( used in skip/test )
@@ -541,14 +557,14 @@ $400     tconstant b/buf ( size of a block )
 0        tvariable boot         ( -- : execute program at startup )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
 
-h: swap! swap ! t;           ( a u -- )
-h: [-1] -1 literal t;        ( -- -1 : space saving measure, push -1 )
-h: 0x8000 $8000 literal t;   ( -- $8000 : space saving measure, push $8000 )
-h: 0x0000 $0000 literal t;   ( -- $0000 : space/optimization, push $0000 )
-t: 2drop drop drop t;        ( n n -- )
-h: drop-0 drop 0x0000 t;  ( n -- 0 )
-h: 2drop-0 2drop 0x0000 t; ( n n -- 0 )
-h: state@ state @ t;         ( -- u )
+h: swap! swap ! t;            ( a u -- )
+h: [-1] -1 literal t;         ( -- -1 : space saving measure, push -1 )
+h: 0x8000 $8000 literal t;    ( -- $8000 : space saving measure, push $8000 )
+h: 0x0000 $0000 literal t;    ( -- $0000 : space/optimization, push $0000 )
+t: 2drop drop drop t;         ( n n -- )
+h: drop-0 drop 0x0000 t;      ( n -- 0 )
+h: 2drop-0 2drop 0x0000 t;    ( n n -- 0 )
+h: state@ state @ t;          ( -- u )
 h: first-bit 1 literal and t; ( u -- u )
 
 t: 1+ 1 literal + t;         ( n -- n : increment a value  )
@@ -578,42 +594,42 @@ t: +! tuck @ + swap! t;      ( n a -- : increment value at address by 'n' )
 t: 1+!  1 literal swap +! t; ( a -- : increment value at address by 1 )
 t: 1-! [-1] swap +! t;       ( a -- : decrement value at address by 1 )
 t: execute >r t;             ( cfa -- : execute a function )
-t: c@ dup-@ swap first-bit
+t: c@ dup-@ swap first-bit   ( b -- c )
    if
       8 literal rshift exit
    then
-   $ff literal and t; ( b -- c )
+   $ff literal and t;                   
 t: c!                       
   swap $ff literal and dup 8 literal lshift or swap
   swap over dup ( -2 and ) @ swap first-bit 0= $ff literal xor
-  >r over xor r> and xor swap ! t;     ( c b -- )
-h: string@ over c@ t;                  ( b u -- b u c )
-t: 2! ( d a -- ) tuck ! cell+ ! t;     ( n n a -- )
-t: 2@ ( a -- d ) dup cell+ @ swap @ t; ( a -- n n )
-t: command? state@ 0= t;               ( -- f )
-t: get-current current @ t;            ( -- wid )
-t: set-current current ! t;            ( wid -- )
-t: here cp @ t;                        ( -- a )
-t: align here fallthrough;             ( -- )
-h: cp! aligned cp ! t;                 ( n -- )
-t: source #tib 2@ t;                   ( -- a u )
-t: source-id id @ t;                   ( -- 0 | -1 )
-h: @execute @ ?dup if >r then t;       ( cfa -- )
-t: bl =bl t;                           ( -- c )
-t: within over- >r - r> u< t;          ( u lo hi -- f )
+  >r over xor r> and xor swap ! t;      ( c b -- )
+h: string@ over c@ t;                   ( b u -- b u c )
+t: 2! ( d a -- ) tuck ! cell+ ! t;      ( n n a -- )
+t: 2@ ( a -- d ) dup cell+ @ swap @ t;  ( a -- n n )
+t: command? state@ 0= t;                ( -- f )
+t: get-current current @ t;             ( -- wid )
+t: set-current current ! t;             ( wid -- )
+t: here cp @ t;                         ( -- a )
+t: align here fallthrough;              ( -- )
+h: cp! aligned cp ! t;                  ( n -- )
+t: source #tib 2@ t;                    ( -- a u )
+t: source-id id @ t;                    ( -- 0 | -1 )
+h: @execute @ ?dup if >r then t;        ( cfa -- )
+t: bl =bl t;                            ( -- c )
+t: within over- >r - r> u< t;           ( u lo hi -- f )
 \ t: dnegate invert >r invert 1 literal um+ r> + t; ( d -- d )
-t: abs dup 0< if negate exit then t;   ( n -- u )
-t: count dup 1+ swap c@ t;             ( cs -- b u )
-t: rot >r swap r> swap t;              ( n1 n2 n3 -- n2 n3 n1 )
-t: -rot swap >r swap r> t;             ( n1 n2 n3 -- n3 n1 n2 )
+t: abs dup 0< if negate exit then t;    ( n -- u )
+t: count dup 1+ swap c@ t;              ( cs -- b u )
+t: rot >r swap r> swap t;               ( n1 n2 n3 -- n2 n3 n1 )
+t: -rot swap >r swap r> t;              ( n1 n2 n3 -- n3 n1 n2 )
 \ @warning be careful with '2>r' and '2r>' as peephole optimizer can
 \ break these words. They should not be used before an 'exit' or a 't;'.
 h: 2>r rxchg swap >r >r t;              ( u1 u2 --, R: -- u1 u2 )
-h: 2r> r> r> swap rxchg nop t; ( -- u1 u2, R: u1 u2 -- )
+h: 2r> r> r> swap rxchg nop t;          ( -- u1 u2, R: u1 u2 -- )
 h: doNext 2r> ?dup if 1- >r @ >r exit then cell+ >r t;
 [t] doNext tdoNext s!
-t: min 2dup < fallthrough;          ( n n -- n )
-h: mux if drop exit then nip t; ( n1 n2 b -- n : multiplex operation )
+t: min 2dup < fallthrough;              ( n n -- n )
+h: mux if drop exit then nip t;         ( n1 n2 b -- n : multiplex operation )
 t: max 2dup > mux t;                    ( n n -- n )
 h: >char $7f literal and dup $7f literal =bl within
   if drop [char] _ then t;              ( c -- c )
@@ -627,10 +643,10 @@ h: @address @ fallthrough;              ( a -- a )
 h: address $3fff literal and t;         ( a -- a : mask off address bits )
 h: last get-current @address t;         ( -- pwd )
 t: emit _emit @execute t;               ( c -- : write out a char )
-t: cr =cr emit =lf emit t;              ( -- )
-t: space =bl emit t;                    ( -- )
-h: depth sp@ sp0 - chars t;             ( -- u )
-h: vrelative cells sp@ swap - t;        ( -- u )
+t: cr =cr emit =lf emit t;              ( -- : emit a newline )
+t: space =bl emit t;                    ( -- : emit a space )
+h: depth sp@ sp0 - chars t;             ( -- u : get current depth )
+h: vrelative cells sp@ swap - t;        ( u -- u )
 t: pick  vrelative @ t;                 ( vn...v0 u -- vn...v0 vu )
 t: type 0 literal fallthrough;          ( b u -- )
 h: typist                               ( b u f -- : print a string )
@@ -643,18 +659,19 @@ h: typist                               ( b u f -- : print a string )
     swap 1-
   repeat
   rdrop 2drop t;
-h: print count type t; ( b -- )
-h: $type [-1] typist t;
-h: decimal? [char] 0 [char] : within t; ( c -- f : decimal char? )
-h: lowercase? [char] a [char] { within t;   ( c -- f )
-h: uppercase? [char] A [char] [ within t;   ( c -- f )
-h: >lower                                   ( c -- c : convert to lower case )
+h: print count type t;                    ( b -- )
+h: $type [-1] typist t;                   ( b u --  )
+h: decimal? [char] 0 [char] : within t;   ( c -- f : decimal char? )
+h: lowercase? [char] a [char] { within t; ( c -- f )
+h: uppercase? [char] A [char] [ within t; ( c -- f )
+h: >lower                                 ( c -- c : convert to lower case )
   dup uppercase? if =bl xor exit then t;
-t: spaces =bl fallthrough;                  ( +n -- )
-h: nchars                                   ( +n c -- : emit c n times )
+t: spaces =bl fallthrough;                ( +n -- )
+h: nchars                                 ( +n c -- : emit c n times )
   swap 0 literal max for aft dup emit then next drop t;
 t: cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop t; ( b b u -- )
 t: fill swap for swap aft 2dup c! 1+ then next 2drop t; ( b u c -- )
+h: ndrop for aft drop then next t; ( 0u....nu n -- : drop n cells )
 
 \ t: even first-bit 0= t;
 \ t: odd even 0= t;
@@ -678,7 +695,7 @@ t: throw
 h: -throw negate throw t;  ( space saving measure )
 [t] -throw 2/ 2 t! 
 
-h: 1depth 1 literal fallthrough;
+h: 1depth 1 literal fallthrough; ( ??? -- : check depth is at least one  )
 h: ?ndepth depth 1- u> if 4 literal -throw exit then t;
 
 \ h: um+ ( w w -- w carry )
@@ -712,10 +729,10 @@ h: ?ndepth depth 1- u> if 4 literal -throw exit then t;
 
 t: decimal $a literal base ! t;              ( -- )
 t: hex     $10 literal base ! t;             ( -- )
-h: radix base @ dup 2 literal - $22 literal u>
+h: radix base @ dup 2 literal - $22 literal u> ( -- u )
   if hex $28 literal -throw exit then t;
 h: digit  9 literal over < 7 literal and + [char] 0 + t; ( u -- c )
-h: extract u/mod swap t;               ( n base -- n c )
+h: extract u/mod swap t;                     ( n base -- n c )
 t: hold  hld @ 1- dup hld ! c! fallthrough;  ( c -- )
 h: ?hold hld @ pad $100 literal + u> if $11 literal -throw exit then t;  ( -- )
 \ t: holds begin dup while 1- 2dup + c@ hold repeat 2drop t;
@@ -726,11 +743,11 @@ t: #s begin # dup while repeat t;            ( u -- 0 )
 t: <#  pad hld ! t;                          ( -- )
 h: str ( n -- b u : convert a signed integer to a numeric string )
   dup>r abs <# #s r> sign #> t;
-h: adjust over- spaces type t;   ( b n n -- )
-t:  .r >r str r> adjust t;  ( n n : print n, right justified by +n )
-h: (u.) <# #s #> t;   ( u -- : )
-t: u.r >r (u.) r> adjust t;    ( u +n -- : print u right justified by +n)
-t: u.  (u.) space type t;   ( u -- : print unsigned number )
+h: adjust over- spaces type t;     ( b n n -- )
+t:  .r >r str r> adjust t;         ( n n -- : print n, right justified by +n )
+h: (u.) <# #s #> t;                ( u -- : )
+t: u.r >r (u.) r> adjust t;        ( u +n -- : print u right justified by +n)
+t: u.  (u.) space type t;          ( u -- : print unsigned number )
 t:  . ( n -- print space, signed number )
    radix $a literal xor if u. exit then str space type t;
 t: ? @ . t; ( a -- : display the contents in a memory cell )
@@ -764,7 +781,7 @@ t: accept ( b u -- b u )
     ( key  dup =bl - 95 u< if tap else _tap @execute then )
   repeat drop over- t;
 
-t: expect ( b u -- ) _expect @execute span ! drop t;
+t: expect _expect @execute span ! drop t; ( b u -- )
 t: query tib tib-length _expect @execute #tib ! drop-0 in! t; ( -- )
 
 t: =string ( a1 u2 a1 u2 -- f : string equality )
@@ -779,11 +796,11 @@ t: =string ( a1 u2 a1 u2 -- f : string equality )
 
 t: nfa address cell+ t; ( pwd -- nfa : move to name field address)
 t: cfa nfa dup c@ + cell+ $fffe literal and t; ( pwd -- cfa )
-h: .id nfa print t; ( pwd -- : print out a word )
-h: logical 0= 0= t; ( n -- f )
-h: immediate? @ $4000 literal and logical t; ( pwd -- f )
-h: compile-only? @ 0x8000 and logical t; ( pwd -- f )
-h: inline? inline-start inline-end within t;
+h: .id nfa print t;                          ( pwd -- : print out a word )
+h: logical 0= 0= t;                          ( n -- f )
+h: immediate? @ $4000 literal and logical t; ( pwd -- f : is immediate word? )
+h: compile-only? @ 0x8000 and logical t;     ( pwd -- f : is compile only? )
+h: inline? inline-start inline-end within t; ( pwd -- f : is word inline? )
 
 h: searcher ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
   swap >r dup
@@ -840,10 +857,8 @@ h: do-number ( n b u -- n b u : convert string )
     +string dup 0= ( advance string and test for end )
   until t;
 
-h: negative?
-   string@ $2D literal =
-   if +string [-1] exit then
-   0x0000 t; ( b u -- f )
+h: negative? ( b u -- f : is >number negative? )
+  string@ $2D literal = if +string [-1] exit then 0x0000 t; 
 
 h: base? ( b u -- )
   string@ $24 literal = ( $hex )
@@ -892,16 +907,16 @@ h: parser ( b u c -- b u delta )
 
 t: parse ( c -- b u t; <string> )
    >r tib in@ + #tib @ in@ - r> parser >in +! -trailing 0 literal max t;
-t: ) t; immediate
-t: ( $29 literal parse 2drop t; immediate \ )
-t: .( $29 literal parse type t;
-t: \ #tib @ in! t; immediate
+t: ) t; immediate ( -- : do nothing )
+t: ( $29 literal parse 2drop t; immediate \ ) ( parse until matching paren )
+t: .( $29 literal parse type t; ( print out text until matching parenthesis )
+t: \ #tib @ in! t; immediate ( comment until new line )
 h: ?length dup word-length u> if $13 literal -throw exit then t;
-t: word 1depth parse ?length here pack$ t;  ( c -- a ; <string> )
-t: token =bl word t;
-t: char token count drop c@ t;               ( -- c; <string> )
-h: unused $4000 literal here - t;
-h: .free unused u. t;
+t: word 1depth parse ?length here pack$ t; ( c -- a ; <string> )
+t: token =bl word t;                       ( -- a )
+t: char token count drop c@ t;             ( -- c; <string> )
+h: unused $4000 literal here - t;          ( -- u : unused program space )
+h: .free unused u. t;                      ( -- : print unused program space )
 
 h: preset ( tib ) tib-start #tib cell+ ! 0 literal in! 0 literal id ! t;
 t: ] [-1]       state ! t;
@@ -961,16 +976,12 @@ h: do$ r> r@ r> count + aligned >r swap >r t; ( -- a )
 h: $"| do$ nop t; ( -- a : do string NB. nop to fool optimizer )
 h: ."| do$ print t; ( -- : print string  )
 
-h: .ok command? if ."| $literal  ok  " cr exit then t;
-h: ?depth sp@ sp0 u< if 4 literal -throw exit then t;
-h: eval
-  begin
-    token dup c@
-  while
-    interpret ?depth
-  repeat drop _prompt @execute t;
-t: quit preset [ begin query [t] eval literal catch ?error again t;
-t: ok! _prompt ! t;
+h: .ok command? if ."| $literal  ok  " cr exit then t; ( -- )
+h: ok _prompt @execute t;                              ( -- : execute prompt )
+h: ?depth sp@ sp0 u< if 4 literal -throw exit then t;  ( u -- : depth check )
+h: eval begin token dup c@ while interpret ?depth repeat drop ok t; ( -- )
+t: quit preset [ begin query [t] eval literal catch ?error again t; ( -- )
+t: ok! _prompt ! t; ( xt -- : set ok prompt execution token )
 
 h: get-input source in@ id @ _prompt @ t; ( -- n1...n5 )
 h: set-input ok! id ! in! #tib 2! t;      ( n1...n5 -- )
@@ -1005,13 +1016,21 @@ t: random ( -- u : pseudo random number )
 \ t: page =page @execute t;   ( -- : page screen )
 \ t: at-xy =at-xy @execute t; ( x y -- : set cursor position )
 
-h: 5u.r 5 literal u.r t;
+h: 5u.r 5 literal u.r t;     ( u -- )
 h: colon $3a literal emit t; ( -- )
 
 \ t: d. base @ >r decimal  . r> base ! t;
 \ t: h. base @ >r hex     u. r> base ! t;
 
 \ ## I/O Control 
+\ The I/O control section is a relic from eForth that is not really needed
+\ in a hosted Forth, at least one where the terminal emulator used handles
+\ things like line editing. It is left in here so it can be quickly be added
+\ back in if this Forth were to be ported to an embed environment, one in
+\ which communications with the Forth took place over a UART.
+
+\ Open and reading from different files is also not needed, it is handled
+\ by the virtual machine.
 
 h: io! preset fallthrough;  ( -- : initialize I/O )
 h: console [t] rx? literal _key ! [t] tx! literal _emit ! fallthrough;
@@ -1027,7 +1046,7 @@ h: ?check ( $cafe -- : check for magic number on the stack )
 h: ?unique ( a -- a : print a message if a word definition is not unique )
   dup last @ searcher
   if
-    \ source type
+    ( source type )
     space
     2drop last-def @ nfa print  ."| $literal  redefined " cr exit
   then t;
@@ -1070,7 +1089,7 @@ t: for =>r , here t; immediate compile-only
 t: next compile doNext , t; immediate compile-only
 t: aft drop here-0 jump, tcall begin swap t; immediate compile-only
 t: doer create =exit last-cfa ! =exit ,  t;
-t: make
+t: make ( "name1", "name2", -- : make name1 do name2 )
   find-cfa find-cfa make-callable
   state@
   if
@@ -1082,11 +1101,11 @@ t: hide ( "name", -- : hide a given word from the search order )
 
 \ ## Strings 
 
-h: $,' [char] " word count + cp! t; ( -- )
-t: $"  compile $"| $,' t; immediate compile-only ( -- ; <string> )
-t: ."  compile ."| $,' t; immediate compile-only ( -- ; <string> )
-t: abort [-1] (bye) t;
-h: {abort} do$ print cr abort t;
+h: $,' [char] " word count + cp! t;              ( -- )
+t: $"  compile $"| $,' t; immediate compile-only ( <string>, -- )
+t: ."  compile ."| $,' t; immediate compile-only ( <string>, -- )
+t: abort [-1] (bye) t;                           ( -- )
+h: {abort} do$ print cr abort t;                 ( -- )
 t: abort" compile {abort} $,' t; immediate compile-only \ "
 
 \ ## Vocabulary Words 
@@ -1109,11 +1128,11 @@ t: set-order ( widn ... wid1 n -- : set the current search order )
   dup #vocs > if $31 literal -throw exit then
   context swap for aft tuck ! cell+ then next 0 literal swap! t;
 
-t: forth root-voc forth-wordlist  2 literal set-order t;
+t: forth root-voc forth-wordlist  2 literal set-order t; ( -- )
 
 \ The name fields length in a counted string is used to store a bit 
 \ indicating the word is hidden. This is the highest bit in the count byte.
-h: not-hidden? nfa c@ $80 literal and 0= t;
+h: not-hidden? nfa c@ $80 literal and 0= t; ( pwd -- )
 h: .words space 
     begin 
       dup 
@@ -1123,26 +1142,26 @@ t: words
 
 xchange root-voc _forth-wordlist
 
-t: previous get-order swap drop 1- set-order t;
-t: also get-order over swap 1+ set-order t;
-t: only [-1] set-order t;
-t: order get-order for aft . then next cr t;
-t: anonymous get-order 1+ here 1 literal cells allot swap set-order t;
-t: definitions context @ set-current t;
-t: (order) ( w wid*n n -- wid*n w n )
+t: previous get-order swap drop 1- set-order t; ( -- )
+t: also get-order over swap 1+ set-order t;     ( wid -- )
+t: only [-1] set-order t;                       ( -- )
+t: order get-order for aft . then next cr t;    ( -- )
+t: anonymous get-order 1+ here 1 literal cells allot swap set-order t; ( -- )
+t: definitions context @ set-current t;         ( -- )
+h: (order)                                      ( w wid*n n -- wid*n w n )
   dup if
     1- swap >r (order) over r@ xor
     if
       1+ r> -rot exit
     then r> drop
   then t;
-t: -order get-order (order) nip set-order t; ( wid -- )
-t: +order dup>r -order get-order r> swap 1+ set-order t; ( wid -- )
+t: -order get-order (order) nip set-order t;                 ( wid -- )
+t: +order dup>r -order get-order r> swap 1+ set-order t;     ( wid -- )
 
-t: editor decimal root-voc editor-voc 2 literal set-order t;
-t: assembler root-voc assembler-voc 2 literal set-order t;
-t: ;code assembler t; immediate
-t: code : assembler t;
+t: editor decimal root-voc editor-voc 2 literal set-order t; ( -- )
+t: assembler root-voc assembler-voc 2 literal set-order t;   ( -- )
+t: ;code assembler t; immediate                              ( -- )
+t: code : assembler t;                                       ( -- )
 
 xchange _forth-wordlist assembler-voc
 t: end-code forth ; t; immediate
@@ -1150,11 +1169,11 @@ xchange assembler-voc _forth-wordlist
 
 \ ## Block Word Set
 
-t: update [-1] block-dirty ! t;          ( -- )
-h: blk-@ blk @ t;
+t: update [-1] block-dirty ! t;    ( -- )
+h: blk-@ blk @ t;                  ( -- k : retrieve current loaded block )
 h: +block blk-@ + t;               ( -- )
-t: save ( -1 ) 0 literal here (save) throw t;
-t: flush block-dirty @ if 0 literal [-1] (save) throw exit then t;
+t: save 0 literal here (save) throw t; ( -- : save blocks )
+t: flush block-dirty @ if 0 literal [-1] (save) throw exit then t; ( -- )
 
 t: block ( k -- a )
   1depth
@@ -1162,19 +1181,19 @@ t: block ( k -- a )
   dup blk !
   $a literal lshift ( <-- b/buf * ) t;
 
-h: c/l* ( c/l * ) 6 literal lshift t;
-h: c/l/ ( c/l / ) 6 literal rshift t;
-h: line swap block swap c/l* + c/l t;  ( k u -- a u )
-h: loadline line evaluate t;  ( k u -- )
-t: load 0 literal l/b 1- for 2dup 2>r loadline 2r> 1+ next 2drop t;
-h: pipe $7c literal emit t;
-h: .line line -trailing $type t;
-h: .border 3 literal spaces c/l $2d literal nchars cr t;
-h: #line dup 2 literal u.r t;  ( u -- u : print line number )
+h: c/l* ( c/l * ) 6 literal lshift t; ( u -- u )
+h: c/l/ ( c/l / ) 6 literal rshift t; ( u -- u )
+h: line swap block swap c/l* + c/l t; ( k u -- a u )
+h: loadline line evaluate t;          ( k u -- )
+t: load 0 literal l/b 1- for 2dup 2>r loadline 2r> 1+ next 2drop t; ( k -- )
+h: pipe $7c literal emit t;           ( -- )
+\ h: .line line -trailing $type t;    ( k u -- )
+h: .border 3 literal spaces c/l $2d literal nchars cr t; ( -- )
+h: #line dup 2 literal u.r t;         ( u -- u : print line number )
 t: thru over- for dup load 1+ next drop t; ( k1 k2 -- )
-t: blank =bl fill t;
-\ t: message l/b extract .line cr t; ( u -- )
-h: retrieve block drop t;
+t: blank =bl fill t;                  ( b u -- )
+\ t: message l/b extract .line cr t;  ( u -- )
+h: retrieve block drop t;             ( k -- )
 t: list
   dup retrieve
   cr
@@ -1183,7 +1202,7 @@ t: list
     dup l/b <
   while
     2dup #line pipe line $type pipe cr 1+
-  repeat .border 2drop t;
+  repeat .border 2drop t; ( k -- )
 
 \ t: index ( k1 k2 -- : show titles for block k1 to k2 )
 \  over- cr
@@ -1203,15 +1222,15 @@ h: bist ( -- u : built in self test )
   header-crc @ 0 literal header-crc !   ( retrieve and zero CRC )
   0 literal here crc xor if 3 literal exit then 0x0000 t;
 
-t: cold
+t: cold ( -- : cold boot )
    bist ?dup if negate (bye) exit then
    $10 literal block b/buf 0 literal fill
    $12 literal retrieve io! 
    forth sp0 sp! t;
 
-t: hi hex cr ."| $literal eFORTH V " ver 0 literal u.r cr here . .free cr [ t;
-h: normal-running hi quit t;
-h: boot-sequence cold boot @execute bye t;
+h: hi hex cr ."| $literal eFORTH V " ver 0 literal u.r cr here . .free cr [ t;
+h: normal-running hi quit t;               ( -- : boot word )
+h: boot-sequence cold boot @execute bye t; ( -- : perform the boot sequence )
 
 \ ## See : The Forth Disassembler
 
@@ -1224,21 +1243,27 @@ h: boot-sequence cold boot @execute bye t;
 
 h: validate tuck cfa <> if drop-0 exit then nfa t; ( cfa pwd -- nfa | 0 )
 
-\ @todo Do this for every vocabulary loaded, and name assembly instruction
-h: name ( cfa -- nfa )
+h: search-for-cfa ( wid cfa -- nfa : search for CFA in a word list )
   address cells >r
-  \ last
-  context @ @address
   begin
     dup
   while
     address dup r@ swap dup-@ address swap within ( simplify? )
-    if @address r> swap validate exit then
+    ( @bug does not continue with search if validate fails )
+    if @address r> swap validate exit then 
     address @
   repeat rdrop t;
 
-h: .name name ?dup 0= if $"| $literal ??? " then print t;
+h: name ( cwf -- a | 0 )
+   >r
+   get-order 
+   begin 
+     dup 
+   while 
+     swap r@ search-for-cfa ?dup if >r 1- ndrop r> rdrop exit then 
+   1- repeat rdrop t;
 
+h: .name name ?dup 0= if $"| $literal ??? " then print t;
 h: ?instruction ( i m e -- i 0 | e -1 )
    >r over and r> tuck = if nip [-1] exit then drop-0 t;
 
@@ -1282,8 +1307,8 @@ t: see ( --, <string> : decompile a word )
   dup inline?       if ."| $literal  inline  "       then
       immediate?    if ."| $literal  immediate  "    then cr t;
 
-t: .s ( -- ) cr depth for aft r@ pick . then next ."| $literal  <sp "  t;
 
+t: .s cr depth for aft r@ pick . then next ."| $literal  <sp " t; ( -- )
 h: dm+ chars for aft dup-@ space 5u.r cell+ then next t; ( a u -- a )
 \ h: dc+ chars for aft dup-@ space decompile cell+ then next t; ( a u -- a )
 
@@ -1300,30 +1325,30 @@ t: dump ( a u -- )
     then
   next drop t;
 
-[last] [t] _forth-wordlist t!
-[t] _forth-wordlist [t] current t!
+[last]              [t] _forth-wordlist t!
+[t] _forth-wordlist [t] current         t!
 
 \ ## Block Editor
 
 0 tlast s!
-h: [block] blk-@ block t;
+h: [block] blk-@ block t;       ( k -- a : loaded block address )
 h: [check] dup b/buf c/l/ u>= if $18 literal -throw exit then t;
-h: [line] [check] c/l* [block] + t;
-t: b retrieve t;
-t: l blk-@ list t;
-t: n  1 literal +block b l t;
-t: p [-1] +block b l t;
-t: d [line] c/l blank t;
-t: x [block] b/buf blank t;
-t: s update flush t;
-t: q forth flush t;
-t: e forth blk-@ load editor t;
-t: ia c/l* + [block] + source drop in@ +
+h: [line] [check] c/l* [block] + t; ( u -- a )
+t: b retrieve t;                ( k -- )
+t: l blk-@ list t;              ( -- )
+t: n  1 literal +block b l t;   ( -- : load and list next block )
+t: p [-1] +block b l t;         ( -- : load and list previous block )
+t: d [line] c/l blank t;        ( u -- : delete line )
+t: x [block] b/buf blank t;     ( -- : erase loaded block )
+t: u update t;                  ( -- : set block set as dirty )
+t: s u flush t;                 ( -- : flush changes to disk )
+t: q forth flush t;             ( -- : quit editor )
+t: e forth blk-@ load editor t; ( -- : evaluate block )
+t: ia c/l* + [block] + source drop in@ + ( u u -- )
    swap source nip in@ - cmove [t] \ tcompile, t;
-t: i 0 literal swap ia t;
-t: u update t;
+t: i 0 literal swap ia t;           ( u -- )
 \ t: w words t;
-\ h: yank pad c/l t; hidden
+\ h: yank pad c/l t; 
 \ t: c [line] yank >r swap r> cmove t;
 \ t: y [line] yank cmove t;
 \ t: ct swap y c t;
@@ -1662,6 +1687,10 @@ unfortunate, as they are useful.
 minimum, by removing unneeded functionality for the metacompilation process,
 such as the block editor, and 'see', as well as any words not actually used
 in the metacompilation process.
+* Floating point routines can be found from here:
+<http://codebase64.org/doku.php?id=base:floating_point_routines_for_the_6502>,
+which will need adapting.
+
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

@@ -18,6 +18,10 @@
 \ - Purpose of this document
 \ - A little bit about Forth, a simple introduction
 \ - How Vocabularies work
+\ - Stack comments, also standardize stack comments
+\ - Design tradeoffs and constraints
+\   - For example: having a separate string storage area
+\   - Limitations of the Virtual Machines code space
 
 \ The project, documentation and Forth images are under an MIT license,
 \ <https://github.com/howerj/embed/blob/master/LICENSE> and the
@@ -108,27 +112,27 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 
 : ( [char] ) parse 2drop ; immediate
 : \ source drop @ >in ! ; immediate
-: there tcp @ ; ( -- a : target dictionary pointer value )
-: tc! #target + c! ;
-: tc@ #target + c@ ;
-: [address] $3fff and ;
-: [last] tlast @ ;
+: there tcp @ ;         ( -- a : target dictionary pointer value )
+: tc! #target + c! ;    ( u a -- )
+: tc@ #target + c@ ;    ( a -- u )
+: [address] $3fff and ; ( a -- a )
+: [last] tlast @ ;      ( -- a )
 : low  swap-endianess 0= if 1+ then ; ( b -- b )
 : high swap-endianess    if 1+ then ; ( b -- b )
-: t! over ff and over high tc! swap 8 rshift swap low tc! ;
-: t@ dup high tc@ swap low tc@ 8 lshift or ;
-: 2/ 1 rshift ;
-: talign there 1 and tcp +! ;
-: tc, there tc! 1 tcp +! ;
-: t,  there t!  =cell tcp +! ;
-: tallot tcp +! ;
-: update-fence there fence ! ;
-: $literal 
+: t! over ff and over high tc! swap 8 rshift swap low tc! ; ( u a -- )
+: t@ dup high tc@ swap low tc@ 8 lshift or ; ( a -- u )
+: 2/ 1 rshift ;                ( u -- u )
+: talign there 1 and tcp +! ;  ( -- )
+: tc, there tc! 1 tcp +! ;     ( c -- )
+: t,  there t!  =cell tcp +! ; ( u -- )
+: tallot tcp +! ;              ( n -- )
+: update-fence there fence ! ; ( -- )
+: $literal                     ( <string>, -- )
   [char] " word count dup tc, 1- for count tc, next drop talign update-fence ;
-: tcells =cell * ;
-: tbody 1 tcells + ;
-: s! ! ;
-: dump-hex #target there 16 + dump ;
+: tcells =cell * ;             ( u -- a )
+: tbody 1 tcells + ;           ( a -- a )
+: s! ! ;                       ( u a -- )
+: dump-hex #target there 16 + dump ; ( -- )
 : locations ( -- : list all words and locations in target dictionary )
   target.1 @ 
   begin 
@@ -147,12 +151,8 @@ variable header -1 header ! ( If true Headers in the target will be generated )
   verbose 1 u> if 
     dump-hex cr 
     ." TARGET DICTIONARY: " cr
-    \ words 
     locations
   then
-  \ ." META: "       meta        . cr
-  \ ." TARGET: "     target.1    . cr
-  \ ." ASSEMBLER: "  assembler.1 . cr
   ." HOST: "       here        . cr
   ." TARGET: "     there       . cr
   ." HEADER: "     #target 20 dump cr ;
@@ -262,24 +262,24 @@ a: return ( -- : Compile a return into the target )
 \ optimizations and merges the return instruction with the previous instruction
 \ if possible. 
 
-: previous there =cell - ;
-: lookback previous t@ ;
-: call? lookback $e000 and [a] #call = ;
-: call>goto previous dup t@ $1fff and swap t! ;
-: fence? fence @  previous u> ;
-: safe? lookback $e000 and [a] #alu = lookback $001c and 0= and ;
-: alu>return previous dup t@ [a] r->pc [a] r-1 swap t! ;
+: previous there =cell - ;                      ( -- a )
+: lookback previous t@ ;                        ( -- u )
+: call? lookback $e000 and [a] #call = ;        ( -- f )
+: call>goto previous dup t@ $1fff and swap t! ; ( -- )
+: fence? fence @  previous u> ;                 ( -- f )
+: safe? lookback $e000 and [a] #alu = lookback $001c and 0= and ; ( -- f )
+: alu>return previous dup t@ [a] r->pc [a] r-1 swap t! ; ( -- )
 
-: exit-optimize
+: exit-optimize ( -- )
   fence? if [a] return exit then
   call?  if call>goto  exit then
   safe?  if alu>return exit then
   [a] return ;
 
-: exit, exit-optimize update-fence ;
+: exit, exit-optimize update-fence ; ( -- )
 
-: compile-only tlast @ t@ $8000 or tlast @ t! ;
-: immediate tlast @ t@ $4000 or tlast @ t! ;
+: compile-only tlast @ t@ $8000 or tlast @ t! ; ( -- )
+: immediate tlast @ t@ $4000 or tlast @ t! ;    ( -- )
 
 \ create a word in the metacompilers dictionary, not the targets
 : tcreate get-current >r target.1 set-current create r> set-current ;
@@ -329,10 +329,12 @@ a: return ( -- : Compile a return into the target )
 : tlocation ( "name", n -- : Reserve space in target for a memory location )
   there swap t, tcreate , does> @ [a] literal ;
 
-: [t]
+: [t] ( "name", -- a : get the address of a target word )
   token target.1 search-wordlist 0= if abort" [t]? " then
   cfa >body @ ;
-: [u] [t] =cell + ; \ @warning only use on variables, not tlocations 
+
+\ @warning only use "[u]" on variables, not tlocations 
+: [u] [t] =cell + ; ( "name", -- a )
 
 \ xchange takes two vocabularies defined in the target by their variable
 \ names "name1" and "name2" and updates "name1" so it contains the previously
@@ -457,7 +459,7 @@ $4126 constant tib-start   ( backup tib-buf value )
 $c    constant header-length ( location of length in header )
 $e    constant header-crc    ( location of CRC in header )
 
-( ===                        Target Words                           === )
+\ # Target Words
 \ With the assembler and meta compiler complete, we can now make our target
 \ application, a Forth interpreter which will be able to read in this file
 \ and create new, possibly modified, images for the Forth virtual machine
@@ -472,6 +474,10 @@ forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 \ See <http://www.fadden.com/tech/file-formats.html> and
 \ <https://stackoverflow.com/questions/323604> for more information about
 \ how to design binary formats
+\ 
+\ The header contains enough information to identify the format, the
+\ version of the format, and to detect corruption of data, as well as
+\ having a few other nice properties.
 
 0        t, \  $0: First instruction executed, jump to start / reset vector
 0        t, \  $2: Instruction exception vector
@@ -484,8 +490,8 @@ $0a1a    t, \  $A: ^Z   '\n'
 $0001    t, \ $10: Endianess check
 #version t, \ $12: Version information
 
-h: doVar   r> t;
-h: doConst r> @ t;
+h: doVar   r> t;    ( -- a : push return address and exit to caller )
+h: doConst r> @ t;  ( -- u : push value at return address and exit to caller )
 
 [t] doVar tdoVar s!
 [t] doConst tdoConst s!
@@ -497,7 +503,7 @@ h: doConst r> @ t;
 0 tlocation _forth-wordlist   ( set at the end near the end of the file )
 0 tlocation current           ( WID to add definitions to )
 
-\ === ASSEMBLY INSTRUCTIONS ===
+\ ## ASSEMBLY INSTRUCTIONS 
 t: nop      nop      t;
 t: dup      dup      t;
 t: over     over     t;
@@ -554,26 +560,55 @@ $8       tconstant #vocs ( number of vocabularies in allowed )
 $400     tconstant b/buf ( size of a block )
 0        tvariable blk   ( current blk loaded, set in 'cold' )
 #version tconstant ver   ( eForth version )
-0        tvariable boot         ( -- : execute program at startup )
+0        tvariable boot  ( -- : execute program at startup )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
 
-h: swap! swap ! t;            ( a u -- )
+\ The following section of words is purely a space saving measure, or
+\ they allow for other optimizations which also save space. Examples
+\ of this include "[-1]"; any number about $7fff requires two instructions
+\ to encode, numbers below only one, -1 is a commonly used number so this
+\ allows us to save on space. 
+\ 
+\ This does not explain the creation of a word to push the number zero 
+\ though, this only takes up one instruction.  This is instead explained 
+\ by the interaction of the peephole optimizer with function calls, calls
+\ to function can be turned into a branch if that instruction were to be
+\ followed by an exit instruction because it is at the end of a word
+\ definition. This cannot be said of literals. This allows us to save
+\ space under special circumstances.
+\ 
+\ The following example illustrates this:
+\ 
+\  | FORTH CODE                     | PSEUDO ASSEMBLER         |
+\  | ------------------------------ | ------------------------ |
+\  | t: push-zero 0 literal t;      | LITERAL(0) EXIT          |
+\  | t: example-1 drop 0 literal t; | DROP LITERAL(0) EXIT     |
+\  | t: example-2 drop 0 literal t; | DROP BRANCH(push-zero)   |
+\ 
+\ Where "example-1" being unoptimized requires three instructions, whereas
+\ "example-2" requires only two, with the two instruction overhead of
+\ "push-zero".
+\ 
+\ Optimizations like this explain some of the structure of the Forth
+\ code, it is better to exit early and heavily factorize code, especially
+\ if space is at a premium.
+\ 
 h: [-1] -1 literal t;         ( -- -1 : space saving measure, push -1 )
 h: 0x8000 $8000 literal t;    ( -- $8000 : space saving measure, push $8000 )
+h: 2drop-0 drop fallthrough;  ( n n -- 0 )
+h: drop-0 drop fallthrough;   ( n -- 0 )
 h: 0x0000 $0000 literal t;    ( -- $0000 : space/optimization, push $0000 )
-t: 2drop drop drop t;         ( n n -- )
-h: drop-0 drop 0x0000 t;      ( n -- 0 )
-h: 2drop-0 2drop 0x0000 t;    ( n n -- 0 )
 h: state@ state @ t;          ( -- u )
 h: first-bit 1 literal and t; ( u -- u )
+h: in! >in ! t;               ( u -- )
+h: in@ >in @ t;               ( -- u )
 
+t: 2drop drop drop t;         ( n n -- )
 t: 1+ 1 literal + t;         ( n -- n : increment a value  )
 t: negate invert 1+ t;       ( n -- n : negate a number )
 t: - negate + t;             ( n1 n2 -- n : subtract n1 from n2 )
 h: over- over - t;           ( u u -- u u )
 h: over+ over + t;           ( u1 u2 -- u1 u1+2 )
-h: in! >in ! t;              ( u -- )
-h: in@ >in @ t;              ( -- u )
 t: aligned dup first-bit + t; ( b -- a )
 t: bye 0 literal (bye) t;    ( -- : leave the interpreter )
 t: cell- cell - t;           ( a -- a : adjust address to previous cell )
@@ -590,7 +625,8 @@ t: 0> 0 literal > t;         ( n -- f : greater than zero? )
 t: 0< 0 literal < t;         ( n -- f : less than zero? )
 t: 2dup over over t;         ( n1 n2 -- n1 n2 n1 n2 )
 t: tuck swap over t;         ( n1 n2 -- n2 n1 n2 )
-t: +! tuck @ + swap! t;      ( n a -- : increment value at address by 'n' )
+t: +! tuck @ +  fallthrough; ( n a -- : increment value at 'a' by 'n' )
+h: swap! swap ! t;           ( a u -- )
 t: 1+!  1 literal swap +! t; ( a -- : increment value at address by 1 )
 t: 1-! [-1] swap +! t;       ( a -- : decrement value at address by 1 )
 t: execute >r t;             ( cfa -- : execute a function )
@@ -599,7 +635,7 @@ t: c@ dup-@ swap first-bit   ( b -- c )
       8 literal rshift exit
    then
    $ff literal and t;                   
-t: c!                       
+t: c!  ( c b -- )               
   swap $ff literal and dup 8 literal lshift or swap
   swap over dup ( -2 and ) @ swap first-bit 0= $ff literal xor
   >r over xor r> and xor swap ! t;      ( c b -- )
@@ -692,7 +728,7 @@ t: throw
     sp! drop r>
   then t;
 
-h: -throw negate throw t;  ( space saving measure )
+h: -throw negate throw t;  ( u -- : negate and throw )
 [t] -throw 2/ 2 t! 
 
 h: 1depth 1 literal fallthrough; ( ??? -- : check depth is at least one  )
@@ -796,11 +832,11 @@ t: =string ( a1 u2 a1 u2 -- f : string equality )
 
 t: nfa address cell+ t; ( pwd -- nfa : move to name field address)
 t: cfa nfa dup c@ + cell+ $fffe literal and t; ( pwd -- cfa )
-h: .id nfa print t;                          ( pwd -- : print out a word )
-h: logical 0= 0= t;                          ( n -- f )
-h: immediate? @ $4000 literal and logical t; ( pwd -- f : is immediate word? )
-h: compile-only? @ 0x8000 and logical t;     ( pwd -- f : is compile only? )
-h: inline? inline-start inline-end within t; ( pwd -- f : is word inline? )
+h: .id nfa print t;                            ( pwd -- : print out a word )
+h: immediate? @ $4000 literal and fallthrough; ( pwd -- f : immediate word? )
+h: logical 0= 0= t;                            ( n -- f )
+h: compile-only? @ 0x8000 and logical t;       ( pwd -- f : is compile only? )
+h: inline? inline-start inline-end within t;   ( pwd -- f : is word inline? )
 
 h: searcher ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
   swap >r dup
@@ -1158,13 +1194,13 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 t: -order get-order (order) nip set-order t;                 ( wid -- )
 t: +order dup>r -order get-order r> swap 1+ set-order t;     ( wid -- )
 
-t: editor decimal root-voc editor-voc 2 literal set-order t; ( -- )
+t: editor decimal editor-voc +order t; ( -- )
 t: assembler root-voc assembler-voc 2 literal set-order t;   ( -- )
 t: ;code assembler t; immediate                              ( -- )
 t: code : assembler t;                                       ( -- )
 
 xchange _forth-wordlist assembler-voc
-t: end-code forth ; t; immediate
+t: end-code forth ; t; immediate ( -- )
 xchange assembler-voc _forth-wordlist
 
 \ ## Block Word Set
@@ -1210,7 +1246,6 @@ t: list
 \    dup 5u.r space pipe space dup 0 literal .line cr 1+
 \  next drop t;
 
-
 \ ## Booting
 
 \ 'bist' checks the length field in the header matches 'here' and that the
@@ -1239,7 +1274,10 @@ h: boot-sequence cold boot @execute bye t; ( -- : perform the boot sequence )
 \ 'see' could be improved with a word that detects when the end of a
 \ word actually occurs, and with a disassembler for instructions. The output
 \ could also be better formatted, or optionally made to be more or less
-\ verbose.
+\ verbose. Another improvement would be to do the word lookup for branches
+\ that occur outside of the word definition, or prior to it, as there
+\ are many words which have been turned into tail calls - or a single
+\ branch.
 
 h: validate tuck cfa <> if drop-0 exit then nfa t; ( cfa pwd -- nfa | 0 )
 
@@ -1329,6 +1367,92 @@ t: dump ( a u -- )
 [t] _forth-wordlist [t] current         t!
 
 \ ## Block Editor
+\ This block editor is an excellent example of a Forth application; it is
+\ small, terse, and uses the facilities already built into Forth to do all
+\ of the heavy lifting, specifically vocabularies, the block word set and
+\ the text interpreter.
+\ 
+\ Forth blocks used to be the canonical way of storing both source code and
+\ data within a Forth system, it is a simply way of abstracting out how mass
+\ storage works and worked well on the microcomputers available in the 1980s.
+\ With the rise of computers with a more capable operating system the Block
+\ Word Set (See <https://www.taygeta.com/forth/dpans7.htm>) fell out of 
+\ favour, being replaced instead by the File Access Word Set 
+\ (See <https://www.taygeta.com/forth/dpans11.htm>), allowing named files
+\ to be accessed as a byte stream.
+\ 
+\ To keep things simple this editor uses the block word set and in typical
+\ Forth fashion simplifies the problem to the extreme, whilst also sacrificing
+\ usability and functionally - the block editor allows for the editing of
+\ programs but it is more difficult and more limited than traditional editors.
+\ It has no spell checking, or syntax highlighting, and does little in the
+\ way of error checking. But it is very small, compact, easy to understand, and
+\ if needed could be extended.
+\ 
+\ The way this editor works is by replacing the current search order with
+\ a set of words that implement text editing on the currently loaded block,
+\ as well as managing what block is loaded. The defined words are short,
+\ often just a single letter long. 
+\ 
+\ The act of editing text is simplified as well, instead of keeping track of 
+\ variable width lines of text and files, a single block (1024 characters) is 
+\ divided up into 16 lines, each 64 characters in length. This is the essence
+\ of Forth, radically simplifying the problem from all possible angels; the
+\ algorithms used, the software itself and where possible the hardware. Not
+\ every task can be approached this way, nor would everyone be happy with
+\ the results, the editor being presented more as a curiosity than anything
+\ else.
+\ 
+\ We have a way of loading and saving data from disks (the 'block', 'update' 
+\ and 'flush' words) as well as a way of viewing the data  in a block (the 
+\ 'list' word) and evaluating the text within a block (with the 'load' word). 
+\ The variable 'blk' is also of use as it holds the latest block we have 
+\ retrieved from disk. By defining a new word set we can skip the part of 
+\ reading in a parsing commands and numbers, we can use text interpreter and 
+\ line oriented input to do the work for us, as discussed. 
+\ 
+\ Only one extra word is actually need given the words we already have, one
+\ which can destructively replace a line starting at a given column in the
+\ currently loaded block. All of the other commands are simple derivations
+\ of existing words. This word is called 'ia', short for 'insert at', which
+\ takes two numeric arguments (starting line as the first, and column as the
+\ second) and reads all text on the line after the 'ia' and places it at the
+\ specified line/column.
+\ 
+\ The command description and their definitions are the best descriptions
+\ of how this editor works. Try to use the word set interactively to get
+\ a feel for it:
+\ 
+\ | A1 | A2 | Command |                Description                 |
+\ | -- | -- | ------- | ------------------------------------------ |
+\ | #2 | #1 |  ia     | insert text into column #1 on line #2      |
+\ |    | #1 |  i      | insert text into column  0 on line #1      |
+\ |    | #1 |  b      | load block number #1                       |
+\ |    | #1 |  d      | blank line number #1                       |
+\ |    |    |  x      | blank currently loaded block               |
+\ |    |    |  l      | redisplay currently loaded block           |
+\ |    |    |  q      | remove editor word set from search order   |
+\ |    |    |  n      | load next block                            |
+\ |    |    |  p      | load previous block                        |
+\ |    |    |  s      | save changes to disk                       |
+\ |    |    |  e      | evaluate block                             |
+\ 
+\ An example command session might be:
+\ 
+\ | Command Sequence         | Description                             |
+\ | ------------------------ | --------------------------------------- |
+\ | editor                   | add the editor word set to search order |
+\ | $20 b l                  | load block $20 (hex) and display it     |
+\ | x                        | blank block $20                         |
+\ | 0 i .( Hello, World ) cr | Put ".( Hello, World ) cr" on line 0    |
+\ | 1 i 2 2 + . cr           | Put "2 2 + . cr" on line 1              |
+\ | l                        | list block $20 again                    |
+\ | e                        | evaluate block $20                      |
+\ | s                        | save contents                           |
+\ | q                        | unload block word set                   |
+\ 
+\ See: <http://retroforth.org/pages/?PortsOfRetroEditor> for the origin of
+\ this block editor, and for different implementations.
 
 0 tlast s!
 h: [block] blk-@ block t;       ( k -- a : loaded block address )
@@ -1340,13 +1464,13 @@ t: n  1 literal +block b l t;   ( -- : load and list next block )
 t: p [-1] +block b l t;         ( -- : load and list previous block )
 t: d [line] c/l blank t;        ( u -- : delete line )
 t: x [block] b/buf blank t;     ( -- : erase loaded block )
-t: u update t;                  ( -- : set block set as dirty )
-t: s u flush t;                 ( -- : flush changes to disk )
-t: q forth flush t;             ( -- : quit editor )
-t: e forth blk-@ load editor t; ( -- : evaluate block )
+t: s update flush t;            ( -- : flush changes to disk )
+t: q editor-voc -order t; ( -- : quit editor )
+t: e q blk-@ load editor t;     ( -- : evaluate block )
 t: ia c/l* + [block] + source drop in@ + ( u u -- )
    swap source nip in@ - cmove [t] \ tcompile, t;
 t: i 0 literal swap ia t;           ( u -- )
+\ t: u update t;                ( -- : set block set as dirty )
 \ t: w words t;
 \ h: yank pad c/l t; 
 \ t: c [line] yank >r swap r> cmove t;
@@ -1368,12 +1492,7 @@ checksum 7 tcells t! \ Calculate image CRC
 finished
 bye
 
-\ ## APPENDIX
-
-\ @note The appendix should go here, which should contain the VM source,
-\ and a description of the Virtual Machine. The file should also be prepared
-\ so it can be sent to a preprocessor that will convert this file to markdown,
-\ for viewing on the web.
+# APPENDIX
 
 ## The Virtual Machine
 
@@ -1628,8 +1747,6 @@ This is a list of Error codes, not all of which are used by the application.
 
 * Documentation of the project, some words, and the instruction set, as well as
 the memory layout
-* Remove the compiler after a cross compiler has been made within the Forth
-interpreter, prepared images and the metacompiler would be provided instead.
 * To facilitate porting to microcontrollers the Forth could be made to be
 stored in a ROM, with initial variable values copied to RAM, the virtual
 machine would also have to be modified to map different parts of the address
@@ -1650,15 +1767,6 @@ library, and a 16-bit metacompiler for the [8086][]/[DOS][] would be useful.
 xoring the image with a known constant. A trivial obfuscation, obviously. Or
 'encrypting' against the output of a Pseudo Random Number Generator for extra 
 marks.
-* Save and load all state to disk, not just the core. The current system also
-does not embed format information into the binary files, which means the
-generated object files is indistinguishable from other binary formats.
-Magic numbers to identify the format, and Endianess information could be
-included in the file format, the metacompiler could insert this information
-into the generated object. Other information to include would be a CRC and
-length information. See <http://www.fadden.com/tech/file-formats.html>,
-and <https://stackoverflow.com/questions/323604>.
-* Improve the command line argument passing in [forth.c][].
 * On the Windows platform the input and output streams should be reopened in
 binary mode.
 * More assertions and range checks should be added to the interpreter, for
@@ -1682,7 +1790,8 @@ and how Forth works.
 * This Forth needs a series of unit tests to make sure the basic functionality
 of all the words is correct
 * This Forth lacks a version of 'FORGET', as well as 'MARKER', which is
-unfortunate, as they are useful.
+unfortunate, as they are useful. This is due to how word lists are
+implemented.
 * One possible exercise would be to reduce the image size to its absoluate
 minimum, by removing unneeded functionality for the metacompilation process,
 such as the block editor, and 'see', as well as any words not actually used
@@ -1690,7 +1799,13 @@ in the metacompilation process.
 * Floating point routines can be found from here:
 <http://codebase64.org/doku.php?id=base:floating_point_routines_for_the_6502>,
 which will need adapting.
-
+* Separating out the word header from the word definition would have a few
+advantages; less code space would be used, 'fallthrough' would not just be
+a special case for the metacompiler, 'FORGET' would be easier to implement,
+and the headers for all words could be saved (so 'see' would work better).
+* An image could be prepared with the smallest possible Forth interpreter,
+it would not necessarily have to be able to meta-compile.
+* Look at the libforth test bench and reimplement it
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

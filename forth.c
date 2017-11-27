@@ -56,7 +56,7 @@ static int binary_memory_load(FILE *input, uw_t *p, const size_t length)
 
 static int binary_memory_save(FILE *output, uw_t *p, const size_t start, const size_t length)
 {
-	assert(output && p && ((start + length) < 0x8000 || (start > length)));
+	assert(output && p /* && ((start + length) < 0x8000 || (start > length))*/);
 	for(size_t i = start; i < length; i++) {
 		errno = 0;
 		const int r1 = fputc((p[i])       & 0xff, output);
@@ -111,31 +111,31 @@ int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			pc = instruction & 0x10 ? m[rp] >> 1 : pc + 1;
 
 			switch((instruction >> 8u) & 0x1f) {
-			case  0: /*T = t;*/                  break;
-			case  1: T = n;                      break;
-			case  2: T = m[rp];                  break;
-			case  3: T = m[t >> 1];              break;
-			case  4: m[t >> 1] = n; T = m[--sp]; break;
+			case  0: /*T = t;*/                break;
+			case  1: T = n;                    break;
+			case  2: T = m[rp];                break;
+			case  3: T = m[t>>1];              break;
+			case  4: m[t>>1] = n; T = m[--sp]; break;
 			case  5: d = (ud_t)t + (ud_t)n; T = d >> 16; m[sp] = d; n = d; break;
 			case  6: d = (ud_t)t * (ud_t)n; T = d >> 16; m[sp] = d; n = d; break;
-			case  7: T &= n;                     break;
-			case  8: T |= n;                     break;
-			case  9: T ^= n;                     break;
-			case 10: T = ~t;                     break;
-			case 11: T--;                        break;
-			case 12: T = -(t == 0);              break;
-			case 13: T = -(t == n);              break;
-			case 14: T = -(n < t);               break;
-			case 15: T = -((sw_t)n < (sw_t)t);   break;
-			case 16: T = n >> t;                 break;
-			case 17: T = n << t;                 break;
-			case 18: T = sp << 1;                break;
-			case 19: T = rp << 1;                break;
-			case 20: sp = t >> 1;                break;
-			case 21: rp = t >> 1; T = n;         break;
-			case 22: T = save(h, block, n >> 1, ((ud_t)T + 1u) >> 1); break;
-			case 23: T = fputc(t, out);          break;
-			case 24: T = fgetc(in);              break;
+			case  7: T &= n;                   break;
+			case  8: T |= n;                   break;
+			case  9: T ^= n;                   break;
+			case 10: T = ~t;                   break;
+			case 11: T--;                      break;
+			case 12: T = -(t == 0);            break;
+			case 13: T = -(t == n);            break;
+			case 14: T = -(n < t);             break;
+			case 15: T = -((sw_t)n < (sw_t)t); break;
+			case 16: T = n >> t;               break;
+			case 17: T = n << t;               break;
+			case 18: T = sp << 1;              break;
+			case 19: T = rp << 1;              break;
+			case 20: sp = t >> 1;              break;
+			case 21: rp = t >> 1; T = n;       break;
+			case 22: T = save(h, block, n>>1, ((ud_t)T+1)>>1); break;
+			case 23: T = fputc(t, out);        break;
+			case 24: T = fgetc(in);            break;
 			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
 			case 26: if(t) { T=(sw_t)n/(sw_t)t; t=(sw_t)n%(sw_t)t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
 			case 27: goto finished;

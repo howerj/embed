@@ -604,38 +604,38 @@ h: doConst r> @ t;  ( -- u : push value at return address and exit to caller )
 \ 
 
 t: nop      nop      t; ( -- : do nothing )
-t: dup      dup      t; ( n -- n n : )
-t: over     over     t; ( n1 n2 -- n1 n2 n1 : )
-t: invert   invert   t; ( u -- u : )
-t: um+      um+      t; ( u u -- u carry : )
-t: +        +        t; ( u u -- u : )
-t: um*      um*      t; ( u u -- ud : )
-t: *        *        t; ( u u -- u : )
-t: swap     swap     t; ( n1 n2 -- n2 n1 : )
-t: nip      nip      t; ( n1 n2 -- n2 : )
-t: drop     drop     t; ( n -- : )
-t: @        @        t; ( a -- u : )
-t: !        !        t; ( u a -- : )
-t: rshift   rshift   t; ( u1 u2 -- u : )
-t: lshift   lshift   t; ( u1 u2 -- u : )
-t: =        =        t; ( u1 u2 -- u : )
-t: u<       u<       t; ( u1 u2 -- u : )
-t: <        <        t; ( u1 u2 -- u : )
-t: and      and      t; ( u u -- u : )
-t: xor      xor      t; ( u u -- u : )
-t: or       or       t; ( u u -- u : )
-t: sp@      sp@      t; ( -- u : )
-t: sp!      sp!      t; ( u -- ??? : )
-t: 1-       1-       t; ( u -- u : )
-t: 0=       0=       t; ( u -- f : )
-t: (bye)    (bye)    t; ( u -- !!! : )
-t: rx?      rx?      t; ( -- c | -1 : )
-t: tx!      tx!      t; ( c -- : )
-t: (save)   (save)   t; ( u1 u2 -- u : )
-t: u/mod    u/mod    t; ( u1 u2 -- rem div : )
-t: /mod     /mod     t; ( u1 u2 -- rem div : )
-t: /        /        t; ( u1 u2 -- u : )
-t: mod      mod      t; ( u1 u2 -- u : )
+t: dup      dup      t; ( n -- n n : duplicate value on top of stack )
+t: over     over     t; ( n1 n2 -- n1 n2 n1 : duplicate second value on stack )
+t: invert   invert   t; ( u -- u : bitwise invert of value on top of stack )
+t: um+      um+      t; ( u u -- u carry : addition with carry )
+t: +        +        t; ( u u -- u : addition without carry )
+t: um*      um*      t; ( u u -- ud : multiplication  )
+t: *        *        t; ( u u -- u : multiplication )
+t: swap     swap     t; ( n1 n2 -- n2 n1 : swap two values on stack )
+t: nip      nip      t; ( n1 n2 -- n2 : remove second item on stack )
+t: drop     drop     t; ( n -- : remove item on stack )
+t: @        @        t; ( a -- u : load value at address )
+t: !        !        t; ( u a -- : store 'u' at address 'a' )
+t: rshift   rshift   t; ( u1 u2 -- u : shift u2 by u1 places to the right )
+t: lshift   lshift   t; ( u1 u2 -- u : shift u2 by u1 places to the left )
+t: =        =        t; ( u1 u2 -- f : does u2 equal u1? )
+t: u<       u<       t; ( u1 u2 -- f : is u2 less than u1 )
+t: <        <        t; ( u1 u2 -- f : is u2 less than u1, signed version )
+t: and      and      t; ( u u -- u : bitwise and )
+t: xor      xor      t; ( u u -- u : bitwise exclusive or )
+t: or       or       t; ( u u -- u : bitwise or )
+t: sp@      sp@      t; ( ??? -- u : get stack depth )
+t: sp!      sp!      t; ( u -- ??? : set stack depth )
+t: 1-       1-       t; ( u -- u : decrement top of stack )
+t: 0=       0=       t; ( u -- f : if top of stack equal to zero )
+t: (bye)    (bye)    t; ( u -- !!! : exit VM with 'u' as return value )
+t: rx?      rx?      t; ( -- c | -1 : fetch a single character, or EOF )
+t: tx!      tx!      t; ( c -- : transmit single character )
+t: (save)   (save)   t; ( u1 u2 -- u : save memory from u1 to u2 inclusive )
+t: u/mod    u/mod    t; ( u1 u2 -- rem div : unsigned divide/modulo )
+t: /mod     /mod     t; ( u1 u2 -- rem div : signed divide/modulo )
+t: /        /        t; ( u1 u2 -- u : u1 divided by u2 )
+t: mod      mod      t; ( u1 u2 -- u : remainder of u1 divided by u2 )
 
 \ These words can also be implemented in a single instruction, yet their
 \ definition is different for multiple reasons. These words should only be
@@ -658,13 +658,13 @@ t: mod      mod      t; ( u1 u2 -- u : )
 \ 
 
 there constant inline-start 
-t: rp@      rp@      fallthrough; compile-only
-t: rp!      rp!      fallthrough; compile-only
-t: exit     exit     fallthrough; compile-only
-t: >r       >r       fallthrough; compile-only
-t: r>       r>       fallthrough; compile-only
-t: r@       r@       fallthrough; compile-only
-t: rdrop    rdrop    fallthrough; compile-only 
+t: rp@   rp@   fallthrough; compile-only ( -- u )
+t: rp!   rp!   fallthrough; compile-only ( u --, R: --- ??? )
+t: exit  exit  fallthrough; compile-only ( -- )
+t: >r    >r    fallthrough; compile-only ( u --, R: -- u )
+t: r>    r>    fallthrough; compile-only ( -- u, R: u -- )
+t: r@    r@    fallthrough; compile-only ( -- u )
+t: rdrop rdrop fallthrough; compile-only ( --, R: u -- )
 there constant inline-end 
 
 [last] [t] assembler-voc t!
@@ -807,10 +807,9 @@ h: doNext 2r> ?dup if 1- >r @ >r exit then cell+ >r t;
 t: min 2dup < fallthrough;              ( n n -- n )
 h: mux if drop exit then nip t;         ( n1 n2 b -- n : multiplex operation )
 t: max 2dup > mux t;                    ( n n -- n )
+
 h: >char $7f literal and dup $7f literal =bl within
   if drop [char] _ then t;              ( c -- c )
-
-
 h: tib #tib cell+ @ t;                  ( -- a )
 \ h: echo _echo @execute t;             ( c -- )
 t: key _key @execute dup [-1] ( <-- EOF = -1 ) = if bye then t; ( -- c )
@@ -1116,7 +1115,7 @@ h: ?error ( n -- : perform actions on error )
   then t;
 
 h: ?dictionary dup $3f00 literal u> if 8 literal -throw exit then t;
-t: , here dup cell+ ?dictionary cp! ! t; ( u -- )
+t: , here dup cell+ ?dictionary cp! ! t; ( u -- : store 'u' in dictionary )
 t: c, here ?dictionary c! cp 1+! t; ( c -- : store 'c' in the dictionary )
 h: doLit 0x8000 or , t;
 t: literal ( n -- : write a literal into the dictionary )
@@ -1237,19 +1236,19 @@ h: ?unique ( a -- a : print a message if a word definition is not unique )
   then t;
 h: ?nul ( b -- : check for zero length strings )
    count 0= if $a literal -throw exit then 1- t;
-h: find-cfa token find if cfa exit then not-found t;
+h: find-cfa token find if cfa exit then not-found t; ( -- xt, <string> )
 t: ' find-cfa state@ if tcall literal exit then t; immediate
-t: [compile] find-cfa compile, t; immediate compile-only  ( -- ; <string> )
+t: [compile] find-cfa compile, t; immediate compile-only  ( --, <string> )
 \ NB. 'compile' only works for words, instructions, and numbers below $8000
 t: compile  r> dup-@ , cell+ >r t; ( -- : Compile next compiled word )
 t: [char] char tcall literal t; immediate compile-only ( --, <string> : )
 \ h: ?quit command? if $38 literal -throw exit then t;
 t: ; ( ?quit ) ?check =exit , [ fallthrough; immediate compile-only
-h: get-current! ?dup if get-current ! exit then t;
-t: : align here dup last-def !
+h: get-current! ?dup if get-current ! exit then t; ( -- wid )
+t: : align here dup last-def ! ( "name", -- colon-sys )
     last , token ?nul ?unique count + cp! $cafe literal ] t;
-t: begin here  t; immediate compile-only
-t: until fallthrough; immediate compile-only
+t: begin here  t; immediate compile-only      ( -- a )
+t: until fallthrough; immediate compile-only  ( a -- )
 h: jumpz, chars $2000 literal or , t;
 t: again fallthrough; immediate compile-only
 h: jump, chars ( $0000 literal or ) , t;
@@ -1332,6 +1331,11 @@ h: {abort} do$ print cr abort t;                 ( -- )
 t: abort" compile {abort} $,' t; immediate compile-only \ "
 
 \ ## Vocabulary Words 
+\ The vocabulary word set should already be well understood, if the
+\ metacompiler has been, the vocabulary word set is how Forth organizes words
+\ and controls visibility of words.
+\ 
+\ 
 
 h: find-empty-cell begin dup-@ while cell+ repeat t; ( a -- a )
 

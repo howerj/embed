@@ -21,6 +21,8 @@
 \ - A little bit about Forth, a simple introduction
 \ - How Vocabularies work
 \ - Stack comments, also standardize stack comments
+\ - Conventions within Forth, Forth blocks, naming of words (for example
+\   using '@' or '!' within words).
 \ - Design tradeoffs and constraints
 \   - For example: having a separate string storage area
 \   - Limitations of the Virtual Machines code space
@@ -1200,7 +1202,7 @@ t: random ( -- u : pseudo random number )
 \ t: page =page @execute t;   ( -- : page screen )
 \ t: at-xy =at-xy @execute t; ( x y -- : set cursor position )
 
-h: 5u.r 5 literal u.r t;     ( u -- )
+h: 5u.r 4 literal u.r t;     ( u -- )
 h: colon $3a literal emit t; ( -- )
 
 \ t: d. base @ >r decimal  . r> base ! t;
@@ -1395,7 +1397,62 @@ t: end-code forth ; t; immediate ( -- )
 xchange assembler-voc _forth-wordlist
 
 \ ## Block Word Set
-
+\ The block word set abstracts out how access to mass storage works in just
+\ a handful of words. The main word is 'block', with the words 'update',
+\ 'flush' and the variable 'blk' also integral to the working of the block
+\ word set. All of the other words can be implemented upon these.
+\ 
+\ Block storage is an outdated, but simple, method of accessing
+\ mass storage that demands little from the hardware or the system it is
+\ implemented under, just that data can be transfered from memory to disk
+\ somehow. It has no requirements that there be a file system, which is
+\ perfect for embedded devices as well as upon the microcomputers it
+\ originated on.
+\ 
+\ A 'Forth block' is 1024 byte long buffer which is backed by a mass
+\ storage device, which we will refer to as 'disk'. Very compact programs
+\ can be written that have their data stored persistently. Source can
+\ and data can be stored in blocks and evaluated, which will be described
+\ more in the 'Block editor' section of this document.
+\ 
+\ The 'block' word does most of the work. The way it is usually implemented
+\ is as follows:
+\ 
+\ 1. A user provides a block number to the 'block' word. The block
+\ number is checked to make sure it is valid, and an exception is thrown
+\ if it is not.
+\ 2. If the block if already loaded into a block buffer from disk, the
+\ address of the memory it is loaded into is returned.
+\ 3. If it was not, then 'block' looks for a free block buffer, loads
+\ the 1024 byte section off disk into the block buffer and returns an
+\ address to that.
+\ 4. If there are no free block buffers then it looks for a block buffer
+\ that is marked as being dirty with 'update' (which marks the previously
+\ loaded block as being dirty when called), then transfers that dirty block
+\ to disk. Now that there is a free block buffer, it loads the data that
+\ the user wants off of disk and returns a pointer to that, as in the
+\ previous bullet point. If none of the buffers are marked as dirty then
+\ then any one of them could be reused - they have not been marked as being
+\ modified so their contents could be retrieved off of disk if needed.
+\ 5. Under all cases, before the address of the loaded block has been
+\ returned, the variable 'blk' is updated to contain the latest loaded
+\ block.
+\ 
+\ This word does a lot, but is quite simple to use. It implements a simple
+\ cache where data is transfered back to disk only if needed, and multiple
+\ sections of memory from disk can be loaded into memory at the same time.
+\ The mechanism by which this happens is entirely hidden from the user.
+\ 
+\ This Forth implements 'block' in a slightly different way. The entire
+\ virtual machine image is loaded at start up, and can be saved back to
+\ disk (or small sections of it) with the "(save)" instruction. 'update'
+\ marks the entire image as needing to be saved back to disk, whilst
+\ 'flush' calls "(save)". 'block' then only has to check the block number
+\ is within range, and return a pointer to the block number multiplied by
+\ the size of a block - so this means that this version of 'block' is just
+\ an index into main memory. This is similar to how 'colorForth' implements
+\ its block word.
+\ 
 t: update [-1] block-dirty ! t;    ( -- )
 h: blk-@ blk @ t;                  ( -- k : retrieve current loaded block )
 h: +block blk-@ + t;               ( -- )
@@ -1408,6 +1465,65 @@ t: block ( k -- a )
   dup blk !
   $a literal lshift ( <-- b/buf * ) t;
 
+\ The block word set has the following additional words, which augment the
+\ set nicely, they are 'list', 'load' and 'thru'. The 'list' word is used
+\ for displaying the contents of a block, it does this by splitting the
+\ block into 16 lines each, 64 characters long. 'load' evaluates a given
+\ block, and 'thru' evaluates a range of blocks.
+\ 
+\ This is how source code was stored and evaluated during the microcomputer
+\ era, as opposed to storing the source in named byte stream oriented files 
+\ as is common nowadays. 
+\ 
+\ It is more difficult, but possible, to store and edit source code in this
+\ manner, but it requires that the programmer(s) follow certain conventions
+\ when editing blocks, both in how programs are split up, and how they are
+\ formatted.
+\ 
+\ A block shown with 'list' might look like the following: 
+\ 
+\ 	   ----------------------------------------------------------------
+\ 	 0|( Simple Math Routines 31/12/1989 RJH 3/4                #20  ) |
+\ 	 1|                                                                |
+\ 	 2|: square dup * ; ( u -- u )                                     |
+\ 	 3|: sum-of-squares square swap square + ; ( u u -- u )            |
+\ 	 4|: even 1 and 0= ; ( u -- b )                                    |
+\ 	 5|: odd even 0= ;   ( u -- b )                                    |
+\ 	 6|                                                                |
+\ 	 7|                                                                |
+\ 	 8|                                                                |
+\ 	 9|                                                                |
+\ 	10|                                                                |
+\ 	11|                                                                |
+\ 	12|                                                                |
+\ 	13|                                                                |
+\ 	14|                                                                |
+\ 	15|                                                                |
+\ 	   ----------------------------------------------------------------
+\ 
+\ Longer comments for a source code block were stored in a 'shadow block', 
+\ which is only enforced by convention. One possible convention is to store
+\ the source in even numbered blocks, and the comments in the odd numbered
+\ blocks.
+\ 
+\ By storing a comment in the first line of a block a word called 'index'
+\ could be used to make a table of contents all of the blocks available on
+\ disk, 'index' simply displays the first line of each block within a block
+\ range. 
+
+\ The common theme is that convention is key to successfully using blocks.
+\
+\ @todo Rewrite this section
+\ Blocks could also be used to store error messages, a word called 'message'
+\ is available on some old Forths which when given an error code (say -8)
+\ loads the block containing error messages and prints off that line. The 
+\ errors messages would be located in a block range that 'message' would know 
+\ about, for example blocks 4-8. This means RAM or program storage is not 
+\ used for storing error messages - a useful feature in memory starved systems. 
+\ It does not matter that access to the disk would be relatively slow, the 
+\ error messages are only displayed in exceptional circumstances. This is an
+\ example of the block storage being used as crude database.
+\ 
 h: c/l* ( c/l * ) 6 literal lshift t; ( u -- u )
 h: c/l/ ( c/l / ) 6 literal rshift t; ( u -- u )
 h: line swap block swap c/l* + c/l t; ( k u -- a u )
@@ -1575,6 +1691,33 @@ t: see ( --, <string> : decompile a word )
   dup inline?       if ."| $literal  inline  "       then
       immediate?    if ."| $literal  immediate  "    then cr t;
 
+\ A few useful utility words will be added next, which are not strictly 
+\ necessary but are useful. Those are '.s' for examining the contents of the 
+\ variable stack, and 'dump' for showing the contents of a section of memory
+\ 
+\ The '.s' word must be careful not to alter that variable stack whilst
+\ trying to print it out. It uses the word 'pick' to achieve this, otherwise
+\ there is nothing special about this word, and it is very useful for
+\ debugging code interactively to see what its stack effects are.
+\ 
+\ The dump keyword is fairly useful for the implementer so that they can
+\ use Forth to debug if the compilation is working, or if a new word
+\ is producing the correct assembly. It can also be used as a utility to
+\ export binary sections of memory as text. 
+\ 
+\ The programmer might want to edit the 'dump' word to customize its output,
+\ the addition of the 'dc+' word is one way it could be extended, which is
+\ commented out below. Like 'dm+', 'dc+' operates on a single line to
+\ be displayed, however 'dc+' decompiles the memory into human readable
+\ instructions instead of numbers, unfortunately the lines it produces are
+\ too long.
+\ 
+\ Normally the word 'dump' outputs the memory contents in hexadecimal,
+\ however a design decision was taken to output the contents of memory in
+\ what the current numeric output base is instead. This makes the word
+\ more flexible, more consistent and shorter, than it otherwise would be as
+\ the current output base would have to be saved and then restored.
+\ 
 
 t: .s cr depth for aft r@ pick . then next ."| $literal  <sp " t; ( -- )
 h: dm+ chars for aft dup-@ space 5u.r cell+ then next t; ( a u -- a )
@@ -1588,12 +1731,20 @@ t: dump ( a u -- )
     aft
       cr dump-width 2dup
       over 5u.r colon space
-      dm+ ( dump-width dc+ ) \ <-- dc+ should be optional?
+      dm+ ( dump-width dc+ ) \ <-- dc+ is optional
       -rot
       2 literal spaces $type
     then
   next drop t;
 
+\ The standard Forth dictionary is now complete, but the variables containing
+\ the word list need to be updated a final time. The next section implements
+\ the block editor, which is in the 'editor' word set. Their are two variables
+\ that need updating, '_forth-wordlist', a vocabulary we have already
+\ encountered. An 'current', which contains a pointer to a word list, this
+\ word list is the one new definitions (defined by ':', or 'create') are
+\ added to. It will be set to '_forth-wordlist' so new definitions are added
+\ to the default vocabulary.
 [last]              [t] _forth-wordlist t!
 [t] _forth-wordlist [t] current         t!
 
@@ -2037,6 +2188,8 @@ and the headers for all words could be saved (so 'see' would work better).
 * An image could be prepared with the smallest possible Forth interpreter,
 it would not necessarily have to be able to meta-compile.
 * Look at the libforth test bench and reimplement it
+* Allow an arbitrary character to be used for numeric output alignment, not
+just spaces. This would allow leading zeros to be added to numbers.
 
 * Some more words need adding in, like "postpone", "[']", "[if]", "[else]",
 "[then]", "T{", "}T", ...
@@ -2049,6 +2202,205 @@ it would not necessarily have to be able to meta-compile.
     >in ! postpone postpone
   repeat
   drop ; immediate 
+
+## Virtual Machine Implementation in C
+
+/** @file      forth.c
+ *  @brief     Forth Virtual Machine
+ *  @copyright Richard James Howe (2017)
+ *  @license   MIT */
+
+#include <assert.h>
+#include <errno.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define CORE (65536u)  /* core size in bytes */
+#define SP0  (8704u)   /* Variable Stack Start: 8192 (end of program area) + 512 (block size) */
+#define RP0  (32767u)  /* Return Stack Start: end of CORE in words */
+
+#ifdef TRON
+#define TRACE(PC,I,SP,RP) \
+	fprintf(stderr, "%04x %04x %04x %04x\n", (unsigned)(PC), (unsigned)(I), (unsigned)(SP), (unsigned)(RP));
+#else
+#define TRACE(PC, I, SP, RP)
+#endif
+
+typedef uint16_t uw_t;
+typedef int16_t  sw_t;
+typedef uint32_t ud_t;
+
+typedef struct {
+	uw_t pc, t, rp, sp, core[CORE/sizeof(uw_t)];
+} forth_t;
+
+static FILE *fopen_or_die(const char *file, const char *mode)
+{
+	FILE *f = NULL;
+	errno = 0;
+	assert(file && mode);
+	if(!(f = fopen(file, mode))) {
+		fprintf(stderr, "failed to open file '%s' (mode %s): %s\n", file, mode, strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+	return f;
+}
+
+static int binary_memory_load(FILE *input, uw_t *p, const size_t length)
+{
+	assert(input && p && length <= 0x8000);
+	for(size_t i = 0; i < length; i++) {
+		const int r1 = fgetc(input);
+		const int r2 = fgetc(input);
+		if(r1 < 0 || r2 < 0)
+			return -1;
+		p[i] = (((unsigned)r1 & 0xffu))|(((unsigned)r2 & 0xffu) << 8u);
+	}
+	return 0;
+}
+
+static int binary_memory_save(FILE *output, uw_t *p, const size_t start, const size_t length)
+{
+	assert(output && p /* && ((start + length) < 0x8000 || (start > length))*/);
+	for(size_t i = start; i < length; i++) {
+		errno = 0;
+		const int r1 = fputc((p[i])       & 0xff, output);
+		const int r2 = fputc((p[i] >> 8u) & 0xff, output);
+		if(r1 < 0 || r2 < 0) {
+			fprintf(stderr, "write failed: %s\n", strerror(errno));
+			return -1;
+		}
+	}
+	return 0;
+}
+
+int load(forth_t *h, const char *name)
+{
+	assert(h && name);
+	FILE *input = fopen_or_die(name, "rb");
+	const int r = binary_memory_load(input, h->core, CORE/sizeof(uw_t));
+	fclose(input);
+	h->pc = 0; h->t = 0; h->rp = RP0; h->sp = SP0;
+	return r;
+}
+
+int save(forth_t *h, const char *name, size_t start, size_t length)
+{
+	assert(h);
+	if(!name)
+		return -1;
+	FILE *output = fopen_or_die(name, "wb");
+	const int r = binary_memory_save(output, h->core, start, length);
+	fclose(output);
+	return r;
+}
+
+int forth(forth_t *h, FILE *in, FILE *out, const char *block)
+{
+	static const uw_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
+	assert(h && in && out);
+	uw_t pc = h->pc, t = h->t, rp = h->rp, sp = h->sp, *m = h->core;
+	ud_t d;
+	for(;;) {
+		const uw_t instruction = m[pc];
+		TRACE(pc, instruction, sp, rp);
+		assert(!(sp & 0x8000) && !(rp & 0x8000));
+
+		if(0x8000 & instruction) { /* literal */
+			m[++sp] = t;
+			t       = instruction & 0x7FFF;
+			pc++;
+		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
+			uw_t n = m[sp], T = t;
+
+			pc = instruction & 0x10 ? m[rp] >> 1 : pc + 1;
+
+			switch((instruction >> 8u) & 0x1f) {
+			case  0: /*T = t;*/                break;
+			case  1: T = n;                    break;
+			case  2: T = m[rp];                break;
+			case  3: T = m[t>>1];              break;
+			case  4: m[t>>1] = n; T = m[--sp]; break;
+			case  5: d = (ud_t)t + (ud_t)n; T = d >> 16; m[sp] = d; n = d; break;
+			case  6: d = (ud_t)t * (ud_t)n; T = d >> 16; m[sp] = d; n = d; break;
+			case  7: T &= n;                   break;
+			case  8: T |= n;                   break;
+			case  9: T ^= n;                   break;
+			case 10: T = ~t;                   break;
+			case 11: T--;                      break;
+			case 12: T = -(t == 0);            break;
+			case 13: T = -(t == n);            break;
+			case 14: T = -(n < t);             break;
+			case 15: T = -((sw_t)n < (sw_t)t); break;
+			case 16: T = n >> t;               break;
+			case 17: T = n << t;               break;
+			case 18: T = sp << 1;              break;
+			case 19: T = rp << 1;              break;
+			case 20: sp = t >> 1;              break;
+			case 21: rp = t >> 1; T = n;       break;
+			case 22: T = save(h, block, n>>1, ((ud_t)T+1)>>1); break;
+			case 23: T = fputc(t, out);        break;
+			case 24: T = fgetc(in);            break;
+			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
+			case 26: if(t) { T=(sw_t)n/(sw_t)t; t=(sw_t)n%(sw_t)t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
+			case 27: goto finished;
+			}
+			sp += delta[ instruction       & 0x3];
+			rp -= delta[(instruction >> 2) & 0x3];
+			if(instruction & 0x20)
+				T = n;
+			if(instruction & 0x40)
+				m[rp] = t;
+			if(instruction & 0x80)
+				m[sp] = t;
+			t = T;
+		} else if (0x4000 & instruction) { /* call */
+			m[--rp] = (pc + 1) << 1;
+			pc = instruction & 0x1FFF;
+		} else if (0x2000 & instruction) { /* 0branch */
+			pc = !t ? instruction & 0x1FFF : pc + 1;
+			t = m[sp--];
+		} else { /* branch */
+			pc = instruction & 0x1FFF;
+		}
+	}
+finished:
+	h->pc = pc; h->sp = sp; h->rp = rp; h->t = t;
+	return (int16_t)t;
+}
+
+int main(int argc, char **argv)
+{
+	static forth_t h;
+	int interactive = 0;
+	if(argc < 4)
+		goto fail;
+	if(!strcmp(argv[1], "i"))
+		interactive = 1;
+	else if(strcmp(argv[1], "f"))
+		goto fail;
+	load(&h, argv[2]);
+	for(int i = 4; i < argc; i++) {
+		FILE *in = fopen_or_die(argv[i], "rb");
+		const int r = forth(&h, in, stdout, argv[3]);
+		fclose(in);
+		if(r != 0) {
+			fprintf(stderr, "run failed: %d\n", r);
+			return r;
+		}
+	}
+	if(interactive)
+		return forth(&h, stdin, stdout, argv[3]);
+	return 0;
+fail:
+	fprintf(stderr, "usage: %s f|i input.blk output.blk file.fth\n", argv[0]);
+	return -1;
+}
+
+
+### References
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

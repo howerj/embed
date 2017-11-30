@@ -471,12 +471,14 @@ a: return ( -- : Compile a return into the target )
 
 \ 'for' needs the new definition of '>r' to work correctly.
 : for >r begin ;
-: s: : ;
 
+: s: : ;
 : :noname h: ;
 : : t: ;
 s: ; t; ;
 hide s:
+hide t:
+hide t;
 
 ]asm #~t              ALU asm[ constant =invert ( invert instruction )
 ]asm #t  r->pc    r-1 ALU asm[ constant =exit   ( return/exit instruction )
@@ -509,6 +511,7 @@ $4014 constant _expect     ( "accept" vector )
 \ $4016 constant _tap      ( "tap" vector, for terminal handling )
 \ $4018 constant _echo     ( c -- : emit character )
 $4020 constant _prompt     ( -- : display prompt )
+\ $4022 constant _literal    ( u -- u | : handles literals )
 $4110 constant context     ( holds current context for search order )
 $4122 constant #tib        ( Current count of terminal input buffer )
 $4124 constant tib-buf     ( ... and address )
@@ -598,6 +601,7 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ requires a separate word ("recurse") to implement recursion. 
 \ 
 \ @todo rewrite the following section as 't:' and 't;' are now ':' and ';'
+\ 
 \ However, the words 't:' and 't;' are not the same as the words ':' and
 \ ';'. 't:' uses 'create' to make a new variable in the metacompilers 
 \ dictionary that points to a word definition in the target, it also creates
@@ -690,6 +694,7 @@ $400     tconstant b/buf ( size of a block )
 #version tconstant ver   ( eForth version )
 0        tvariable boot  ( -- : execute program at startup )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
+0        tvariable =literal ( holds execution vector for literal )
 
 \ The following section of words is purely a space saving measure, or
 \ they allow for other optimizations which also save space. Examples
@@ -1074,8 +1079,6 @@ h: -trailing ( b u -- b u : remove trailing spaces )
     then
   next 0x0000 ;
 
-\ @todo rewrite so 'lookfor' does not use vectored word execution
-
 h: lookfor ( b u c -- b u : skip until _test succeeds )
   >r
   begin
@@ -1127,9 +1130,6 @@ h: ?dictionary dup $3f00 literal u> if 8 literal -throw exit then ;
 : , here dup cell+ ?dictionary cp! ! ; ( u -- : store 'u' in dictionary )
 : c, here ?dictionary c! cp 1+! ; ( c -- : store 'c' in the dictionary )
 h: doLit 0x8000 or , ;
-\ @todo make 'literal' a word that relies on vectorized execution
-\ This will make the cross compiler simpler, we can just use a number
-\ inside a metacompiled word instead of the number followed by 'literal'.
 : literal ( n -- : write a literal into the dictionary )
   dup 0x8000 and ( n > $7fff ? )
   if
@@ -1150,7 +1150,8 @@ h: not-found source type $d literal -throw ; ( -- : throw 'word not found' )
 \ 't:' and ';' could also be replaced by ':' and ';'.
 
 h: ?compile dup compile-only? if source type $e literal -throw exit then ;
-h: interpret ( ??? a -- ??? : The command/compiler loop )
+: (literal) state@ if [t] literal tcompile, exit then ; ( u -- u | )
+: interpret ( ??? a -- ??? : The command/compiler loop )
   find ?dup if
     state@
     if
@@ -1161,10 +1162,9 @@ h: interpret ( ??? a -- ??? : The command/compiler loop )
   then 
   \ not a word
   dup count number? if
-    nip
-    state@ if [t] literal tcompile, exit then exit
+    nip =literal @execute exit
   then
-  ( drop space print ) not-found ;
+  not-found ;
 
 : immediate last $4000 literal fallthrough; ( -- : previous word immediate )
 h: toggle over @ xor swap! ;           ( a u -- : xor value at addr with u )
@@ -1385,7 +1385,7 @@ xchange root-voc _forth-wordlist
 : also get-order over swap 1+ set-order ;     ( wid -- )
 : only [-1] set-order ;                       ( -- )
 : order get-order for aft . then next cr ;    ( -- )
-: anonymous get-order 1+ here 1 literal cells allot swap set-order ; ( -- )
+\ : anonymous get-order 1+ here 1 literal cells allot swap set-order ; ( -- )
 : definitions context @ set-current ;         ( -- )
 h: (order)                                      ( w wid*n n -- wid*n w n )
   dup if
@@ -1875,6 +1875,7 @@ h: [line] [check] c/l* [block] + ; ( u -- a )
 \ ## Final Touches
 
 there           [t] cp t!
+[t] (literal) [u] =literal t! ( set literal execution vector )
 [t] boot-sequence 2/ 0 t! ( set starting word )
 [t] normal-running [u] boot t!
 
@@ -2202,7 +2203,9 @@ it would not necessarily have to be able to meta-compile.
 * Look at the libforth test bench and reimplement it
 * Allow an arbitrary character to be used for numeric output alignment, not
 just spaces. This would allow leading zeros to be added to numbers.
-
+* As 'literal' should be changed in the metacompiler, so should string 
+handling so that it looks like normal Forth. This should not be too difficult
+to do, it will require another word vector to complete.
 * Some more words need adding in, like "postpone", "[']", "[if]", "[else]",
 "[then]", "T{", "}T", ...
 

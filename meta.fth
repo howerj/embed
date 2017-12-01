@@ -31,6 +31,9 @@
 \   - More modern Forths which optimize more but lose the simplicity
 \   of Forth
 \   - Lack of user variables, making a ROMable Forth, compression
+\   - Making the metacompiler use look like ordinary Forth, so understanding
+\   how to put together a Forth interpreter can be done by an ordinary
+\   Forth programmer (which complicates the metacompiler, but only a little).
 \ - The document should describe both how, and why, things are the
 \ way they are. The design decisions are just as important as the decision
 \ itself, more so even, as understand the why a decision was made allows
@@ -106,6 +109,8 @@ variable tlast         ( Last defined word in target )
 variable tdoVar        ( Location of doVar in target )
 variable tdoConst      ( Location of doConst in target )
 variable tdoNext       ( Location of doNext in target )
+variable tdoPrintString ( Location of .string in target )
+variable tdoStringLit  ( Location of string-literal in target )
 variable fence         ( Do not peephole optimize before this point )
 1984 constant #version ( Version number )
 5000 constant #target  ( Memory location where the target image will be built )
@@ -144,7 +149,7 @@ variable header -1 header ! ( If true Headers in the target will be generated )
   [char] " word count dup tc, 1- for count tc, next drop talign update-fence ;
 : tcells =cell * ;             ( u -- a )
 : tbody 1 tcells + ;           ( a -- a )
-: s! ! ;                       ( u a -- )
+: meta! ! ;                    ( u a -- )
 : dump-hex #target there 16 + dump ; ( -- )
 : locations ( -- : list all words and locations in target dictionary )
   target.1 @ 
@@ -355,7 +360,7 @@ a: return ( -- : Compile a return into the target )
 \ @note perhaps 't:' should set a target state variable?
 : tliteral [a] literal ;
 : h: ( -- : create a word with no name in the target dictionary )
- ' tliteral =literal !
+ ' tliteral <literal> !
  $f00d tcreate there , update-fence does> @ [a] call ;
 
 : t: ( "name", -- : creates a word in the target dictionary )
@@ -363,7 +368,7 @@ a: return ( -- : Compile a return into the target )
 
 \ @warning: Only use 'fallthrough' to fallthrough to words defined with 'h:'.
 : fallthrough;
-  ' (literal) =literal !
+  ' (literal) <literal> !
   $f00d <> if source type cr abort" unstructured! " then ;
 : t; 
   fallthrough; optimize if exit, else [a] return then ;
@@ -401,7 +406,7 @@ a: return ( -- : Compile a return into the target )
 \ defined words, and makes "name2" the vocabulary which subsequent definitions
 \ are added to.
 : xchange ( "name1", "name2", -- : exchange target vocabularies )
-  [last] [t] t! [t] t@ tlast s! ; 
+  [last] [t] t! [t] t@ tlast meta! ; 
 
 \ These words implement the basic control structures needed to make 
 \ applications in the metacompiled program, they are no immediate words
@@ -420,11 +425,12 @@ a: return ( -- : Compile a return into the target )
 : aft    drop skip begin swap ;              ( a -- a )
 : constant tcreate , does> @ literal ;       ( "name", a -- )
 : [char] char literal ;                      ( "name" )
-: tcompile, [a] call ;                       ( a -- )
-: tcall [t] tcompile, ;                      ( "name", -- )
+: postpone [t] [a] call ;                    ( "name", -- )
 : next tdoNext fetch-xt [a] call t, update-fence ; ( a -- )
 : exit exit, ;                               ( -- )
 : ' [t] literal ;                            ( "name", -- )
+: ." tdoPrintString fetch-xt [a] call $literal ; ( "string", -- )
+: $" tdoStringLit   fetch-xt [a] call $literal ; ( "string", -- )
 
 \ The following section adds the words implementable in assembly to the
 \ metacompiler, when one of these words is used in the metacompiled program
@@ -480,11 +486,11 @@ a: return ( -- : Compile a return into the target )
 \ 'for' needs the new definition of '>r' to work correctly.
 : for >r begin ;
 
-: s: : ;
+: meta: : ;
 : :noname h: ;
 : : t: ;
-s: ; t; ;
-hide s:
+meta: ; t; ;
+hide meta:
 hide t:
 hide t;
 
@@ -513,21 +519,22 @@ $4006 constant id          ( used for source id )
 $4008 constant seed        ( seed used for the PRNG )
 $400A constant handler     ( current handler for throw/catch )
 $400C constant block-dirty ( -1 if loaded block buffer is modified )
-$4010 constant _key        ( -- c : new character, blocking input )
-$4012 constant _emit       ( c -- : emit character )
-$4014 constant _expect     ( "accept" vector )
-\ $4016 constant _tap      ( "tap" vector, for terminal handling )
-\ $4018 constant _echo     ( c -- : emit character )
-$4020 constant _prompt     ( -- : display prompt )
-\ $4022 constant _literal    ( u -- u | : handles literals )
+$4010 constant <key>       ( -- c : new character, blocking input )
+$4012 constant <emit>      ( c -- : emit character )
+$4014 constant <expect>    ( "accept" vector )
+\ $4016 constant <tap>     ( "tap" vector, for terminal handling )
+\ $4018 constant <echo>    ( c -- : emit character )
+$4020 constant <ok>     ( -- : display prompt )
+\ $4022 constant _literal   ( u -- u | : handles literals )
 $4110 constant context     ( holds current context for search order )
 $4122 constant #tib        ( Current count of terminal input buffer )
 $4124 constant tib-buf     ( ... and address )
 $4126 constant tib-start   ( backup tib-buf value )
 \ $4280 == pad-area    
 
-$c    constant header-length ( location of length in header )
-$e    constant header-crc    ( location of CRC in header )
+$c    constant header-length  ( location of length in header )
+$e    constant header-crc     ( location of CRC in header )
+$14   constant header-options ( location of options bits in header )
 
 \ # Target Words
 \ With the assembler and meta compiler complete, we can now make our target
@@ -564,6 +571,7 @@ $0a1a    t, \  $A: ^Z   '\n'
 0        t, \  $E: For CRC
 $0001    t, \ $10: Endianess check
 #version t, \ $12: Version information
+$0001    t, \ $14: Header options
 
 \ After the header two short words are defined, visible only to the meta
 \ compiler and used by its internal machinery. The words are needed by
@@ -577,18 +585,36 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ Here the address of 'doVar' and 'doConst' in the target is stored in 
 \ variables accessible by the metacompiler, so 'tconstant' and 'tvariable' can
 \ compile references to them in the target.
- 
 
-[t] doVar tdoVar s!
-[t] doConst tdoConst s!
+[t] doVar tdoVar meta!
+[t] doConst tdoConst meta!
 
 \ Next some space is reserved for variables which will have no name in the
 \ target and are not on the target Forths search order. We do this with
 \ 'tlocation'. These variables are needed for the internal working of the
 \ interpreter but the application programmer using the target Forth can make
-\ do without them.
+\ do without them, so they do not have names within the target.
 \ 
-\ @todo explain the vocabularies variables, and other variables here.
+\ A short description of the variables and their uses:
+\ 
+\ 'cp' is the dictionary pointer, which usually is only incremented in order
+\ to reserve space in this dictionary. Words like "," and ":" advance this
+\ variable.
+\ 
+\ 'root-voc', 'editor-voc', 'assembler-voc', and '_forth-wordlist' are
+\ variables which point to word lists, they can be used with 'set-order'
+\ and pointers to them may be returned by 'get-order'. By default the only
+\ vocabularies loaded are the root vocabulary (which contains only a few
+\ vocabulary manipulation words) and the forth vocabulary are loaded (which
+\ contains most of the words in a standard Forth).
+\ 
+\ 'current' contains a pointer to the vocabulary which new words will be
+\ added to when the target is up and running, this will be the forth 
+\ vocabulary, or '_forth-wordlist'.
+\ 
+\ None of these variables are set to any meaningful values here and will be
+\ updated during the metacompilation process.
+\ 
 
 0 tlocation cp                ( Dictionary Pointer: Set at end of file )
 0 tlocation root-voc          ( root vocabulary )
@@ -608,10 +634,11 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ the previous definition of a word to be use within that definition, and
 \ requires a separate word ("recurse") to implement recursion. 
 \ 
-\ @todo rewrite the following section as 't:' and 't;' are now ':' and ';'
+\ However, the words ':' and ';' are not the normal Forth define and end
+\ definitions words, they are the metacompilers and they behave differently,
+\ ':' is implemented with 't:' and ';' with 't;'.
 \ 
-\ However, the words 't:' and 't;' are not the same as the words ':' and
-\ ';'. 't:' uses 'create' to make a new variable in the metacompilers 
+\ 't:' uses 'create' to make a new variable in the metacompilers 
 \ dictionary that points to a word definition in the target, it also creates
 \ the words header in the target ('h:' is the same, but without a header
 \ being made in the target). The word is compilable into the target as soon
@@ -702,7 +729,10 @@ $400     tconstant b/buf ( size of a block )
 #version tconstant ver   ( eForth version )
 0        tvariable boot  ( -- : execute program at startup )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
-0        tvariable =literal ( holds execution vector for literal )
+0        tvariable <literal> ( holds execution vector for literal )
+\ 0        tvariable <error>      ( execution vector for interpreter error )
+\ 0        tvariable <interpret>  ( execution vector for interpreter )
+\ 0        tvariable <abort>      ( execution vector for abort handler )
 
 \ The following section of words is purely a space saving measure, or
 \ they allow for other optimizations which also save space. Examples
@@ -746,13 +776,13 @@ pad-area tconstant pad   ( pad variable - offset into temporary storage )
 \ a word like "2drop-0", even if it is fairly clear what it does from its
 \ name.
 \ 
-h: [-1] -1 ;         ( -- -1 : space saving measure, push -1 )
-h: 0x8000 $8000 ;    ( -- $8000 : space saving measure, push $8000 )
-h: 2drop-0 drop fallthrough;  ( n n -- 0 )
-h: drop-0 drop fallthrough;   ( n -- 0 )
-h: 0x0000 $0000 ;    ( -- $0000 : space/optimization, push $0000 )
+h: [-1] -1 ;                 ( -- -1 : space saving measure, push -1 )
+h: 0x8000 $8000 ;            ( -- $8000 : space saving measure, push $8000 )
+h: 2drop-0 drop fallthrough; ( n n -- 0 )
+h: drop-0 drop fallthrough;  ( n -- 0 )
+h: 0x0000 $0000 ;            ( -- $0000 : space/optimization, push $0000 )
 h: state@ state @ ;          ( -- u )
-h: first-bit 1 and ; ( u -- u )
+h: first-bit 1 and ;         ( u -- u )
 h: in! >in ! ;               ( u -- )
 h: in@ >in @ ;               ( -- u )
 
@@ -765,33 +795,53 @@ h: in@ >in @ ;               ( -- u )
 \ "cell+" require a reason for such a simple word (they embody a concept or
 \ they help hide implementation details).
 
-: 2drop drop drop ;        ( n n -- )
-: 1+ 1 + ;         ( n -- n : increment a value  )
-: negate invert 1+ ;       ( n -- n : negate a number )
-: - negate + ;             ( n1 n2 -- n : subtract n1 from n2 )
+: 2drop drop drop ;         ( n n -- )
+: 1+ 1 + ;                  ( n -- n : increment a value  )
+: negate invert 1+ ;        ( n -- n : negate a number )
+: - negate + ;              ( n1 n2 -- n : subtract n1 from n2 )
 h: over- over - ;           ( u u -- u u )
 h: over+ over + ;           ( u1 u2 -- u1 u1+2 )
 : aligned dup first-bit + ; ( b -- a )
-: bye 0 (bye) ;    ( -- : leave the interpreter )
-: cell- cell - ;           ( a -- a : adjust address to previous cell )
-: cell+ cell + ;           ( a -- a : move address forward to next cell )
-: cells 1 lshift ; ( n -- n : convert cells count to address count )
-: chars 1 rshift ; ( n -- n : convert bytes to number of cells )
+: bye 0 (bye) ;             ( -- : leave the interpreter )
+: cell- cell - ;            ( a -- a : adjust address to previous cell )
+: cell+ cell + ;            ( a -- a : move address forward to next cell )
+: cells 1 lshift ;          ( n -- n : convert cells count to address count )
+: chars 1 rshift ;          ( n -- n : convert bytes to number of cells )
 : ?dup dup if dup exit then ; ( n -- 0 | n n : duplicate non zero value )
-: >  swap < ;              ( n1 n2 -- f : signed greater than, n1 > n2 )
-: u> swap u< ;             ( u1 u2 -- f : unsigned greater than, u1 > u2 )
-: u>= u< invert ;          ( u1 u2 -- f : unsigned greater/equal )
-: <> = invert ;            ( n n -- f : not equal )
-: 0<> 0= invert ;          ( n n -- f : not equal  to zero )
-: 0> 0 > ;         ( n -- f : greater than zero? )
-: 0< 0 < ;         ( n -- f : less than zero? )
-: 2dup over over ;         ( n1 n2 -- n1 n2 n1 n2 )
-: tuck swap over ;         ( n1 n2 -- n2 n1 n2 )
+: >  swap < ;               ( n1 n2 -- f : signed greater than, n1 > n2 )
+: u> swap u< ;              ( u1 u2 -- f : unsigned greater than, u1 > u2 )
+: u>= u< invert ;           ( u1 u2 -- f : unsigned greater/equal )
+: <> = invert ;             ( n n -- f : not equal )
+: 0<> 0= invert ;           ( n n -- f : not equal  to zero )
+: 0> 0 > ;                  ( n -- f : greater than zero? )
+: 0< 0 < ;                  ( n -- f : less than zero? )
+: 2dup over over ;          ( n1 n2 -- n1 n2 n1 n2 )
+: tuck swap over ;          ( n1 n2 -- n2 n1 n2 )
 : +! tuck @ +  fallthrough; ( n a -- : increment value at 'a' by 'n' )
 h: swap! swap ! ;           ( a u -- )
-: 1+!  1 swap +! ; ( a -- : increment value at address by 1 )
-: 1-! [-1] swap +! ;       ( a -- : decrement value at address by 1 )
-: execute >r ;             ( cfa -- : execute a function )
+: 1+!  1 swap +! ;          ( a -- : increment value at address by 1 )
+: 1-! [-1] swap +! ;        ( a -- : decrement value at address by 1 )
+
+\ 
+\ 'execute' requires an understanding of the return stack, much like
+\ 'doConst' and 'doVar', when given an execution token of a word, a pointer
+\ to its Code Field Address (or CFA), 'execute' will call that word. This
+\ allows us to call arbitrary function and change, or vector, execution at
+\ run time. All 'execute' needs to do is push the address onto the return
+\ stack and when 'execute' exits it will jump to the desired word, the callers
+\ address is still on the return stack, so when the called word exit it will
+\ jump back to 'executes' caller.
+\ 
+
+: execute >r ;              ( cfa -- : execute a function )
+
+\ 
+\ As the virtual machine is only addressable by cells, and not by characters,
+\ the words 'c@' and 'c!' cannot be defined as simple assembly primitives, 
+\ they must be defined in terms of '@' and '!'. It is not difficult to do,
+\ but does mean these two primitives are slower than might be first thought.
+\ 
+
 : c@ dup-@ swap first-bit   ( b -- c )
    if
       8 rshift exit
@@ -800,19 +850,21 @@ h: swap! swap ! ;           ( a u -- )
 : c!  ( c b -- )               
   swap $ff and dup 8 lshift or swap
   swap over dup @ swap first-bit 0= $ff xor
-  >r over xor r> and xor swap ! ;      ( c b -- )
-h: string@ over c@ ;                   ( b u -- b u c )
+  >r over xor r> and xor swap ! ;     ( c b -- )
+
+
+h: string@ over c@ ;                  ( b u -- b u c )
 : 2! ( d a -- ) tuck ! cell+ ! ;      ( n n a -- )
 : 2@ ( a -- d ) dup cell+ @ swap @ ;  ( a -- n n )
-: command? state@ 0= ;                ( -- f )
+h: command? state@ 0= ;               ( -- f )
 : get-current current @ ;             ( -- wid )
 : set-current current ! ;             ( wid -- )
 : here cp @ ;                         ( -- a )
-: align here fallthrough;              ( -- )
-h: cp! aligned cp ! ;                  ( n -- )
+: align here fallthrough;             ( -- )
+h: cp! aligned cp ! ;                 ( n -- )
 : source #tib 2@ ;                    ( -- a u )
 : source-id id @ ;                    ( -- 0 | -1 )
-h: @execute @ ?dup if >r then ;        ( cfa -- )
+h: @execute @ ?dup if >r then ;       ( cfa -- )
 : bl =bl ;                            ( -- c )
 : within over- >r - r> u< ;           ( u lo hi -- f )
 \ t: dnegate invert >r invert 1 um+ r> + ; ( d -- d )
@@ -824,33 +876,66 @@ h: @execute @ ?dup if >r then ;        ( cfa -- )
 \ break these words. They should not be used before an 'exit' or a ';'.
 h: 2>r rxchg swap >r >r ;              ( u1 u2 --, R: -- u1 u2 )
 h: 2r> r> r> swap rxchg nop ;          ( -- u1 u2, R: u1 u2 -- )
+
+\ 'doNext' needs to be defined before we can use 'for...next' loops, the
+\ metacompiler compiles a reference to this word when 'next' is encountered.
+\ 
+\ It is worth explaining how this word works, it is a complex word that
+\ requires an understanding of how the return stack words, as well as how
+\ both 'for' and 'next work.
+\ 
+\ The 'for...next' loop accepts a value, 'u' and runs for 'u+1' times.
+\ 'for' puts the loop counter onto the return stack, meaning the
+\ loop counter value is available to us as the first stack element, but
+\ also meaning if we want to exit from within a 'for...next' loop we must
+\ pop off the value from the return stack first.
+\ 
+\ The 'next' word compiles a 'doNext' into the dictionary, and then the
+\ address to jump back to, just after the 'for' has compiled a '>r' into the
+\ dictionary.
+\ 
+\ 'doNext' has two possible actions, it either takes the branch back to
+\ the place after 'for' if the loop counter non zero, being careful to 
+\ decrement the loop counter and restoring it the correct place, or
+\ it jumps over the place where the back jump address is stored in the
+\ case when the loop counter is zero, removing the loop counter from the
+\ return stack. 
+\ 
+\ This is all possible, because when 'doNext' is called (and it must be 
+\ called, not jumped to), the return address points to the cell after 
+\ 'doNext' is compiled into. By manipulating the return stack correctly it
+\ can change the program flow to either jump over the next cell, or jump
+\ to the address contained in the next cell. Understanding the simpler
+\ 'doConst' and 'doVar' helps in understanding this word.
+\ 
+
 h: doNext 2r> ?dup if 1- >r @ >r exit then cell+ >r ;
-[t] doNext tdoNext s!
-: min 2dup < fallthrough;              ( n n -- n )
-h: mux if drop exit then nip ;         ( n1 n2 b -- n : multiplex operation )
+[t] doNext tdoNext meta!
+: min 2dup < fallthrough;             ( n n -- n )
+h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 : max 2dup > mux ;                    ( n n -- n )
 
 h: >char $7f and dup $7f =bl within
   if drop [char] _ then ;              ( c -- c )
 h: tib #tib cell+ @ ;                  ( -- a )
-\ h: echo _echo @execute ;             ( c -- )
-: key _key @execute dup [-1] ( <-- EOF = -1 ) = if bye then ; ( -- c )
-: allot cp +! ;                       ( n -- )
-: /string over min rot over+ -rot - ; ( b u1 u2 -- b u : advance string u2 )
-h: +string 1 /string ;         ( b u -- b u : )
-h: @address @ fallthrough;              ( a -- a )
-h: address $3fff and ;         ( a -- a : mask off address bits )
+\ h: echo <echo> @execute ;            ( c -- )
+: key <key> @execute dup [-1] ( <-- EOF = -1 ) = if bye then ; ( -- c )
+: allot cp +! ;                        ( n -- )
+: /string over min rot over+ -rot - ;  ( b u1 u2 -- b u : advance string u2 )
+h: +string 1 /string ;                 ( b u -- b u : )
+h: @address @ fallthrough;             ( a -- a )
+h: address $3fff and ;                 ( a -- a : mask off address bits )
 h: last get-current @address ;         ( -- pwd )
-: emit _emit @execute ;               ( c -- : write out a char )
-: cr =cr emit =lf emit ;              ( -- : emit a newline )
-: space =bl emit ;                    ( -- : emit a space )
+: emit <emit> @execute ;               ( c -- : write out a char )
+: cr =cr emit =lf emit ;               ( -- : emit a newline )
+: space =bl emit ;                     ( -- : emit a space )
 
 h: depth sp@ sp0 - chars ;             ( -- u : get current depth )
 h: vrelative cells sp@ swap - ;        ( u -- u )
-: pick  vrelative @ ;                 ( vn...v0 u -- vn...v0 vu )
+: pick  vrelative @ ;                  ( vn...v0 u -- vn...v0 vu )
 
-: type 0 fallthrough;          ( b u -- )
-h: typist                               ( b u f -- : print a string )
+: type 0 fallthrough;                  ( b u -- )
+h: typist                              ( b u f -- : print a string )
   >r begin dup while
     swap count r@
     if
@@ -865,10 +950,10 @@ h: $type [-1] typist ;                   ( b u --  )
 h: decimal? [char] 0 [char] : within ;   ( c -- f : decimal char? )
 h: lowercase? [char] a [char] { within ; ( c -- f )
 h: uppercase? [char] A [char] [ within ; ( c -- f )
-h: >lower                                 ( c -- c : convert to lower case )
+h: >lower                                ( c -- c : convert to lower case )
   dup uppercase? if =bl xor exit then ;
 : spaces =bl fallthrough;                ( +n -- )
-h: nchars                                 ( +n c -- : emit c n times )
+h: nchars                                ( +n c -- : emit c n times )
   swap 0 max for aft dup emit then next drop ;
 : cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop ; ( b b u -- )
 : fill swap for swap aft 2dup c! 1+ then next 2drop ; ( b u c -- )
@@ -889,7 +974,7 @@ h: ndrop for aft drop then next ; ( 0u....nu n -- : drop n cells )
   ?dup if
     handler @ rp!
     r> handler !
-    rxchg ( <-- r> swap >r )
+    rxchg ( 'rxchg' is equivalent to 'r> swap >r' )
     sp! drop r>
   then ;
 
@@ -983,11 +1068,11 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
     2dup-xor
   while
     key dup =lf xor if tap else drop nip dup then
-    ( key  dup =bl - 95 u< if tap else _tap @execute then )
+    ( key  dup =bl - 95 u< if tap else <tap> @execute then )
   repeat drop over- ;
 
-: expect _expect @execute span ! drop ; ( b u -- )
-: query tib tib-length _expect @execute #tib ! drop-0 in! ; ( -- )
+: expect <expect> @execute span ! drop ; ( b u -- )
+: query tib tib-length <expect> @execute #tib ! drop-0 in! ; ( -- )
 
 : =string ( a1 u2 a1 u2 -- f : string equality )
   >r swap r> ( a1 a2 u1 u2 )
@@ -1152,13 +1237,10 @@ h: $compile dup inline? if cfa @ , exit then cfa compile, ; ( pwd -- )
 h: not-found source type $d -throw ; ( -- : throw 'word not found' )
 
 \ @todo more words should have vectored execution
-\ such as: interpret, literal, abort, page, at-xy, ?error. We can then
-\ use the new vectored literal so inbetween 'h:' or 't:' and ';' numbers
-\ are instead written into the target, to make things easier. (Perhaps
-\ 't:' and ';' could also be replaced by ':' and ';'.
+\ such as: interpret, literal, abort, page, at-xy, ?error. 
 
 h: ?compile dup compile-only? if source type $e -throw exit then ;
-: (literal) state@ if [t] literal tcompile, exit then ; ( u -- u | )
+: (literal) state@ if postpone literal exit then ; ( u -- u | )
 : interpret ( ??? a -- ??? : The command/compiler loop )
   find ?dup if
     state@
@@ -1170,31 +1252,95 @@ h: ?compile dup compile-only? if source type $e -throw exit then ;
   then 
   \ not a word
   dup count number? if
-    nip =literal @execute exit
+    nip <literal> @execute exit
   then
   not-found ;
 
+\ NB. 'compile' only works for words, instructions, and numbers below $8000
+: compile  r> dup-@ , cell+ >r ; ( -- : Compile next compiled word )
 : immediate last $4000 fallthrough; ( -- : previous word immediate )
-h: toggle over @ xor swap! ;           ( a u -- : xor value at addr with u )
-h: do$ r> r@ r> count + aligned >r swap >r ; ( -- a )
-h: $"| do$ nop ; ( -- a : do string NB. nop to fool optimizer )
-h: ."| do$ print ; ( -- : print string  )
+h: toggle over @ xor swap! ;        ( a u -- : xor value at addr with u )
 
-h: .ok command? if ."| $literal  ok  " cr exit then ; ( -- )
-h: ok _prompt @execute ;                              ( -- : execute prompt )
+\ ## Strings 
+\ The string word set is quite small, there are words already defined for
+\ manipulating strings such 'c@', and 'count', but they are not exclusively
+\ used for strings. These woulds will allow string literals to be embedded
+\ within word definitions.
+\ 
+\ Forth uses counted strings, at least traditionally, which contain the string
+\ length as the first byte of the string. This limits the string length to
+\ 255 characters, which is enough for our small Forth but is quite limiting.
+\ 
+\ More modern Forths either use NUL terminated strings, or larger counts
+\ for their counted strings. Both methods have trade-offs. 
+
+\ NUL terminated strings allow for arbitrary lengths, and are often used by 
+\ programs written in C, or built upon the C runtime, along with their 
+\ libraries. NUL terminated strings cannot hold binary data however, and have 
+\ an overhead for string length related operations.
+\ 
+\ Using a larger count prefix obviously allows for larger strings, but it
+\ is not standard and new words would have to be written, or new conventions
+\ followed, when dealing with these strings. For example the 'count' word can 
+\ be used on the entire string if the string size is a single byte in size.
+\ Another complication is how big should the length prefix be? 16, 32, or
+\ 64-bit? This might depend on the intended use, the preferences of the
+\ programmer, or what is most natural on the platform.
+\ 
+\ Another complication in modern string handling is UTF-8,
+\ <https://en.wikipedia.org/wiki/UTF-8> and other character encoding schemes,
+\ which is something to be aware of, but not a subject we will go in to.
+\ 
+\ The issues described only talk about problems with Forths representation
+\ of strings, nothing has even been said about the difficulty of using them
+\ for string heavy applications!
+\ 
+\ Only a few string specific words will be defined, for compiling string
+\ literals into a word definition, and for returning an address to a compiled
+\ string. There are two things the string words will have to do; parse a
+\ string from the input stream and compile the string and an action into
+\ the dictionary. The action will be more complicated than it might seem as
+\ the string literal will be compiled into a word definition, like code is, so
+\ the action will have also manipulate the return stack so the string literal
+\ is jumped over.
+\ 
+
+h: do$ r> r@ r> count + aligned >r swap >r ; ( -- a )
+h: string-literal do$ nop ; ( -- a : do string NB. nop to fool optimizer )
+h: .string do$ print ; ( -- : print string  )
+
+\ To allow the metacompilers version of '."' and '$"' to work we will need
+\ to populate two variables in the metacompiler with the correct actions.
+[t] .string        tdoPrintString meta!
+[t] string-literal tdoStringLit   meta!
+
+h: parse-string [char] " word count + cp! ;              ( -- )
+( <string>, --, Run: -- b )
+: $"  compile string-literal parse-string ; immediate compile-only 
+: ."  compile .string parse-string ; immediate compile-only ( <string>, -- )
+: abort [-1] (bye) ;                           ( -- )
+h: {abort} do$ print cr abort ;                 ( -- )
+: abort" compile {abort} parse-string ; immediate compile-only \ "
+
+\ ## Evaluator
+
+h: .ok command? if ."  ok  " cr exit then ; ( -- )
+h: ok <ok> @execute ;                              ( -- : execute prompt )
 h: ?depth sp@ sp0 u< if 4 -throw exit then ;  ( u -- : depth check )
 h: eval begin token dup c@ while interpret ?depth repeat drop ok ; ( -- )
 : quit preset [ begin query ' eval catch ?error again ; ( -- )
-: ok! _prompt ! ; ( xt -- : set ok prompt execution token )
+: ok! <ok> ! ; ( xt -- : set ok prompt execution token )
 
-h: get-input source in@ id @ _prompt @ ; ( -- n1...n5 )
-h: set-input ok! id ! in! #tib 2! ;      ( n1...n5 -- )
+h: get-input source in@ id @ <ok> @ ; ( -- n1...n5 )
+h: set-input ok! id ! in! #tib 2! ;   ( n1...n5 -- )
 : evaluate ( a u -- )
   get-input 2>r 2>r >r
   0 [-1] 0 set-input
   ' eval catch
   r> 2r> 2r> set-input
   throw ;
+
+\ ## Miscellaneous Words
 
 h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
   over $8 rshift xor    ( crc x )
@@ -1237,9 +1383,9 @@ h: colon $3a emit ; ( -- )
 \ by the virtual machine.
 
 h: io! preset fallthrough;  ( -- : initialize I/O )
-h: console ' rx? _key ! ' tx! _emit ! fallthrough;
-h: hand ' .ok  ( ' "drop" <-- was emit )  ( ' ktap ) fallthrough;
-h: xio  ' accept _expect ! ( _tap ! ) ( _echo ! ) ok! ;
+h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
+h: hand ' .ok  ( ' drop <-- was emit )  ( ' ktap ) fallthrough;
+h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) ok! ;
 \ h: pace 11 emit ;
 \ t: file ' pace ' drop ' ktap xio ;
 
@@ -1252,16 +1398,14 @@ h: ?unique ( a -- a : print a message if a word definition is not unique )
   if
     ( source type )
     space
-    2drop last-def @ nfa print  ."| $literal  redefined " cr exit
+    2drop last-def @ nfa print  ."  redefined " cr exit
   then ;
 h: ?nul ( b -- : check for zero length strings )
    count 0= if $a -throw exit then 1- ;
 h: find-cfa token find if cfa exit then not-found ; ( -- xt, <string> )
-: ' find-cfa state@ if tcall literal exit then ; immediate
+: ' find-cfa state@ if postpone literal exit then ; immediate
 : [compile] find-cfa compile, ; immediate compile-only  ( --, <string> )
-\ NB. 'compile' only works for words, instructions, and numbers below $8000
-: compile  r> dup-@ , cell+ >r ; ( -- : Compile next compiled word )
-: [char] char tcall literal ; immediate compile-only ( --, <string> : )
+: [char] char postpone literal ; immediate compile-only ( --, <string> : )
 \ h: ?quit command? if $38 -throw exit then ;
 : ; ( ?quit ) ?check =exit , [ fallthrough; immediate compile-only
 h: get-current! ?dup if get-current ! exit then ; ( -- wid )
@@ -1277,12 +1421,12 @@ h: here-0 here 0x0000 ;
 : then fallthrough; immediate compile-only
 h: doThen  here chars over @ or swap! ;
 : else here-0 jump, swap doThen ; immediate compile-only
-: while tcall if ; immediate compile-only
-: repeat swap tcall again tcall then ; immediate compile-only
+: while postpone if ; immediate compile-only
+: repeat swap postpone again postpone then ; immediate compile-only
 h: last-cfa last-def @ cfa ;  ( -- u )
 : recurse last-cfa compile, ; immediate compile-only
 : tail last-cfa jump, ; immediate compile-only
-: create tcall : drop compile doVar get-current ! [ ;
+: create postpone : drop compile doVar get-current ! [ ;
 : >body cell+ ;
 h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 : does> compile doDoes nop ; immediate compile-only
@@ -1291,64 +1435,17 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 : :noname here 0 $cafe ]  ;
 : for =>r , here ; immediate compile-only
 : next compile doNext , ; immediate compile-only
-: aft drop here-0 jump, tcall begin swap ; immediate compile-only
+: aft drop here-0 jump, postpone begin swap ; immediate compile-only
 : doer create =exit last-cfa ! =exit ,  ;
 : make ( "name1", "name2", -- : make name1 do name2 )
   find-cfa find-cfa make-callable
   state@
   if
-    tcall literal tcall literal compile ! nop exit
+    postpone literal postpone literal compile ! nop exit
   then
   swap! ; immediate
 : hide ( "name", -- : hide a given word from the search order )
   token find 0= if not-found exit then nfa $80 toggle ;
-
-\ ## Strings 
-\ The string word set is quite small, there are words already defined for
-\ manipulating strings such 'c@', and 'count', but they are not exclusively
-\ used for strings. These woulds will allow string literals to be embedded
-\ within word definitions.
-\ 
-\ Forth uses counted strings, at least traditionally, which contain the string
-\ length as the first byte of the string. This limits the string length to
-\ 255 characters, which is enough for our small Forth but is quite limiting.
-\ 
-\ More modern Forths either use NUL terminated strings, or larger counts
-\ for their counted strings. Both methods have trade-offs. 
-
-\ NUL terminated strings allow for arbitrary lengths, and are often used by 
-\ programs written in C, or built upon the C runtime, along with their 
-\ libraries. NUL terminated strings cannot hold binary data however, and have 
-\ an overhead for string length related operations.
-\ 
-\ Using a larger count prefix obviously allows for larger strings, but it
-\ is not standard and new words would have to be written, or new conventions
-\ followed, when dealing with these strings. For example the 'count' word can 
-\ be used on the entire string if the string size is a single byte in size.
-\ Another complication is how big should the length prefix be? 16, 32, or
-\ 64-bit? This might depend on the intended use, the preferences of the
-\ programmer, or what is most natural on the platform.
-\ 
-\ Another complication in modern string handling is UTF-8,
-\ <https://en.wikipedia.org/wiki/UTF-8> and other character encoding schemes,
-\ which is something to be aware of, but not a subject we will go in to.
-\ 
-\ The issues described only talk about problems with Forths representation
-\ of strings, nothing has even been said about the difficulty of using them
-\ for string heavy applications!
-\ 
-\ Only a few string specific words will be defined, for compiling string
-\ literals into a word definition, and for returning an address to a compiled
-\ string.
-
-\ @todo Change order of program, this should be near '$"|' and '."|'
-
-h: $,' [char] " word count + cp! ;              ( -- )
-: $"  compile $"| $,' ; immediate compile-only ( <string>, --, Run: -- b )
-: ."  compile ."| $,' ; immediate compile-only ( <string>, -- )
-: abort [-1] (bye) ;                           ( -- )
-h: {abort} do$ print cr abort ;                 ( -- )
-: abort" compile {abort} $,' ; immediate compile-only \ "
 
 \ ## Vocabulary Words 
 \ The vocabulary word set should already be well understood, if the
@@ -1395,7 +1492,7 @@ xchange root-voc _forth-wordlist
 : order get-order for aft . then next cr ;    ( -- )
 \ : anonymous get-order 1+ here 1 cells allot swap set-order ; ( -- )
 : definitions context @ set-current ;         ( -- )
-h: (order)                                      ( w wid*n n -- wid*n w n )
+h: (order)                                    ( w wid*n n -- wid*n w n )
   dup if
     1- swap >r (order) over r@ xor
     if
@@ -1406,12 +1503,12 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 : +order dup>r -order get-order r> swap 1+ set-order ;     ( wid -- )
 
 : editor decimal editor-voc +order ; ( -- )
-: assembler root-voc assembler-voc 2 set-order ;   ( -- )
-: ;code assembler ; immediate                              ( -- )
-: code tcall : assembler ;                                       ( -- )
+: assembler root-voc assembler-voc 2 set-order ; ( -- )
+: ;code assembler ; immediate                    ( -- )
+: code postpone : assembler ;                       ( -- )
 
 xchange _forth-wordlist assembler-voc
-: end-code forth tcall ; ; immediate ( -- )
+: end-code forth postpone ; ; immediate ( -- )
 xchange assembler-voc _forth-wordlist
 
 \ ## Block Word Set
@@ -1507,15 +1604,15 @@ h: +block blk-@ + ;               ( -- )
 \ 	 3|: sum-of-squares square swap square + ; ( u u -- u )            |
 \ 	 4|: even 1 and 0= ; ( u -- b )                                    |
 \ 	 5|: odd even 0= ;   ( u -- b )                                    |
-\ 	 6|                                                                |
-\ 	 7|                                                                |
-\ 	 8|                                                                |
-\ 	 9|                                                                |
-\ 	10|                                                                |
-\ 	11|                                                                |
-\ 	12|                                                                |
-\ 	13|                                                                |
-\ 	14|                                                                |
+\ 	 6|: log >r 0 swap ( u base -- u )                                 |
+\ 	 7|  begin swap 1+ swap r@ / dup 0= until                          |
+\ 	 8|  drop 1- rdrop ;                                               |
+\ 	 9|: signum ( n -- -1 | 0 | 1 )                                    |
+\ 	10|    dup 0> if drop 1 exit then                                  |
+\ 	11|        0< if     -1 exit then                                  |
+\ 	12|        0 ;                                                     |
+\ 	13|: >< dup 8 rshift swap 8 lshift or ; ( u -- u : swap bytes )    |
+\ 	14|: #digits dup 0= if 1+ exit then base @ log 1+ ;                |
 \ 	15|                                                                |
 \ 	   ----------------------------------------------------------------
 \ 
@@ -1530,18 +1627,18 @@ h: +block blk-@ + ;               ( -- )
 \ range. 
 
 \ The common theme is that convention is key to successfully using blocks.
-\
-\ @todo Rewrite this section
-\ Blocks could also be used to store error messages, a word called 'message'
-\ is available on some old Forths which when given an error code (say -8)
-\ loads the block containing error messages and prints off that line. The 
-\ errors messages would be located in a block range that 'message' would know 
-\ about, for example blocks 4-8. This means RAM or program storage is not 
-\ used for storing error messages - a useful feature in memory starved systems. 
-\ It does not matter that access to the disk would be relatively slow, the 
-\ error messages are only displayed in exceptional circumstances. This is an
-\ example of the block storage being used as crude database.
 \ 
+\ An example of using blocks to store data is how some old Forths used to
+\ store their error messages. Instead of storing strings of error messages
+\ in memory (either in RAM or ROM) they were stored in block storage, with
+\ one error message per line. The error messages were stored in order, and
+\ a word 'message' is used to convert an error code like '-4' to its error
+\ string (the numbers and what they mean are standardized, there is a table
+\ in the appendix), which was then printed out. The full list of the
+\ standardized error messages can be stored in four blocks, and form a neat
+\ and easy to use database.
+\ 
+
 h: c/l* ( c/l * ) 6 lshift ; ( u -- u )
 h: c/l/ ( c/l / ) 6 rshift ; ( u -- u )
 h: line swap block swap c/l* + c/l ; ( k u -- a u )
@@ -1601,21 +1698,59 @@ h: retrieve block drop ;             ( k -- )
 \ 
 \ It should be noted that the self-check routine, 'bist', disables checking
 \ in generated images by manipulating the word header once the check has
-\ succeeded. 
+\ succeeded. This is because after the system boots up the image is going
+\ to change in RAM soon after 'cold' has finished, this could be organized
+\ better so only sections of memory that do not (or should not change) get
+\ checked, one way this could be achieved is by locating all variables
+\ in specific sections, and checking only code. This has the advantage that
+\ the system image could be stored in Read Only Memory (ROM), which would
+\ facilitate porting the system to low memory systems, such as a 
+\ microcontroller as they only have a few kilobytes of RAM to work with. The
+\ virtual machine primitives for load and store could be changed so that
+\ reads get mapped to RAM or ROM based on their address, and writes to RAM
+\ also (with attempted writes to ROM throwing an exception).
+\ 
+\ A few other interesting things could be done during the execution of 'cold',
+\ the image could be compressed by the metacompiler and the boot sequence
+\ could decompress it (which would require the decompressor to be one of the
+\ first things to run). Experimenting with various schemes it appears
+\ Adaptive Huffman Coding 
+\ (see <https://en.wikipedia.org/wiki/Adaptive_Huffman_coding>) produces
+\ the best results, followed by LZSS (see
+\ <https://oku.edu.mie-u.ac.jp/~okumura/compression/lzss.c>). The schemes
+\ are also simple and small enough (both in size and memory requirements)
+\ that they could be implemented in Forth.
+\ 
+\ Another possibility is to obfuscate the image by exclusive or'ing it with
+\ a value to frustrate the reserve engineering of binaries, or even to
+\ encrypt it and ask for the decryption key on startup.
+\ 
+\ Obfuscation and compression are more difficult to implement than a simple
+\ CRC check and require a more careful organization and control of the
+\ boot sequence than is provided. It is possible to make 'turn-key' 
+\ applications that start execution at an arbitrary point (call 'turn-key'
+\ because all the user has to do is 'turn the key' and the program is ready
+\ to go) by setting the boot variable the desired word and saving the
+\ image with "save".
+\ 
 
-\ @todo Talk about 'encryption' or obfuscation, and decompressing the image
-\ on the fly.
-\ @todo Disable CRC check with a bit in the image header, instead of by
-\ zeroing the CRC.
+h: check-header? header-options @ first-bit 0= ; ( -- f )
+h: disable-check header-options $1 toggle ; ( -- )
 
 \ 'bist' checks the length field in the header matches 'here' and that the
 \ CRC in the header matches the CRC it calculates in the image, it has to
 \ zero the CRC field out first.
+
 h: bist ( -- u : built in self test )
-  header-crc @ 0= if 0x0000 exit then ( exit if CRC was zero )
+  check-header? if 0x0000 exit then 
   header-length @ here xor if 2 exit then ( length check )
   header-crc @ 0 header-crc !   ( retrieve and zero CRC )
-  0 here crc xor if 3 exit then 0x0000 ;
+  0 here crc xor if 3 exit then disable-check 0x0000 ;
+
+\ 'cold' performs the self check, and exits if it fails. It then
+\ goes on to zero memory, set the initial value of 'blk', set the I/O
+\ vectors to sensible values, set the vocabularies to the default search
+\ order and reset the variable stack.
 
 : cold ( -- : cold boot )
    bist ?dup if negate (bye) exit then
@@ -1623,7 +1758,9 @@ h: bist ( -- u : built in self test )
    $12 retrieve io! 
    forth sp0 sp! ;
 
-h: hi hex cr ."| $literal eFORTH V " ver 0 u.r cr here . .free cr [ ;
+\ 'hi' prints out the welcome message, 
+
+h: hi hex cr ." eFORTH V " ver 0 u.r cr here . .free cr [ ;
 h: normal-running hi quit ;               ( -- : boot word )
 h: boot-sequence cold boot @execute bye ; ( -- : perform the boot sequence )
 
@@ -1665,16 +1802,16 @@ h: name ( cwf -- a | 0 )
      swap r@ search-for-cfa ?dup if >r 1- ndrop r> rdrop exit then 
    1- repeat rdrop ;
 
-h: .name name ?dup 0= if $"| $literal ??? " then print ;
+h: .name name ?dup 0= if $" ???" then print ;
 h: ?instruction ( i m e -- i 0 | e -1 )
    >r over and r> tuck = if nip [-1] exit then drop-0 ;
 
 h: .instruction
-   0x8000  0x8000 ?instruction if ."| $literal LIT " exit then
-   $6000   $6000  ?instruction if ."| $literal ALU " exit then
-   $6000   $4000  ?instruction if ."| $literal CAL " exit then
-   $6000   $2000  ?instruction if ."| $literal BRZ " exit then
-   drop-0 ."| $literal BRN " ;
+   0x8000  0x8000 ?instruction if ." LIT " exit then
+   $6000   $6000  ?instruction if ." ALU " exit then
+   $6000   $4000  ?instruction if ." CAL " exit then
+   $6000   $2000  ?instruction if ." BRZ " exit then
+   drop-0 ." BRN " ;
 
 : decompile ( u -- : decompile instruction )
    dup .instruction $4000 =
@@ -1683,7 +1820,7 @@ h: .instruction
 h: decompiler ( previous current -- : decompile starting at address )
   >r
    begin dup r@ u< while
-     dup 5u.r colon
+     dup 5u.r colon space
      dup-@
      dup 5u.r space decompile cr cell+
    repeat rdrop drop ;
@@ -1705,9 +1842,9 @@ h: decompiler ( previous current -- : decompile starting at address )
   cr colon space dup .id space dup
   cr
   cfa r> decompiler space $3b emit
-  dup compile-only? if ."| $literal  compile-only  " then 
-  dup inline?       if ."| $literal  inline  "       then
-      immediate?    if ."| $literal  immediate  "    then cr ;
+  dup compile-only? if ."  compile-only  " then 
+  dup inline?       if ."  inline  "       then
+      immediate?    if ."  immediate  "    then cr ;
 
 \ A few useful utility words will be added next, which are not strictly 
 \ necessary but are useful. Those are '.s' for examining the contents of the 
@@ -1737,10 +1874,9 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ the current output base would have to be saved and then restored.
 \ 
 
-: .s cr depth for aft r@ pick . then next ."| $literal  <sp " ; ( -- )
+: .s cr depth for aft r@ pick . then next ."  <sp " ; ( -- )
 h: dm+ chars for aft dup-@ space 5u.r cell+ then next ; ( a u -- a )
 \ h: dc+ chars for aft dup-@ space decompile cell+ then next ; ( a u -- a )
-\ @todo Use '\\' to comment out code
 
 : dump ( a u -- )
   $10 + \ align up by dump-width
@@ -1854,7 +1990,7 @@ h: dm+ chars for aft dup-@ space 5u.r cell+ then next ; ( a u -- a )
 \ See: <http://retroforth.org/pages/?PortsOfRetroEditor> for the origin of
 \ this block editor, and for different implementations.
 
-0 tlast s!
+0 tlast meta!
 h: [block] blk-@ block ;       ( k -- a : loaded block address )
 h: [check] dup b/buf c/l/ u>= if $18 -throw exit then ;
 h: [line] [check] c/l* [block] + ; ( u -- a )
@@ -1868,7 +2004,7 @@ h: [line] [check] c/l* [block] + ; ( u -- a )
 : q editor-voc -order ; ( -- : quit editor )
 : e q blk-@ load editor ;     ( -- : evaluate block )
 : ia c/l* + [block] + source drop in@ + ( u u -- )
-   swap source nip in@ - cmove [t] \ tcompile, ;
+   swap source nip in@ - cmove postpone \ ;
 : i 0 swap ia ;           ( u -- )
 \ : u update ;                ( -- : set block set as dirty )
 \ : w words ;
@@ -1878,12 +2014,12 @@ h: [line] [check] c/l* [block] + ; ( u -- a )
 \ : ct swap y c ;
 \ : ea [line] c/l evaluate ;
 \ : sw 2dup y [line] swap [line] swap c/l cmove c ;
-[last] [t] editor-voc t! 0 tlast s!
+[last] [t] editor-voc t! 0 tlast meta!
 
 \ ## Final Touches
 
 there           [t] cp t!
-[t] (literal) [u] =literal t! ( set literal execution vector )
+[t] (literal) [u] <literal> t! ( set literal execution vector )
 [t] boot-sequence 2/ 0 t! ( set starting word )
 [t] normal-running [u] boot t!
 
@@ -2208,16 +2344,16 @@ a special case for the metacompiler, 'FORGET' would be easier to implement,
 and the headers for all words could be saved (so 'see' would work better).
 * An image could be prepared with the smallest possible Forth interpreter,
 it would not necessarily have to be able to meta-compile.
+* A more traditional block storage method would be more useful, instead of
+saving sections of the virtual machine image a 'block transfer' instruction
+could be made, which would index into a file and retrieve/create blocks, which
+would allow much more memory to be used as mass storage (65536*1024 Bytes).
 * Look at the libforth test bench and reimplement it
 * Allow an arbitrary character to be used for numeric output alignment, not
 just spaces. This would allow leading zeros to be added to numbers.
-* As 'literal' should be changed in the metacompiler, so should string 
-handling so that it looks like normal Forth. This should not be too difficult
-to do, it will require another word vector to complete, again the same should
-be done with tick, or "'".
 * Some more words need adding in, like "postpone", "[']", "[if]", "[else]",
-"[then]", "T{", "}T", ...
-
+"[then]", "T{", "}T", ... Of note is that "postpone" would have to deal
+with inlineable words.
 : [[ ;     \ Stop postponing
 : ]]
   begin
@@ -2226,6 +2362,15 @@ be done with tick, or "'".
     >in ! postpone postpone
   repeat
   drop ; immediate 
+* For the words with vectored exection, it might be a good idea to create
+default actions if the vector is null, currently the default action is to
+do nothing. For example:
+
+   : emit <emit> ?dup if @execute exit then drop ;
+   : key  <key>  ?dup if @execute exit then -1 ( -1 = end of file ) ;
+   ( An alternative version of 'key' would be: )
+   : key  <key>  ?dup if @execute exit then rx? ;
+
 
 ## Virtual Machine Implementation in C
 
@@ -2242,12 +2387,13 @@ be done with tick, or "'".
 #include <string.h>
 
 #define CORE (65536u)  /* core size in bytes */
-#define SP0  (8704u)   /* Variable Stack Start: 8192 (end of program area) + 512 (block size) */
+#define SP0  (8704u)   /* Variable Stack Start: 8192 + 512 */
 #define RP0  (32767u)  /* Return Stack Start: end of CORE in words */
 
 #ifdef TRON
 #define TRACE(PC,I,SP,RP) \
-	fprintf(stderr, "%04x %04x %04x %04x\n", (unsigned)(PC), (unsigned)(I), (unsigned)(SP), (unsigned)(RP));
+  fprintf(stderr, "%04x %04x %04x %04x\n", (unsigned)(PC), (unsigned)(I),\
+                                           (unsigned)(SP), (unsigned)(RP));
 #else
 #define TRACE(PC, I, SP, RP)
 #endif
@@ -2257,170 +2403,174 @@ typedef int16_t  sw_t;
 typedef uint32_t ud_t;
 
 typedef struct {
-	uw_t pc, t, rp, sp, core[CORE/sizeof(uw_t)];
+  uw_t pc, t, rp, sp, core[CORE/sizeof(uw_t)];
 } forth_t;
 
 static FILE *fopen_or_die(const char *file, const char *mode)
 {
-	FILE *f = NULL;
-	errno = 0;
-	assert(file && mode);
-	if(!(f = fopen(file, mode))) {
-		fprintf(stderr, "failed to open file '%s' (mode %s): %s\n", file, mode, strerror(errno));
-		exit(EXIT_FAILURE);
-	}
-	return f;
+  FILE *f = NULL;
+  errno = 0;
+  assert(file && mode);
+  if(!(f = fopen(file, mode))) {
+    fprintf(stderr, "failed to open file '%s' (mode %s): %s\n", 
+                                            file, mode, strerror(errno));
+    exit(EXIT_FAILURE);
+  }
+  return f;
 }
 
 static int binary_memory_load(FILE *input, uw_t *p, const size_t length)
 {
-	assert(input && p && length <= 0x8000);
-	for(size_t i = 0; i < length; i++) {
-		const int r1 = fgetc(input);
-		const int r2 = fgetc(input);
-		if(r1 < 0 || r2 < 0)
-			return -1;
-		p[i] = (((unsigned)r1 & 0xffu))|(((unsigned)r2 & 0xffu) << 8u);
-	}
-	return 0;
+  assert(input && p && length <= 0x8000);
+  for(size_t i = 0; i < length; i++) {
+    const int r1 = fgetc(input);
+    const int r2 = fgetc(input);
+    if(r1 < 0 || r2 < 0)
+      return -1;
+    p[i] = (((unsigned)r1 & 0xffu))|(((unsigned)r2 & 0xffu) << 8u);
+  }
+  return 0;
 }
 
-static int binary_memory_save(FILE *output, uw_t *p, const size_t start, const size_t length)
+static int binary_memory_save(FILE *output, uw_t *p, const size_t start, 
+      const size_t length)
 {
-	assert(output && p /* && ((start + length) < 0x8000 || (start > length))*/);
-	for(size_t i = start; i < length; i++) {
-		errno = 0;
-		const int r1 = fputc((p[i])       & 0xff, output);
-		const int r2 = fputc((p[i] >> 8u) & 0xff, output);
-		if(r1 < 0 || r2 < 0) {
-			fprintf(stderr, "write failed: %s\n", strerror(errno));
-			return -1;
-		}
-	}
-	return 0;
+  assert(output && p /* && ((start + length) < 0x8000 || (start > length))*/);
+  for(size_t i = start; i < length; i++) {
+    errno = 0;
+    const int r1 = fputc((p[i])       & 0xff, output);
+    const int r2 = fputc((p[i] >> 8u) & 0xff, output);
+    if(r1 < 0 || r2 < 0) {
+      fprintf(stderr, "write failed: %s\n", strerror(errno));
+      return -1;
+    }
+  }
+  return 0;
 }
 
 int load(forth_t *h, const char *name)
 {
-	assert(h && name);
-	FILE *input = fopen_or_die(name, "rb");
-	const int r = binary_memory_load(input, h->core, CORE/sizeof(uw_t));
-	fclose(input);
-	h->pc = 0; h->t = 0; h->rp = RP0; h->sp = SP0;
-	return r;
+  assert(h && name);
+  FILE *input = fopen_or_die(name, "rb");
+  const int r = binary_memory_load(input, h->core, CORE/sizeof(uw_t));
+  fclose(input);
+  h->pc = 0; h->t = 0; h->rp = RP0; h->sp = SP0;
+  return r;
 }
 
 int save(forth_t *h, const char *name, size_t start, size_t length)
 {
-	assert(h);
-	if(!name)
-		return -1;
-	FILE *output = fopen_or_die(name, "wb");
-	const int r = binary_memory_save(output, h->core, start, length);
-	fclose(output);
-	return r;
+  assert(h);
+  if(!name)
+    return -1;
+  FILE *output = fopen_or_die(name, "wb");
+  const int r = binary_memory_save(output, h->core, start, length);
+  fclose(output);
+  return r;
 }
 
 int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
-	static const uw_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
-	assert(h && in && out);
-	uw_t pc = h->pc, t = h->t, rp = h->rp, sp = h->sp, *m = h->core;
-	ud_t d;
-	for(;;) {
-		const uw_t instruction = m[pc];
-		TRACE(pc, instruction, sp, rp);
-		assert(!(sp & 0x8000) && !(rp & 0x8000));
+  static const uw_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
+  assert(h && in && out);
+  uw_t pc = h->pc, t = h->t, rp = h->rp, sp = h->sp, *m = h->core;
+  ud_t d;
+  for(;;) {
+    const uw_t instruction = m[pc];
+    TRACE(pc, instruction, sp, rp);
+    assert(!(sp & 0x8000) && !(rp & 0x8000));
 
-		if(0x8000 & instruction) { /* literal */
-			m[++sp] = t;
-			t       = instruction & 0x7FFF;
-			pc++;
-		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
-			uw_t n = m[sp], T = t;
+    if(0x8000 & instruction) { /* literal */
+      m[++sp] = t;
+      t       = instruction & 0x7FFF;
+      pc++;
+    } else if ((0xE000 & instruction) == 0x6000) { /* ALU */
+      uw_t n = m[sp], T = t;
 
-			pc = instruction & 0x10 ? m[rp] >> 1 : pc + 1;
+      pc = instruction & 0x10 ? m[rp] >> 1 : pc + 1;
 
-			switch((instruction >> 8u) & 0x1f) {
-			case  0: /*T = t;*/                break;
-			case  1: T = n;                    break;
-			case  2: T = m[rp];                break;
-			case  3: T = m[t>>1];              break;
-			case  4: m[t>>1] = n; T = m[--sp]; break;
-			case  5: d = (ud_t)t + (ud_t)n; T = d >> 16; m[sp] = d; n = d; break;
-			case  6: d = (ud_t)t * (ud_t)n; T = d >> 16; m[sp] = d; n = d; break;
-			case  7: T &= n;                   break;
-			case  8: T |= n;                   break;
-			case  9: T ^= n;                   break;
-			case 10: T = ~t;                   break;
-			case 11: T--;                      break;
-			case 12: T = -(t == 0);            break;
-			case 13: T = -(t == n);            break;
-			case 14: T = -(n < t);             break;
-			case 15: T = -((sw_t)n < (sw_t)t); break;
-			case 16: T = n >> t;               break;
-			case 17: T = n << t;               break;
-			case 18: T = sp << 1;              break;
-			case 19: T = rp << 1;              break;
-			case 20: sp = t >> 1;              break;
-			case 21: rp = t >> 1; T = n;       break;
-			case 22: T = save(h, block, n>>1, ((ud_t)T+1)>>1); break;
-			case 23: T = fputc(t, out);        break;
-			case 24: T = fgetc(in);            break;
-			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
-			case 26: if(t) { T=(sw_t)n/(sw_t)t; t=(sw_t)n%(sw_t)t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
-			case 27: goto finished;
-			}
-			sp += delta[ instruction       & 0x3];
-			rp -= delta[(instruction >> 2) & 0x3];
-			if(instruction & 0x20)
-				T = n;
-			if(instruction & 0x40)
-				m[rp] = t;
-			if(instruction & 0x80)
-				m[sp] = t;
-			t = T;
-		} else if (0x4000 & instruction) { /* call */
-			m[--rp] = (pc + 1) << 1;
-			pc = instruction & 0x1FFF;
-		} else if (0x2000 & instruction) { /* 0branch */
-			pc = !t ? instruction & 0x1FFF : pc + 1;
-			t = m[sp--];
-		} else { /* branch */
-			pc = instruction & 0x1FFF;
-		}
-	}
+      switch((instruction >> 8u) & 0x1f) {
+      case  0: /*T = t;*/                break;
+      case  1: T = n;                    break;
+      case  2: T = m[rp];                break;
+      case  3: T = m[t>>1];              break;
+      case  4: m[t>>1] = n; T = m[--sp]; break;
+      case  5: d = (ud_t)t + (ud_t)n; T = d >> 16; m[sp] = d; n = d; break;
+      case  6: d = (ud_t)t * (ud_t)n; T = d >> 16; m[sp] = d; n = d; break;
+      case  7: T &= n;                   break;
+      case  8: T |= n;                   break;
+      case  9: T ^= n;                   break;
+      case 10: T = ~t;                   break;
+      case 11: T--;                      break;
+      case 12: T = -(t == 0);            break;
+      case 13: T = -(t == n);            break;
+      case 14: T = -(n < t);             break;
+      case 15: T = -((sw_t)n < (sw_t)t); break;
+      case 16: T = n >> t;               break;
+      case 17: T = n << t;               break;
+      case 18: T = sp << 1;              break;
+      case 19: T = rp << 1;              break;
+      case 20: sp = t >> 1;              break;
+      case 21: rp = t >> 1; T = n;       break;
+      case 22: T = save(h, block, n>>1, ((ud_t)T+1)>>1); break;
+      case 23: T = fputc(t, out);        break;
+      case 24: T = fgetc(in);            break;
+      case 25: if(t) { T=n/t; t=n%t; n=t; } 
+               else { pc=1; T=10; n=T; t=n; } break;
+      case 26: if(t) { T=(sw_t)n/(sw_t)t; t=(sw_t)n%(sw_t)t; n=t; } 
+               else { pc=1; T=10; n=T; t=n; } break;
+      case 27: goto finished;
+      }
+      sp += delta[ instruction       & 0x3];
+      rp -= delta[(instruction >> 2) & 0x3];
+      if(instruction & 0x20)
+        T = n;
+      if(instruction & 0x40)
+        m[rp] = t;
+      if(instruction & 0x80)
+        m[sp] = t;
+      t = T;
+    } else if (0x4000 & instruction) { /* call */
+      m[--rp] = (pc + 1) << 1;
+      pc = instruction & 0x1FFF;
+    } else if (0x2000 & instruction) { /* 0branch */
+      pc = !t ? instruction & 0x1FFF : pc + 1;
+      t = m[sp--];
+    } else { /* branch */
+      pc = instruction & 0x1FFF;
+    }
+  }
 finished:
-	h->pc = pc; h->sp = sp; h->rp = rp; h->t = t;
-	return (int16_t)t;
+  h->pc = pc; h->sp = sp; h->rp = rp; h->t = t;
+  return (int16_t)t;
 }
 
 int main(int argc, char **argv)
 {
-	static forth_t h;
-	int interactive = 0;
-	if(argc < 4)
-		goto fail;
-	if(!strcmp(argv[1], "i"))
-		interactive = 1;
-	else if(strcmp(argv[1], "f"))
-		goto fail;
-	load(&h, argv[2]);
-	for(int i = 4; i < argc; i++) {
-		FILE *in = fopen_or_die(argv[i], "rb");
-		const int r = forth(&h, in, stdout, argv[3]);
-		fclose(in);
-		if(r != 0) {
-			fprintf(stderr, "run failed: %d\n", r);
-			return r;
-		}
-	}
-	if(interactive)
-		return forth(&h, stdin, stdout, argv[3]);
-	return 0;
+  static forth_t h;
+  int interactive = 0;
+  if(argc < 4)
+    goto fail;
+  if(!strcmp(argv[1], "i"))
+    interactive = 1;
+  else if(strcmp(argv[1], "f"))
+    goto fail;
+  load(&h, argv[2]);
+  for(int i = 4; i < argc; i++) {
+    FILE *in = fopen_or_die(argv[i], "rb");
+    const int r = forth(&h, in, stdout, argv[3]);
+    fclose(in);
+    if(r != 0) {
+      fprintf(stderr, "run failed: %d\n", r);
+      return r;
+    }
+  }
+  if(interactive)
+    return forth(&h, stdin, stdout, argv[3]);
+  return 0;
 fail:
-	fprintf(stderr, "usage: %s f|i input.blk output.blk file.fth\n", argv[0]);
-	return -1;
+  fprintf(stderr, "usage: %s f|i input.blk output.blk file.fth\n", argv[0]);
+  return -1;
 }
 
 

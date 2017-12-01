@@ -1891,6 +1891,80 @@ h: dm+ chars for aft dup-@ space 5u.r cell+ then next ; ( a u -- a )
     then
   next drop ;
 
+\ alloc.fth
+\  Dynamic Memory Allocation package
+\  this code is an adaptation of the routines by
+\  Dreas Nielson, 1990; Dynamic Memory Allocation;
+\  Forth Dimensions, V. XII, No. 3, pp. 17-27
+
+\ pointer to beginning of free space
+\  0 tlocation freelist  0 t, 
+\  
+\  \ : cell_size ( addr -- n ) >body cell+ @ ;       \ gets array cell size
+\  
+\  \ initialize memory pool at aligned address 'start_addr'
+\  : initialize ( start_addr length -- )
+\    over dup freelist !
+\    0 swap !
+\    swap cell+ ! ;
+\  
+\  : allocate ( u -- addr ior ) \ allocate n bytes, return pointer to block
+\                               \ and result flag ( 0 for success )
+\                               \ check to see if pool has been initialized 
+\    freelist @ 0= if ." pool not initialized! " abort then
+\    cell+ freelist dup
+\    begin
+\    while dup @ cell+ @ 2 pick u<
+\      if 
+\        @ @ dup   \ get new link
+\      else   
+\        dup @ cell+ @ 2 pick - 2 cells max dup 2 cells =
+\        if 
+\          drop dup @ dup @ rot !
+\        else  
+\          over over swap @ cell+ !   swap @ +
+\        then
+\        over over ! cell+ 0  \ store size, bump pointer
+\      then                   \ and set exit flag
+\    repeat
+\    swap drop
+\    dup 0= ;
+\  
+\  : free ( ptr -- ior ) \ free space at ptr, return status ( 0 for success )
+\    1 cells - dup @ swap over over cell+ ! freelist dup
+\    begin
+\      dup 3 pick u< and
+\    while
+\      @ dup @
+\    repeat
+\  
+\    dup @ dup 3 pick ! ?dup
+\    if 
+\      dup 3 pick 5 pick + =
+\      if 
+\        dup cell+ @ 4 pick + 3 pick cell+ ! @ 2 pick !
+\      else  
+\        drop 
+\      then
+\    then
+\  
+\    dup cell+ @ over + 2 pick =
+\    if  
+\      over cell+ @ over cell+ dup @ rot + swap ! swap @ swap !
+\    else 
+\      !
+\    then
+\    drop-0 ; \ this code always returns a success flag
+\  
+\  
+\  \ create pool  1000 allot
+\  \ pool 1000 dynamic-mem
+\  \ 5000 1000 initialize
+\  \ 5000 100 dump
+\  \ 40 allocate throw
+\  \ 80 allocate throw .s swap free throw .s 20 allocate throw .s cr
+  
+
 \ The standard Forth dictionary is now complete, but the variables containing
 \ the word list need to be updated a final time. The next section implements
 \ the block editor, which is in the 'editor' word set. Their are two variables

@@ -538,8 +538,6 @@ target.1 +order         ( Add target word dictionary to search order )
 meta -order meta +order ( Reorder so 'meta' has a higher priority )
 forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 
-
-
 \ # The Target Forth
 \ With the assembler and meta compiler complete, we can now make our target
 \ application, a Forth interpreter which will be able to read in this file
@@ -1390,38 +1388,52 @@ h: 5u.r 5 u.r ;                  ( u -- )
 \        : ? @ . ; ( a -- : display the contents in a memory cell )
 \ 
 
+\ Words that use the numeric output words can be defined, '.free' can now
+\ be defined which prints out the amount of space left in memory for programs
+\ 
+
+h: unused $4000 here - ;         ( -- u : unused program space )
+h: .free unused u. ;             ( -- : print unused program space )
+
 \ ### String Handling and Input
+\ 'pack$' and '=string' are more advanced string handling words for copying
+\ strings to a new location, turning it into a counted string, which 'pack$'
+\ does, or for comparing two string, which '=string' does. 
+\ 
+\ 'expect', 'query' and 'accept' are used for fetching a line of input which
+\ can be further processed. Input in Forth is fundamentally line based, a
+\ line is fetch from the terminal, which is then parsed into tokens delimited
+\ by whitespace called words, which are then processed by the Forth
+\ interpreter. On hosted systems the input typed into a terminal is usually
+\ line buffered, you type in a line and hit return, then the line is passed
+\ to the program reading from the terminal. This is not the case on all
+\ systems, often it is the case that the Forth will be on a different target
+\ and the programmer is talking to it via a serial port, the programmer sends
+\ a character - not an entire line - and the Forth interpreter echos back a
+\ character, or not. This means that the Forth interpreter has to mimic the
+\ line handling normally provided by the terminal emulator. As this is a hosted
+\ Forth it does not have to do this, however the capability to handle input
+\ in this way is left commented out so the system is easier to port across
+\ to such platforms. Either way, a line of text needs to be fetched from an
+\ input stream.
+\ 
+\ First to describe 'pack$' and '=string'.
+\ 
+\ 'pack$' takes a string, its length, and a place which is assumed to be
+\ large enough to store the string in as a final argument. Creates a counted
+\ string and places it in the target location, this word is especially useful
+\ for the creation of word headers which will be needed later.
+\ 
+\ '=string' checks for string equality, as it has the length of both strings
+\ it checks their lengths first before proceeding to check all of the string,
+\ this saves a little time. Only a yes/no to the comparison is returned as
+\ a boolean answer, unlike 'strcmp' in C
+\ (See: <http://www.cplusplus.com/reference/cstring/strcmp/>)
 
 : pack$ ( b u a -- a ) \ null fill
   aligned dup>r over
   dup cell negate and ( align down )
   - over+ 0 swap! 2dup c! 1+ swap cmove r> ;
-
-\ : ^h ( bot eot cur c -- bot eot cur )
-\   >r over r@ < dup
-\   if
-\     =bs dup echo =bl echo echo
-\   then r> + ;
-\ 
-\ : ktap ( bot eot cur c -- bot eot cur )
-\   dup =lf ( <-- was =cr ) xor
-\   if =bs xor
-\     if =bl tap else ^h then
-\     exit
-\   then drop nip dup ;
-
-h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
-: accept ( b u -- b u )
-  over+ over
-  begin
-    2dup-xor
-  while
-    key dup =lf xor if tap else drop nip dup then
-    ( key  dup =bl - 95 u< if tap else <tap> @execute then )
-  repeat drop over- ;
-
-: expect <expect> @execute span ! drop ; ( b u -- )
-: query tib tib-length <expect> @execute #tib ! drop-0 in! ; ( -- )
 
 : =string ( a1 u2 a1 u2 -- f : string equality )
   >r swap r> ( a1 a2 u1 u2 )
@@ -1433,15 +1445,266 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
     then
   next 2drop [-1] ;
 
-: nfa address cell+ ; ( pwd -- nfa : move to name field address)
-: cfa nfa dup c@ + cell+ $fffe and ; ( pwd -- cfa )
-h: .id nfa print ;                            ( pwd -- : print out a word )
-h: immediate? @ $4000 and fallthrough; ( pwd -- f : immediate word? )
-h: logical 0= 0= ;                            ( n -- f )
-h: compile-only? @ 0x8000 and logical ;       ( pwd -- f : is compile only? )
-h: inline? inline-start inline-end within ;   ( pwd -- f : is word inline? )
+\ '^h' and 'ktap' are commented out as they are not needed, they deal with
+\ line based input, some sections of 'tap' and 'accept' are commented out
+\ as well as they are not needed on a hosted system, thus the job of 'accept'
+\ is simplified. It is still worth talking about what these words do however,
+\ in case they need to be added back in.
+\ 
+\ 'accept' is the word that does all of the work and calls '^h' and 'ktap' when
+\ needed, 'query' and 'expect' a wrappers around it. Image we are talking to
+\ the Forth interpreter over a serial line, if the programmer sends a character
+\ to the Forth interpreter it is up to the Forth interpreter how to respond, 
+\ the remote interpreter needs to echo back characters to the programmer
+\ otherwise they will be greeted with a blank terminal. Likewise the remote
+\ Forth interpreter needs to process not only new lines, indicating a new
+\ line of input should be accepted for processing, but it also needs to deal
+\ with backspace characters, which are used to delete characters in the current
+\ input line. It also needs to make sure it does not overflow the input buffer,
+\ or when deleting characters go beyond the beginning of the input buffer.
+\ 
+\ 'accept' takes an address of an input buffer and a length of it, the words
+\ '^h', 'tap' and 'ktap' are free to move around inside that buffer and do
+\ so based on the latest character received.
+\ 
+\ '^h' takes a pointer to the bottom of the input buffer, one to the end of
+\ the input buffer and the current position. It decrements the current position
+\ within the buffer and uses 'echo' - not 'emit' - to output a backspace to
+\ move the terminal cursor back one place, a space to erase the character and
+\ a backspace to move the cursor back one space again. It only does this if it
+\ will not go below the bottom of the input buffer.
+\ 
+\       : ^h ( bot eot cur -- bot eot cur )
+\         >r over r@ < dup
+\         if
+\           =bs dup echo =bl echo echo
+\         then r> + ;
+\ 
+\ 'ktap' processes the current character received, and has the same buffer
+\ information that '^h' does, in fact it passes that information to '^h' to
+\ process if the character is a backspace. It also handles the case where a
+\ line feed, indicating a new line, has been entered. It returns a modified
+\ buffer.
+\       
+\       : ktap ( bot eot cur c -- bot eot cur )
+\         dup =lf ( <-- was =cr ) xor
+\         if =bs xor
+\           if =bl tap else ^h then
+\           exit
+\         then drop nip dup ;
+\ 
+\ 'tap' is used to store a character in the current line, 'ktap' can also
+\ call this word, 'tap' uses echo to echo back the character - it is currently
+\ commented out as this is handled by the terminal emulator but would be
+\ needed for serial communication.
 
-h: searcher ( a a -- pwd pwd 1 | pwd pwd -1 | 0 : find a word in a vocabulary )
+h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
+
+\ 'accept' takes an buffer input buffer and returns a pointer and line length
+\ once a line of text has been fully entered. A line is considered fully
+\ entered when either a new line is received or the maximum number of input
+\ characters in a line is received, 'accept' checks for both of these
+\ conditions. It calls 'tap to do the work. In an alternate version it calls
+\ the execution vector '<tap>', which is usually set to 'ktap', which is shown
+\ as a commented out line.
+\ 
+
+: accept ( b u -- b u )
+  over+ over
+  begin
+    2dup-xor
+  while
+    key dup =lf xor if tap else drop nip dup then
+    \ The alternative 'accept' code replaces the line above:
+    \  
+    \   key  dup =bl - 95 u< if tap else <tap> @execute then
+    \ 
+  repeat drop over- ;
+
+\ '<expect>' is set to 'accept' later on in this file, but can be changed if
+\ needed. 'expect' and 'query' both call 'accept' this way. 'query' uses the
+\ systems input buffer and stores the result in a know location so that the
+\ rest of the interpreter can use the results. 'expect' gets a buffer from the
+\ use and stores the length of the resulting string in 'span'.
+
+: expect <expect> @execute span ! drop ; ( b u -- )
+: query tib tib-length <expect> @execute #tib ! drop-0 in! ; ( -- )
+
+\ 'query' stores its results in the Terminal Input Buffer (TIB), which is way
+\ the word 'tib' gets its name. The TIB is a simple data structure which 
+\ contains a pointer to the buffer itself and the length of the most current
+\ input line.
+
+\ Now we have a line based input system, and from the previous chapters we
+\ also have numeric output, the Forth interpreter is starting to take shape.
+
+
+\ ## Dictionary Words
+\ These words either navigate around the word header, or search through the
+\ dictionary to find a word, both word sets are related. This section now
+\ requires an understanding on how this Forth lays out its word headers, each
+\ Forth tends to do this in a slightly different way and more modern Forths
+\ use more advanced (and more complex, perhaps un-forth-like) techniques.
+\ 
+\ The dictionary is organized into word lists, and these words lists are simply
+\ linked lists of all the words in that list. To find a definition by name
+\ we search through all of the word lists in the current search order following 
+\ the linked lists until they terminate.
+\ 
+\ This Forth, like Jones Forth (another literate Forth designed to teach how
+\ a Forth interpreter works, see
+\ <https://rwmj.wordpress.com/2010/08/07/jonesforth-git-repository/>), lays
+\ out its dictionary in a way that is simpler than having a separate storage
+\ area for word names, but complicates other parts of the system. Most other
+\ Forths have a separate space for string storage where names of words and
+\ pointers to their code field are kept. This is how things were done in the
+\ original eForth model.
+\ 
+\ A word list looks like this..
+\ 
+\         ^
+\         |        
+\      .-----.-----.-----.----.----    
+\      | PWD | NFA | CFA | ...         <--- Word definition
+\      .-----.-----.-----.----.---- 
+\         ^        ^                ^
+\         |        |--Word Body...  |
+\         |
+\      .-----.-----.-----.----.---- 
+\      | PWD | NFA | CFA | ...
+\      .-----.-----.-----.----.---- 
+\      ^                 ^
+\      |---Word Header---|
+\      
+\ 
+\ 
+\ We 'PWD' is the Previous Word pointer, 'NFA' is the Name Field Address, and
+\ the 'CFA' is the first code word in the Forth word. In other Forths this
+\ is a special field, but as this is a Subroutine Threaded forth
+\ (see https://en.wikipedia.org/wiki/Threaded_code), designed to execute
+\ on a Forth machine, this field does not need to do anything. It is simply
+\ the first bit of code that gets executed in a Forth definition, and things
+\ point to the 'CFA'. The rest of the word definition follows and includes the
+\ 'CFA'. The 'NFA' is a variable length field containing the name of the
+\ Forth word, it is stored as a counted string, which is what 'pack$' was
+\ defined for.
+\ 
+\ The 'PWD' field is not just a simple pointer, as already mentioned, it is
+\ also used to store information about the word, the top two most bits store
+\ whether a word is compile only (the top most bit) meaning the word should
+\ only be used within a word definition, being compiled into it, and whether
+\ or not the word is an immediate word or not (the second highest bit in the
+\ 'PWD' field). Another property of a word is whether it is an inline word
+\ or not, which is a property of the location of where the word is defined,
+\ and applies to words like 'r@' and 'r>', this is done by checking to see
+\ if the word is between two sentinel values.
+\ 
+\ Immediate and compiling words are a very important concept in Forth, and it
+\ is possible for the programmer to define their own immediate words. The
+\ Forth Read-Evaluate loop is quite simple, as this diagram shows:
+\ 
+\        .--------------------------.        .----------------------------.
+\     .->| Get Next Word From Input |<-------| Error: Throw an Exception! |
+\     |  .--------------------------.        .----------------------------.
+\     |    |                                           ^
+\     |   \|/                                          | (No)
+\     |    .                                           |
+\     ^  .-----------------.  (Not Found)            .--------------------.
+\     |  | Search For Word |------------------------>| Is token a number? |
+\     |  .-----------------.                         .--------------------.
+\     |    |                                           |
+\     ^   \|/ (Found)                                 \|/ (Yes)
+\     |    .                                           .
+\     |  .-------------------------.            .-------------------------.          
+\     |  | Are we in command mode? |            | Are we in command mode? | 
+\     ^  .-------------------------.            .-------------------------.
+\     |    |                   |                  |                     |
+\     |   \|/ (Yes)            | (No)            \|/ (Yes)              | (No)
+\     |    .                   |                  .                     |
+\     |  .--------------.      |             .------------------------. |
+\     .--| Execute Word |      |             | Push Number onto Stack | |
+\     |  .--------------.      |             .------------------------. |
+\     |         ^             \|/                 |                     |
+\     ^         |              .                  |                    \|/
+\     |         | (Yes)   .--------------------.  |                     .
+\     |         ----------| Is word immediate? |  | .------------------------.
+\     |                   .--------------------.  | | Compile number literal |
+\     ^                        |                  | | into next available    |
+\     |                       \|/ (No)            | | location in the        |
+\     |                        .                  | | dictionary             |
+\     |  .--------------------------------.       | .------------------------.
+\     |  |    Compile Pointer to word     |       |                     |
+\     .--| in next available location in  |       |                     |
+\     |  |         the dictionary         |      \|/                   \|/
+\     |  .--------------------------------.       .                     .
+\     |                                           |                     |
+\     .----<-------<-------<-------<-------<------.------<-------<------.
+\ 
+\ No matter how complex the Forth system may appear, this loop forms the heart
+\ of it: parse a word and execute it or compile it, with numbers handled as
+\ a special case. Immediate words are always executed, whereas compiling words
+\ may be executed depending on whether we are in command mode, or in compile
+\ mode, which is stored in the 'state' variable. There are several words that
+\ affect the interpreter state, such as ':', ';', '[', and ']'. 
+\ 
+\ We should now talk about some examples of immediate and compiling words,
+\ ':' is a compiling word that when executed reads in a single token and
+\ creates a new word header with this token. It does not add the new word
+\ to the definition just yet. It also does one other things, it switches the
+\ interpreter to compile mode, words that are not immediate are instead
+\ compiled into the dictionary, as are numbers. This allows us to define
+\ new words. However, we need immediate words so that we can break out of
+\ compile mode, and enter back into command word so we can actually execute
+\ something. ';' is an example of an immediate word, it is executed instead
+\ of compiled into the dictionary, it switches the interpreter back into 
+\ command mode, as well as finishing off the word definition by compiling
+\ an exit instructions into the dictionary, and adding the word into the
+\ current definitions word list.
+\ 
+\ The control structure words, like 'if', 'for', and 'begin', are just words
+\ as well, they are immediate words and will be explained later.
+\ 
+
+\ 'nfa' and 'cfa' both take a pointer to the 'PWD' field and adjust it to
+\ point to different sections of the word.
+
+: nfa address cell+ ; ( pwd -- nfa : move to name field address)
+: cfa nfa dup c@ + cell+ $fffe and ;        ( pwd -- cfa )
+
+\ '.id' prints out a words name field.
+
+h: .id nfa print ;                          ( pwd -- : print out a word )
+
+\ 'immediate?', 'compile-only?' and 'inline?' are the tests words that
+\ all take a pointer to the 'PWD' field.
+
+h: immediate? @ $4000 and fallthrough;      ( pwd -- f : immediate word? )
+h: logical 0= 0= ;                          ( n -- f )
+h: compile-only? @ 0x8000 and logical ;     ( pwd -- f : is compile only? )
+h: inline? inline-start inline-end within ; ( pwd -- f : is word inline? )
+
+\ Now we know the structure of the dictionary we can define some words that
+\ work with it. We will define 'find' and 'search-wordlist', which will
+\ be derived from 'finder' and 'searcher'. 'searcher' will attempt to
+\ find a word in a specific word list, and 'find' will attempt to find a
+\ word in all the word lists in the current order.
+\ 
+\ 'searcher' and 'finder' both return as much information about the words
+\ they find as possible, if they find them. 'searcher' returns
+\ the 'PWD' of the word that points to the found word, the 'PWD' of the
+\ found word and a number indicating whether the found word is immediate
+\ (1) or a compiling word (-1). It returns zero, the original counted string,
+\ and another zero if the word could not be found in its first argument, a word
+\ list (wid). The word is provided as a counted string in the second argument
+\ to 'searcher'.
+\ 
+\ 'finder' wraps up 'searcher' and applies it to all the words in the
+\ search order. It returns the same values as 'searcher' if a word is found,
+\ returns the original counted word string address if it was not found, as
+\ well as zeros.
+\ 
+
+h: searcher ( a wid -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word in a WID )
   swap >r dup
   begin
     dup
@@ -1468,15 +1731,34 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
     cell+
   repeat drop-0 r> 0x0000 ;
 
+\ 'search-wordlist' and 'find' are simple applications of 'searcher' and
+\ 'finder', there is a difference between this Forths version of 'find' and
+\ the standard one, this version of 'find' does not return an execution token
+\ but a pointer in the word header which can be turned into an execution token
+\ with 'cfa'.
+
 : search-wordlist searcher rot drop ; ( a wid -- pwd 1 | pwd -1 | a 0 )
 : find ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
   finder rot drop ;
 
-h: decimal? [char] 0 [char] : within ;   ( c -- f : decimal char? )
+\ ## Numeric Input
+\ Numeric input is handled next, converting a string into a number, which is
+\ similar to numeric output. First we define a series of words for checking
+\ whether a character belongs to a certain character class, whether it is
+\ a decimal number, or whether it is lowercase, and a word for converting
+\ uppercase letters to lower case, as numbers above base ten use the alphabet
+\ to represent numbers and can be input in either case. 
+\ 
+
+h: decimal?   [char] 0 [char] : within ; ( c -- f : decimal char? )
 h: lowercase? [char] a [char] { within ; ( c -- f )
 h: uppercase? [char] A [char] [ within ; ( c -- f )
 h: >lower                                ( c -- c : convert to lower case )
   dup uppercase? if =bl xor exit then ;
+
+\ 'numeric?' determines whether a character is possibly a number character
+\ in any base, from base 2 to base 36, and converts it to a numeric value
+\ if it is, or returns -1 if it is a non-numeric character.
 
 h: numeric? ( char -- n|-1 : convert character in 0-9 a-z range to number )
   >lower
@@ -1484,7 +1766,19 @@ h: numeric? ( char -- n|-1 : convert character in 0-9 a-z range to number )
   dup decimal?   if [char] 0 - exit then 
   drop [-1] ;
 
+\ 'digit?' restricts the output of 'numeric?' to numbers within the current
+\ numeric radix, so if the current base is 16, characters '0-9', 'a-f' and
+\ 'A-F' all return the boolean value as true for when passed to 'digit?', but
+\ characters outside this range return false.
+\ 
+
 h: digit? >lower numeric? base @ u< ; ( c -- f : is char a digit given base )
+
+\ 'do-number' does the work of the numeric conversion, getting a character
+\ from an input array, converting the character to a number, multiplying it
+\ by the current input base and adding in to the number being converted. It
+\ stops on the first non-numeric character.
+
 h: do-number ( n b u -- n b u : convert string )
   begin
     ( get next character )
@@ -1500,15 +1794,29 @@ h: do-number ( n b u -- n b u : convert string )
     +string dup 0= ( advance string and test for end )
   until ;
 
+\ 'negative?' and 'base?' should be thought of as working in conjunction
+\ with '>number' only. Numbers can have certain prefixes which change the
+\ interpretation of the number, for example a prefix of '-' means the number
+\ is negative, a '$' prefix means the number is hexadecimal regardless of the
+\ current input base, and a '#' prefix (which is a less common prefix) means
+\ the number is decimal. 'negative?' handles the negative case, and could 
+\ potentially be used as standalone word, however using 'base?' comes with
+\ caveats, it changes the current base if one of the base changing prefixes
+\ is encountered, '>number' is careful to restore the base back to what it
+\ was when it uses 'base?'.
+\ 
+
 h: negative? ( b u -- f : is >number negative? )
-  string@ $2D = if +string [-1] exit then 0x0000 ; 
+  string@ [char] - = if +string [-1] exit then 0x0000 ; 
 
 h: base? ( b u -- )
-  string@ $24 = ( $hex )
+  string@ [char] $ = ( $hex )
   if
     +string hex exit
   then ( #decimal )
   string@ [char] # = if +string decimal exit then ;
+
+\ '>number' converts a string in its entirety. 
 
 h: >number ( n b u -- n b u : convert string )
   radix >r
@@ -1519,6 +1827,8 @@ h: >number ( n b u -- n b u : convert string )
   r> base ! ;
 
 : number? 0 -rot >number nip 0= ; ( b u -- n f : is number? )
+
+\ ## Parsing
 
 h: -trailing ( b u -- b u : remove trailing spaces )
   for
@@ -1556,8 +1866,6 @@ h: ?length dup word-length u> if $13 -throw exit then ;
 : word 1depth parse ?length here pack$ ; ( c -- a ; <string> )
 : token =bl word ;                       ( -- a )
 : char token count drop c@ ;             ( -- c; <string> )
-h: unused $4000 here - ;          ( -- u : unused program space )
-h: .free unused u. ;                      ( -- : print unused program space )
 
 h: preset ( tib ) tib-start #tib cell+ ! 0 in! 0 id ! ;
 : ] [-1]       state ! ;
@@ -1593,6 +1901,12 @@ h: not-found source type $d -throw ; ( -- : throw 'word not found' )
 
 \ @todo more words should have vectored execution
 \ such as: interpret, literal, abort, page, at-xy, ?error. 
+\ h: not-implemented 15 -throw ;
+\ [t] not-implemented tvariable =page
+\ [t] not-implemented tvariable =at-xy
+\ t: page =page @execute ;   ( -- : page screen )
+\ t: at-xy =at-xy @execute ; ( x y -- : set cursor position )
+
 
 h: ?compile dup compile-only? if source type $e -throw exit then ;
 : (literal) state@ if postpone literal exit then ; ( u -- u | )
@@ -1715,12 +2029,6 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
 
 : random ( -- u : pseudo random number )
   seed @ 0= seed swap toggle seed @ 0 ccitt dup seed ! ; 
-
-\ h: not-implemented 15 -throw ;
-\ [t] not-implemented tvariable =page
-\ [t] not-implemented tvariable =at-xy
-\ t: page =page @execute ;   ( -- : page screen )
-\ t: at-xy =at-xy @execute ; ( x y -- : set cursor position )
 
 
 \ t: d. base @ >r decimal  . r> base ! ;

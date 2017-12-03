@@ -69,7 +69,7 @@ static int binary_memory_save(FILE *output, uw_t *p, const size_t start, const s
 	return 0;
 }
 
-int load(forth_t *h, const char *name)
+static int load(forth_t *h, const char *name)
 {
 	assert(h && name);
 	FILE *input = fopen_or_die(name, "rb");
@@ -79,7 +79,7 @@ int load(forth_t *h, const char *name)
 	return r;
 }
 
-int save(forth_t *h, const char *name, size_t start, size_t length)
+static int save(forth_t *h, const char *name, size_t start, size_t length)
 {
 	assert(h);
 	if(!name)
@@ -90,7 +90,7 @@ int save(forth_t *h, const char *name, size_t start, size_t length)
 	return r;
 }
 
-int forth(forth_t *h, FILE *in, FILE *out, const char *block)
+static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
 	static const uw_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
 	assert(h && in && out);

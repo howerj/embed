@@ -11,6 +11,7 @@ lzss
 *.lzss
 *.o
 *.rle
+tron
 *.txt
 vgcore.*
 *.xz

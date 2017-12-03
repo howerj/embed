@@ -6,7 +6,6 @@ EFORTH=eforth.blk
 META=meta1.blk
 XX=meta2.blk
 
-
 .PHONY: all clean run cross cross-run double-cross default static
 
 default: all
@@ -43,11 +42,12 @@ double-cross: cross
 	${DF}${FORTH} f ${META} ${XX} meta.fth
 	cmp ${META} ${XX}
 
-tron: CFLAGS+=-DTRON
-tron: ${FORTH}
+tron: CFLAGS += -DTRON
+tron: forth.c
+	${CC} ${CFLAGS} $< -o $@
 
-static: CC=musl-gcc
-static: CFLAGS+=-static
+static: CC = musl-gcc
+static: CFLAGS += -static
 static: ${FORTH}
 	strip ${FORTH}
 

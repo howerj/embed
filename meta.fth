@@ -511,7 +511,7 @@ $4400 constant sp0         ( start of variable stack )
 $7fff constant rp0         ( start of return stack )
 
 ( Volatile variables )
-$4000 constant _test       ( used in skip/test )
+$4000 constant <test>      ( used in skip/test )
 $4002 constant last-def    ( last, possibly unlinked, word definition )
 $4006 constant id          ( used for source id )
 $4008 constant seed        ( seed used for the PRNG )
@@ -798,13 +798,17 @@ $0       tvariable span  ( Hold character count received by expect   )
 $8       tconstant #vocs ( number of vocabularies in allowed )
 $400     tconstant b/buf ( size of a block )
 0        tvariable blk   ( current blk loaded, set in 'cold' )
-#version tconstant ver   ( eForth version )
-0        tvariable boot  ( -- : execute program at startup )
+#version constant  ver   ( eForth version )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
 0        tvariable <literal> ( holds execution vector for literal )
+0        tvariable <boot>  ( -- : execute program at startup )
 \ 0        tvariable <error>      ( execution vector for interpreter error )
 \ 0        tvariable <interpret>  ( execution vector for interpreter )
 \ 0        tvariable <abort>      ( execution vector for abort handler )
+\ 0        tvariable <at-xy>      ( execution vector for at-xy )
+\ 0        tvariable <page>       ( execution vector for page )
+\ 0        tvariable hidden       ( vocabulary for hidden words )
+
 
 \ ### Basic Word Set
 \ 
@@ -877,24 +881,24 @@ h: over- over - ;           ( u u -- u u )
 h: over+ over + ;           ( u1 u2 -- u1 u1+2 )
 : aligned dup first-bit + ; ( b -- a )
 : bye 0 (bye) ;             ( -- : leave the interpreter )
-: cell- cell - ;            ( a -- a : adjust address to previous cell )
+h: cell- cell - ;            ( a -- a : adjust address to previous cell )
 : cell+ cell + ;            ( a -- a : move address forward to next cell )
 : cells 1 lshift ;          ( n -- n : convert cells count to address count )
 : chars 1 rshift ;          ( n -- n : convert bytes to number of cells )
 : ?dup dup if dup exit then ; ( n -- 0 | n n : duplicate non zero value )
 : >  swap < ;               ( n1 n2 -- f : signed greater than, n1 > n2 )
 : u> swap u< ;              ( u1 u2 -- f : unsigned greater than, u1 > u2 )
-: u>= u< invert ;           ( u1 u2 -- f : unsigned greater/equal )
+h: u>= u< invert ;          ( u1 u2 -- f : unsigned greater/equal )
 : <> = invert ;             ( n n -- f : not equal )
-: 0<> 0= invert ;           ( n n -- f : not equal  to zero )
-: 0> 0 > ;                  ( n -- f : greater than zero? )
-: 0< 0 < ;                  ( n -- f : less than zero? )
+h: 0<> 0= invert ;          ( n n -- f : not equal  to zero )
+h: 0> 0 > ;                 ( n -- f : greater than zero? )
+h: 0< 0 < ;                 ( n -- f : less than zero? )
 : 2dup over over ;          ( n1 n2 -- n1 n2 n1 n2 )
 : tuck swap over ;          ( n1 n2 -- n2 n1 n2 )
 : +! tuck @ +  fallthrough; ( n a -- : increment value at 'a' by 'n' )
 h: swap! swap ! ;           ( a u -- )
-: 1+!  1 swap +! ;          ( a -- : increment value at address by 1 )
-: 1-! [-1] swap +! ;        ( a -- : decrement value at address by 1 )
+h: 1+!  1 swap +! ;         ( a -- : increment value at address by 1 )
+\ : 1-! [-1] swap +! ;      ( a -- : decrement value at address by 1 )
 : 2! ( d a -- ) tuck ! cell+ ! ;      ( n n a -- )
 : 2@ ( a -- d ) dup cell+ @ swap @ ;  ( a -- n n )
 : get-current current @ ;             ( -- wid )
@@ -1095,7 +1099,7 @@ h: last get-current @address ;         ( -- pwd )
 : cr =cr emit =lf emit ;               ( -- : emit a newline )
 h: colon [char] : emit ; ( -- )
 : space =bl emit ;                     ( -- : emit a space )
-: spaces =bl fallthrough;              ( +n -- )
+h: spaces =bl fallthrough;             ( +n -- )
 h: nchars                              ( +n c -- : emit c n times )
   swap 0 max for aft dup emit then next drop ;
 
@@ -1119,7 +1123,7 @@ h: nchars                              ( +n c -- : emit c n times )
 \   : pick ?dup if swap >r 1- pick r> swap exit then dup ; 
 \ 
 
-h: depth sp@ sp0 - chars ;             ( -- u : get current depth )
+: depth sp@ sp0 - chars ;             ( -- u : get current depth )
 : pick cells sp@ swap - @ ;            ( vn...v0 u -- vn...v0 vu )
 
 \ '>char' takes a character and converts it to an underscore if it is not
@@ -1369,11 +1373,11 @@ h: str ( n -- b u : convert a signed integer to a numeric string )
 \ again with a trailing space. Neither adds leading spaces.
 \ 
 
-h: adjust over- spaces type ;    ( b n n -- )
-:  .r >r str r> adjust ;         ( n n -- : print n, right justified by +n )
 h: (u.) <# #s #> ;               ( u -- b u : turn 'u' into number string )
-: u.r >r (u.) r> adjust ;        ( u +n -- : print u right justified by +n)
+: u.r >r (u.) r> fallthrough;    ( u +n -- : print u right justified by +n)
+h: adjust over- spaces type ;    ( b n n -- )
 h: 5u.r 5 u.r ;                  ( u -- )
+\ :  .r >r str r> adjust ;       ( n n -- : print n, right justified by +n )
 : u.  (u.) space type ;          ( u -- : print unsigned number )
 :  .  radix $a xor if u. exit then str space type ; ( n -- print number )
 \ t: d. base @ >r decimal  . r> base ! ;
@@ -1666,7 +1670,6 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ The control structure words, like 'if', 'for', and 'begin', are just words
 \ as well, they are immediate words and will be explained later.
 \ 
-
 \ 'nfa' and 'cfa' both take a pointer to the 'PWD' field and adjust it to
 \ point to different sections of the word.
 
@@ -1780,8 +1783,14 @@ h: digit? >lower numeric? base @ u< ; ( c -- f : is char a digit given base )
 \ from an input array, converting the character to a number, multiplying it
 \ by the current input base and adding in to the number being converted. It
 \ stops on the first non-numeric character.
+\ 
+\ 'do-number' accepts a string as an address-length pair which are the first
+\ two arguments, and a starting number for the number conversion (which is
+\ usually zero). 'do-number' returns a string containing the unconverted
+\ characters, if any, as well as the converted number.
+\ 
 
-h: do-number ( n b u -- n b u : convert string )
+h: do-number ( n b u -- n b u : convert string to number )
   begin
     ( get next character )
     2dup 2>r drop c@ dup digit? ( n char bool, Rt: b u )
@@ -1818,7 +1827,10 @@ h: base? ( b u -- )
   then ( #decimal )
   string@ [char] # = if +string decimal exit then ;
 
-\ '>number' converts a string in its entirety. 
+\ '>number' converts a string in its entirety, it takes all the same arguments
+\ as 'do-number' and passes them to it to do the work, but not before doing
+\ the prefix handling. After it does the base restoration. It returns the
+\ same arguments as 'do-number'
 
 h: >number ( n b u -- n b u : convert string )
   radix >r
@@ -1828,9 +1840,23 @@ h: >number ( n b u -- n b u : convert string )
   r> if rot negate -rot then
   r> base ! ;
 
-: number? 0 -rot >number nip 0= ; ( b u -- n f : is number? )
+\ '>number' is a generic word, but awkward to use, it contains information
+\ that the programmer probably does not need to know, 'number?' does some
+\ processing of the results to '>number', a string containing a number to
+\ be converted it passed in, and a boolean is returned as well as the
+\ converted number. The boolean indicates if the entire string was numeric
+\ only
+\ 
+
+h: number? 0 -rot >number nip 0= ; ( b u -- n f : is number? )
 
 \ ## Parsing
+\ After a line of text has been fetched the line needs to be tokenized into
+\ space delimited words, which is as complex as parsing gets in Forth.
+\ Technically Forth has no fixed grammar as any Forth word is free to parse
+\ the following input stream however it likes, but it is rare that to deviate
+\ from the norm and words which do complex processing are highly discouraged.
+\ 
 
 h: -trailing ( b u -- b u : remove trailing spaces )
   for
@@ -1839,19 +1865,19 @@ h: -trailing ( b u -- b u : remove trailing spaces )
     then
   next 0x0000 ;
 
-h: lookfor ( b u c -- b u : skip until _test succeeds )
+h: lookfor ( b u c -- b u : skip until <test> succeeds )
   >r
   begin
     dup
   while
-    string@ r@ - r@ =bl = _test @execute if rdrop exit then
+    string@ r@ - r@ =bl = <test> @execute if rdrop exit then
     +string
   repeat rdrop ;
 
 h: skipTest if 0> exit then 0<> ; ( n f -- f )
 h: scanTest skipTest invert ; ( n f -- f )
-h: skipper ' skipTest _test ! lookfor ; ( b u c -- u c )
-h: scanner ' scanTest _test ! lookfor ; ( b u c -- u c )
+h: skipper ' skipTest <test> ! lookfor ; ( b u c -- u c )
+h: scanner ' scanTest <test> ! lookfor ; ( b u c -- u c )
 
 h: parser ( b u c -- b u delta )
   >r over r> swap 2>r 
@@ -1868,6 +1894,8 @@ h: ?length dup word-length u> if $13 -throw exit then ;
 : word 1depth parse ?length here pack$ ; ( c -- a ; <string> )
 : token =bl word ;                       ( -- a )
 : char token count drop c@ ;             ( -- c; <string> )
+
+\ ## The Interpreter
 
 h: preset ( tib ) tib-start #tib cell+ ! 0 in! 0 id ! ;
 : ] [-1]       state ! ;
@@ -1901,15 +1929,6 @@ h: make-callable chars $4000 or ; ( cfa -- instruction )
 h: $compile dup inline? if cfa @ , exit then cfa compile, ; ( pwd -- )
 h: not-found source type $d -throw ; ( -- : throw 'word not found' )
 
-\ @todo more words should have vectored execution
-\ such as: interpret, literal, abort, page, at-xy, ?error. 
-\ h: not-implemented 15 -throw ;
-\ [t] not-implemented tvariable =page
-\ [t] not-implemented tvariable =at-xy
-\ t: page =page @execute ;   ( -- : page screen )
-\ t: at-xy =at-xy @execute ; ( x y -- : set cursor position )
-
-
 h: ?compile dup compile-only? if source type $e -throw exit then ;
 : (literal) state@ if postpone literal exit then ; ( u -- u | )
 : interpret ( ??? a -- ??? : The command/compiler loop )
@@ -1928,7 +1947,7 @@ h: ?compile dup compile-only? if source type $e -throw exit then ;
   not-found ;
 
 \ NB. 'compile' only works for words, instructions, and numbers below $8000
-: compile  r> dup-@ , cell+ >r ; ( -- : Compile next compiled word )
+: compile  r> dup-@ , cell+ >r ; compile-only ( --:Compile next compiled word )
 : immediate last $4000 fallthrough; ( -- : previous word immediate )
 h: toggle over @ xor swap! ;        ( a u -- : xor value at addr with u )
 
@@ -1989,10 +2008,10 @@ h: parse-string [char] " word count + cp! ;              ( -- )
 ( <string>, --, Run: -- b )
 : $"  compile string-literal parse-string ; immediate compile-only 
 : ."  compile .string parse-string ; immediate compile-only ( <string>, -- )
-: abort [-1] (bye) ;                           ( -- )
-h: ?abort swap if print cr abort else drop then ; ( x a -- )
-h: {abort} do$ ?abort ;   ( -- )
-: abort" compile {abort} parse-string ; immediate compile-only \ "
+: abort [-1] (bye) ;                                           ( -- )
+h: ?abort swap if print cr abort else drop then ;              ( u a -- )
+h: {abort} do$ ?abort ;                                        ( -- )
+: abort" compile {abort} parse-string ; immediate compile-only ( u -- ) 
 
 \ ## Evaluator
 
@@ -2096,14 +2115,14 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 : for =>r , here ; immediate compile-only
 : next compile doNext , ; immediate compile-only
 : aft drop here-0 jump, postpone begin swap ; immediate compile-only
-: doer create =exit last-cfa ! =exit ,  ;
-: make ( "name1", "name2", -- : make name1 do name2 )
-  find-cfa find-cfa make-callable
-  state@
-  if
-    postpone literal postpone literal compile ! nop exit
-  then
-  swap! ; immediate
+\ : doer create =exit last-cfa ! =exit ,  ;
+\ : make ( "name1", "name2", -- : make name1 do name2 )
+\  find-cfa find-cfa make-callable
+\  state@
+\  if
+\    postpone literal postpone literal compile ! nop exit
+\  then
+\  swap! ; immediate
 : hide ( "name", -- : hide a given word from the search order )
   token find 0= if not-found exit then nfa $80 toggle ;
 
@@ -2130,7 +2149,7 @@ xchange _forth-wordlist root-voc
   dup #vocs > if $31 -throw exit then
   context swap for aft tuck ! cell+ then next 0 swap! ;
 
-: forth root-voc forth-wordlist  2 set-order ; ( -- )
+: forth root-voc forth-wordlist 2 set-order ; ( -- )
 
 \ The name fields length in a counted string is used to store a bit 
 \ indicating the word is hidden. This is the highest bit in the count byte.
@@ -2157,13 +2176,13 @@ h: (order)                                    ( w wid*n n -- wid*n w n )
       1+ r> -rot exit
     then rdrop
   then ;
-: -order get-order (order) nip set-order ;                 ( wid -- )
-: +order dup>r -order get-order r> swap 1+ set-order ;     ( wid -- )
+: -order get-order (order) nip set-order ;             ( wid -- )
+: +order dup>r -order get-order r> swap 1+ set-order ; ( wid -- )
 
-: editor decimal editor-voc +order ; ( -- )
-: assembler root-voc assembler-voc 2 set-order ; ( -- )
-: ;code assembler ; immediate                    ( -- )
-: code postpone : assembler ;                       ( -- )
+: editor decimal editor-voc +order ;                   ( -- )
+: assembler root-voc assembler-voc 2 set-order ;       ( -- )
+: ;code assembler ; immediate                          ( -- )
+: code postpone : assembler ;                          ( -- )
 
 xchange _forth-wordlist assembler-voc
 : end-code forth postpone ; ; immediate ( -- )
@@ -2226,10 +2245,10 @@ xchange assembler-voc _forth-wordlist
 \ an index into main memory. This is similar to how 'colorForth' implements
 \ its block word.
 \ 
-: update [-1] block-dirty ! ;    ( -- )
-h: blk-@ blk @ ;                  ( -- k : retrieve current loaded block )
-h: +block blk-@ + ;               ( -- )
-: save 0 here (save) throw ; ( -- : save blocks )
+: update [-1] block-dirty ! ; ( -- )
+h: blk-@ blk @ ;              ( -- k : retrieve current loaded block )
+h: +block blk-@ + ;           ( -- )
+: save 0 here (save) throw ;  ( -- : save blocks )
 : flush block-dirty @ if 0 [-1] (save) throw exit then ; ( -- )
 
 : block ( k -- a )
@@ -2343,14 +2362,14 @@ h: retrieve block drop ;             ( k -- )
 \ match the values it calculates, zeros blocks of memory, and initializes the
 \ systems I/O. 
 \ 4. 'boot-sequence' continues execution by executing the execution token
-\ stored in the variable 'boot'. This is set to 'normal-running' by default.
+\ stored in the variable '<boot>'. This is set to 'normal-running' by default.
 \ 5. 'normal-running' prints out the welcome message by calling the word 'hi',
 \ and then entering the Forth Read-Evaluate Loop, known as 'quit'. This should
 \ not normally return.
 \ 6. If the function returns, 'bye' is called, halting the virtual machine.
 \ 
 \ The boot sequence is modifiable by the user by either writing an execution
-\ token to the 'boot' variable, or by writing to a jump to a word into memory
+\ token to the '<boot>' variable, or by writing to a jump to a word into memory
 \ location zero, if the image is saved, the next time it is run execution will
 \ take place at the new location.
 \ 
@@ -2390,8 +2409,8 @@ h: retrieve block drop ;             ( k -- )
 \ boot sequence than is provided. It is possible to make 'turn-key' 
 \ applications that start execution at an arbitrary point (call 'turn-key'
 \ because all the user has to do is 'turn the key' and the program is ready
-\ to go) by setting the boot variable the desired word and saving the
-\ image with "save".
+\ to go) by setting the boot variable to the desired word and saving the
+\ image with 'save'.
 \ 
 
 h: check-header? header-options @ first-bit 0= ; ( -- f )
@@ -2422,7 +2441,7 @@ h: bist ( -- u : built in self test )
 
 h: hi hex cr ." eFORTH V " ver 0 u.r cr here . .free cr [ ;
 h: normal-running hi quit ;               ( -- : boot word )
-h: boot-sequence cold boot @execute bye ; ( -- : perform the boot sequence )
+h: boot-sequence cold <boot> @execute bye ; ( -- : perform the boot sequence )
 
 \ ## See : The Forth Disassembler
 
@@ -2551,6 +2570,7 @@ h: dm+ chars for aft dup-@ space 5u.r cell+ then next ; ( a u -- a )
     then
   next drop ;
 
+\ ## Dynamic Memory Allocation
 \ alloc.fth
 \  Dynamic Memory Allocation package
 \  this code is an adaptation of the routines by
@@ -2623,7 +2643,22 @@ h: dm+ chars for aft dup-@ space 5u.r cell+ then next ; ( a u -- a )
 \  \ 5000 100 dump
 \  \ 40 allocate throw
 \  \ 80 allocate throw .s swap free throw .s 20 allocate throw .s cr
-  
+ 
+\ ## Terminal Handling
+\ @todo Implement terminal handling routines
+\ 
+\ h: not-implemented 15 -throw ;
+\ [t] not-implemented tvariable <page>
+\ [t] not-implemented tvariable <at-xy>
+\ t: page <page> @execute ;   ( -- : page screen )
+\ t: at-xy <at-xy> @execute ; ( x y -- : set cursor position )
+
+\ h: CSI $1b emit [char] [ emit ; 
+\ h: 10u. base @ >r decimal <# #s #> type r> base ! ; ( u -- )
+\ h: ansi swap CSI 10u. emit ; ( n c -- )
+\ : at-xy CSI 10u. $3b emit 10u. [char] H emit ; ( x y -- )
+\ : page 2 [char] J ansi 1 1 at-xy ; ( -- )
+\ : sgr [char] m ansi ; ( -- )
 
 \ The standard Forth dictionary is now complete, but the variables containing
 \ the word list need to be updated a final time. The next section implements
@@ -2755,7 +2790,7 @@ h: [line] [check] c/l* [block] + ; ( u -- a )
 there           [t] cp t!
 [t] (literal) [u] <literal> t! ( set literal execution vector )
 [t] boot-sequence 2/ 0 t! ( set starting word )
-[t] normal-running [u] boot t!
+[t] normal-running [u] <boot> t!
 
 there    6 tcells t! \ Set Length First!
 checksum 7 tcells t! \ Calculate image CRC

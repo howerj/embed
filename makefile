@@ -5,8 +5,9 @@ DF=
 EFORTH=eforth.blk
 META=meta1.blk
 XX=meta2.blk
+TEMP=tmp.blk
 
-.PHONY: all clean run cross cross-run double-cross default static
+.PHONY: all clean run cross cross-run double-cross default static tests
 
 default: all
 
@@ -41,6 +42,9 @@ cross-run: cross
 double-cross: cross
 	${DF}${FORTH} f ${META} ${XX} meta.fth
 	cmp ${META} ${XX}
+
+tests: ${FORTH} ${META} unit.fth
+	${DF}${FORTH} f ${META} ${TEMP} unit.fth
 
 tron: CFLAGS += -DTRON
 tron: forth.c

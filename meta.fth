@@ -1376,6 +1376,8 @@ h: (u.) <# #s #> ;               ( u -- b u : turn 'u' into number string )
 h: 5u.r 5 u.r ;                  ( u -- )
 : u.  (u.) space type ;          ( u -- : print unsigned number )
 :  .  radix $a xor if u. exit then str space type ; ( n -- print number )
+\ t: d. base @ >r decimal  . r> base ! ;
+\ t: h. base @ >r hex     u. r> base ! ;
 
 \ 'holds' and '.base' can be defined as so:
 \ 
@@ -1603,42 +1605,42 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ is possible for the programmer to define their own immediate words. The
 \ Forth Read-Evaluate loop is quite simple, as this diagram shows:
 \ 
-\        .--------------------------.        .----------------------------.
-\     .->| Get Next Word From Input |<-------| Error: Throw an Exception! |
-\     |  .--------------------------.        .----------------------------.
-\     |    |                                           ^
-\     |   \|/                                          | (No)
-\     |    .                                           |
-\     ^  .-----------------.  (Not Found)            .--------------------.
-\     |  | Search For Word |------------------------>| Is token a number? |
-\     |  .-----------------.                         .--------------------.
-\     |    |                                           |
-\     ^   \|/ (Found)                                 \|/ (Yes)
-\     |    .                                           .
-\     |  .-------------------------.            .-------------------------.          
-\     |  | Are we in command mode? |            | Are we in command mode? | 
-\     ^  .-------------------------.            .-------------------------.
-\     |    |                   |                  |                     |
-\     |   \|/ (Yes)            | (No)            \|/ (Yes)              | (No)
-\     |    .                   |                  .                     |
-\     |  .--------------.      |             .------------------------. |
-\     .--| Execute Word |      |             | Push Number onto Stack | |
-\     |  .--------------.      |             .------------------------. |
-\     |         ^             \|/                 |                     |
-\     ^         |              .                  |                    \|/
-\     |         | (Yes)   .--------------------.  |                     .
-\     |         ----------| Is word immediate? |  | .------------------------.
-\     |                   .--------------------.  | | Compile number literal |
-\     ^                        |                  | | into next available    |
-\     |                       \|/ (No)            | | location in the        |
-\     |                        .                  | | dictionary             |
-\     |  .--------------------------------.       | .------------------------.
-\     |  |    Compile Pointer to word     |       |                     |
-\     .--| in next available location in  |       |                     |
-\     |  |         the dictionary         |      \|/                   \|/
-\     |  .--------------------------------.       .                     .
-\     |                                           |                     |
-\     .----<-------<-------<-------<-------<------.------<-------<------.
+\         .--------------------------.        .----------------------------.
+\      .->| Get Next Word From Input |<-------| Error: Throw an Exception! |
+\      |  .--------------------------.        .----------------------------.
+\      |    |                                           ^
+\      |   \|/                                          | (No)
+\      |    .                                           |
+\      ^  .-----------------.  (Not Found)            .--------------------.
+\      |  | Search For Word |------------------------>| Is token a number? |
+\      |  .-----------------.                         .--------------------.
+\      |    |                                           |
+\      ^   \|/ (Found)                                 \|/ (Yes)
+\      |    .                                           .
+\      |  .-------------------------.            .-------------------------.          
+\      |  | Are we in command mode? |            | Are we in command mode? | 
+\      ^  .-------------------------.            .-------------------------.
+\      |    |                   |                  |                     |
+\      |   \|/ (Yes)            | (No)            \|/ (Yes)              | (No)
+\      |    .                   |                  .                     |
+\      |  .--------------.      |             .------------------------. |
+\      .--| Execute Word |      |             | Push Number onto Stack | |
+\      |  .--------------.      |             .------------------------. |
+\      |         ^             \|/                 |                     |
+\      ^         |              .                  |                    \|/
+\      |         | (Yes)   .--------------------.  |                     .
+\      |         ----------| Is word immediate? |  | .------------------------.
+\      |                   .--------------------.  | | Compile number literal |
+\      ^                        |                  | | into next available    |
+\      |                       \|/ (No)            | | location in the        |
+\      |                        .                  | | dictionary             |
+\      |  .--------------------------------.       | .------------------------.
+\      |  |    Compile Pointer to word     |       |                     |
+\      .--| in next available location in  |       |                     |
+\      |  |         the dictionary         |      \|/                   \|/
+\      |  .--------------------------------.       .                     .
+\      |                                           |                     |
+\      .----<-------<-------<-------<-------<------.------<-------<------.
 \ 
 \ No matter how complex the Forth system may appear, this loop forms the heart
 \ of it: parse a word and execute it or compile it, with numbers handled as
@@ -2013,10 +2015,10 @@ h: set-input ok! id ! in! #tib 2! ;   ( n1...n5 -- )
 \ ## Miscellaneous Words
 
 h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
-  over $8 rshift xor    ( crc x )
-  dup  $4 rshift xor    ( crc x )
-  dup  $5 lshift xor    ( crc x )
-  dup  $c lshift xor    ( crc x )
+  over $8 rshift xor   ( crc x )
+  dup  $4 rshift xor   ( crc x )
+  dup  $5 lshift xor   ( crc x )
+  dup  $c lshift xor   ( crc x )
   swap $8 lshift xor ; ( crc )
 
 : crc ( b u -- u : calculate ccitt-ffff CRC )
@@ -2029,10 +2031,6 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
 
 : random ( -- u : pseudo random number )
   seed @ 0= seed swap toggle seed @ 0 ccitt dup seed ! ; 
-
-
-\ t: d. base @ >r decimal  . r> base ! ;
-\ t: h. base @ >r hex     u. r> base ! ;
 
 \ ## I/O Control 
 \ The I/O control section is a relic from eForth that is not really needed
@@ -2114,7 +2112,6 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 \ metacompiler has been, the vocabulary word set is how Forth organizes words
 \ and controls visibility of words.
 \ 
-\ 
 
 h: find-empty-cell begin dup-@ while cell+ repeat ; ( a -- a )
 
@@ -2126,7 +2123,6 @@ h: find-empty-cell begin dup-@ while cell+ repeat ; ( a -- a )
   for aft dup-@ swap cell- then next @ r> ;
 
 xchange _forth-wordlist root-voc
-
 : forth-wordlist _forth-wordlist ;
 
 : set-order ( widn ... wid1 n -- : set the current search order )
@@ -2956,7 +2952,7 @@ The eForth model imposes extra semantics to certain areas of memory.
 
 This is a list of Error codes, not all of which are used by the application.
 
-| Hex  | Dec  |  Message                                      |
+| Hex  | Dec  | Message                                       |
 | ---- | ---- | --------------------------------------------- |
 | FFFF |  -1  | ABORT                                         |
 | FFFE |  -2  | ABORT"                                        |
@@ -3017,6 +3013,28 @@ This is a list of Error codes, not all of which are used by the application.
 | FFC7 | -57  | exception in sending or receiving a character |
 | FFC6 | -58  | [IF], [ELSE], or [THEN] exception             |
 
+<http://www.forth200x.org/throw-iors.html>
+
+| Hex  | Dec  | Message                                       |
+| ---- | ---- | --------------------------------------------- |
+| FFC5 | -59  | ALLOCATE                                      |
+| FFC4 | -60  | FREE                                          |
+| FFC3 | -61  | RESIZE                                        |
+| FFC2 | -62  | CLOSE-FILE                                    |
+| FFC1 | -63  | CREATE-FILE                                   |
+| FFC0 | -64  | DELETE-FILE                                   |
+| FFBF | -65  | FILE-POSITION                                 |
+| FFBE | -66  | FILE-SIZE                                     |
+| FFBD | -67  | FILE-STATUS                                   |
+| FFBC | -68  | FLUSH-FILE                                    |
+| FFBB | -69  | OPEN-FILE                                     |
+| FFBA | -70  | READ-FILE                                     |
+| FFB9 | -71  | READ-LINE                                     |
+| FFB8 | -72  | RENAME-FILE                                   |
+| FFB7 | -73  | REPOSITION-FILE                               |
+| FFB6 | -74  | RESIZE-FILE                                   |
+| FFB5 | -75  | WRITE-FILE                                    |
+| FFB4 | -76  | WRITE-LINE                                    |
 
 ## To Do / Wish List
 

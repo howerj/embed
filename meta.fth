@@ -3129,6 +3129,8 @@ of all the words is correct
 * This Forth lacks a version of 'FORGET', as well as 'MARKER', which is
 unfortunate, as they are useful. This is due to how word lists are
 implemented.
+* For Floating Point Routines, written in portable Forth for a 16-bit platform,
+look at the Forth Dimensions magazine, volume 4, issue 1
 * One possible exercise would be to reduce the image size to its absoluate
 minimum, by removing unneeded functionality for the metacompilation process,
 such as the block editor, and 'see', as well as any words not actually used

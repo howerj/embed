@@ -2,7 +2,6 @@
  *  @brief     Forth Virtual Machine
  *  @copyright Richard James Howe (2017)
  *  @license   MIT */
-
 #include <assert.h>
 #include <errno.h>
 #include <stdint.h>
@@ -13,6 +12,7 @@
 #define CORE (65536u)  /* core size in bytes */
 #define SP0  (8704u)   /* Variable Stack Start: 8192 (end of program area) + 512 (block size) */
 #define RP0  (32767u)  /* Return Stack Start: end of CORE in words */
+#define UNUSED(VARIABLE) ((void)(VARIABLE))
 
 #ifdef TRON
 #define TRACE(PC,I,SP,RP) \
@@ -21,13 +21,21 @@
 #define TRACE(PC, I, SP, RP)
 #endif
 
+#ifdef _WIN32 /* Making standard input streams on Windows binary */
+#include <windows.h>
+#include <io.h>
+#include <fcntl.h>
+extern int _fileno(FILE *);
+static void binary(FILE *f) { _setmode(_fileno(f), _O_BINARY); }
+#else
+static inline void binary(FILE *f) { UNUSED(f); }
+#endif
+
 typedef uint16_t uw_t;
 typedef int16_t  sw_t;
-typedef uint32_t ud_t;
+typedef uint32_t ud_t; 
 
-typedef struct {
-	uw_t pc, t, rp, sp, core[CORE/sizeof(uw_t)];
-} forth_t;
+typedef struct { uw_t pc, t, rp, sp, core[CORE/sizeof(uw_t)]; } forth_t;
 
 static FILE *fopen_or_die(const char *file, const char *mode)
 {
@@ -85,14 +93,14 @@ static int save(forth_t *h, const char *name, size_t start, size_t length)
 	if(!name)
 		return -1;
 	FILE *output = fopen_or_die(name, "wb");
-	const int r = binary_memory_save(output, h->core, start, length);
+	const int r  = binary_memory_save(output, h->core, start, length);
 	fclose(output);
 	return r;
 }
 
 static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
-	static const uw_t delta[] = { 0x0000, 0x0001, 0xFFFE, 0xFFFF };
+	static const uw_t delta[] = { 0, 1, -2, -1};
 	assert(h && in && out);
 	uw_t pc = h->pc, t = h->t, rp = h->rp, sp = h->sp, *m = h->core;
 	ud_t d;
@@ -107,7 +115,6 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			pc++;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
 			uw_t n = m[sp], T = t;
-
 			pc = instruction & 0x10 ? m[rp] >> 1 : pc + 1;
 
 			switch((instruction >> 8u) & 0x1f) {
@@ -151,16 +158,15 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			t = T;
 		} else if (0x4000 & instruction) { /* call */
 			m[--rp] = (pc + 1) << 1;
-			pc = instruction & 0x1FFF;
+			pc      = instruction & 0x1FFF;
 		} else if (0x2000 & instruction) { /* 0branch */
 			pc = !t ? instruction & 0x1FFF : pc + 1;
-			t = m[sp--];
+			t  = m[sp--];
 		} else { /* branch */
 			pc = instruction & 0x1FFF;
 		}
 	}
-finished:
-	h->pc = pc; h->sp = sp; h->rp = rp; h->t = t;
+finished: h->pc = pc; h->sp = sp; h->rp = rp; h->t = t;
 	return (int16_t)t;
 }
 
@@ -168,6 +174,7 @@ int main(int argc, char **argv)
 {
 	static forth_t h;
 	int interactive = 0;
+	binary(stdin); binary(stdout);
 	if(argc < 4)
 		goto fail;
 	if(!strcmp(argv[1], "i"))
@@ -187,8 +194,6 @@ int main(int argc, char **argv)
 	if(interactive)
 		return forth(&h, stdin, stdout, argv[3]);
 	return 0;
-fail:
-	fprintf(stderr, "usage: %s f|i input.blk output.blk file.fth\n", argv[0]);
+fail: fprintf(stderr, "usage: %s f|i input.blk output.blk file.fth\n", argv[0]);
 	return -1;
 }
-

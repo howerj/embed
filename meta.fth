@@ -2102,7 +2102,7 @@ h: doThen  here chars over @ or swap! ;
 : repeat swap postpone again postpone then ; immediate compile-only
 h: last-cfa last-def @ cfa ;  ( -- u )
 : recurse last-cfa compile, ; immediate compile-only
-\ : tail last-cfa jump, ; immediate compile-only
+: tail last-cfa jump, ; immediate compile-only
 : create postpone : drop compile doVar get-current ! [ ;
 : >body cell+ ;
 h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
@@ -2573,6 +2573,9 @@ h: dm+ chars for aft dup-@ space 5u.r cell+ then next ; ( a u -- a )
 \  this code is an adaptation of the routines by
 \  Dreas Nielson, 1990; Dynamic Memory Allocation;
 \  Forth Dimensions, V. XII, No. 3, pp. 17-27
+\ @todo This could use refactoring and better error checking, 'free' could
+\ check that its arguments are within bounds and on the free list
+\ 
 \ 
 \ pointer to beginning of free space
 \  0 tlocation freelist  0 t, 

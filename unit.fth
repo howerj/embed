@@ -84,23 +84,38 @@ only forth definitions
 : defined? token find nip 0= 0= ; ( "name", -- b )
 : ?\ 0= if [compile] \ then ; ( b -- )
 
-T{ -> }T
-T{ 1 -> 1 }T
-T{ 1 2 3 -> 1 2 3 }T
-T{ 2 2 + -> 4 }T
-T{ 3 2 4 within -> -1 }T
-T{ 2 2 4 within -> -1 }T
-T{ 4 2 4 within ->  0 }T
-T{ 98 4 min -> 4 }T
-T{ 1  5 min -> 1 }T
-T{ -1  5 min -> -1 }T
-T{ 55 3 max -> 55 }T
-T{ -55 3 max -> 3 }T
-T{ 3 10 max -> 10 }T
-T{ -2 negate -> 2 }T
-T{ 0  negate -> 0 }T
-T{ 2  negate -> -2 }T
-T{ char 0 -> $30 }T
+T{               ->  }T
+T{  1            ->  1 }T
+T{  1 2 3        ->  1 2 3 }T
+T{  1 1+         ->  2 }T
+T{  2 2 +        ->  4 }T
+T{  3 2 4 within -> -1 }T
+T{  2 2 4 within -> -1 }T
+T{  4 2 4 within ->  0 }T
+T{ 98 4 min      ->  4 }T
+T{  1  5 min     ->  1 }T
+T{ -1  5 min     -> -1 }T
+T{  55 3 max     -> 55 }T
+T{ -55 3 max     ->  3 }T
+T{  3 10 max     -> 10 }T
+T{ -2 negate     ->  2 }T
+T{  0 negate     ->  0 }T
+T{  2 negate     -> -2 }T
+T{    char 0     -> $30 }T
+T{  0 aligned    ->  0 }T
+T{  1 aligned    ->  2 }T
+T{  2 aligned    ->  2 }T
+T{  3 aligned    ->  4 }T
+T{  3  4 >       ->  0 }T
+T{  3 -4 >       -> -1 }T
+T{  5  5 >       ->  0 }T
+T{  6  6 u>      ->  0 }T
+T{  9 -8 u>      ->  0 }T
+T{  5  2 u>      -> -1 }T
+T{ -4 abs        ->  4 }T
+T{  7 abs        ->  7 }T
+T{ 100 10 8  /string -> 108 8 }T
+T{ 100 10 18 /string -> 110 0 }T
 defined? x ?\ T{ 5 -> 4 }T
 
 0 ok!

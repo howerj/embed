@@ -133,7 +133,6 @@ variable header -1 header ! ( If true Headers in the target will be generated )
 : there tcp @ ;         ( -- a : target dictionary pointer value )
 : tc! #target + c! ;    ( u a -- )
 : tc@ #target + c@ ;    ( a -- u )
-: [address] $3fff and ; ( a -- a )
 : [last] tlast @ ;      ( -- a )
 : low  swap-endianess 0= if 1+ then ; ( b -- b )
 : high swap-endianess    if 1+ then ; ( b -- b )
@@ -1279,7 +1278,7 @@ h: ?ndepth depth 1- u> if 4 -throw exit then ;
 \ thrown.
 \ 
 
-: decimal $a base ! ;                       ( -- )
+: decimal  $a base ! ;                      ( -- )
 : hex     $10 base ! ;                      ( -- )
 h: radix base @ dup 2 - $22 u> if hex $28 -throw exit then ; ( -- u )
 
@@ -1358,7 +1357,7 @@ h: ?hold hld @ pad $100 + u> if $11 -throw exit then ;  ( -- )
 \ of a number when operating with a hexadecimal base.
 \ 
 
-: sign  0< if [char] - hold exit then ;     ( n -- )
+h: sign  0< if [char] - hold exit then ;     ( n -- )
 h: str ( n -- b u : convert a signed integer to a numeric string )
   dup>r abs <# #s r> sign #> ;
 
@@ -1380,8 +1379,8 @@ h: 5u.r 5 u.r ;                  ( u -- )
 \ :  .r >r str r> adjust ;       ( n n -- : print n, right justified by +n )
 : u.  (u.) space type ;          ( u -- : print unsigned number )
 :  .  radix $a xor if u. exit then str space type ; ( n -- print number )
-\ t: d. base @ >r decimal  . r> base ! ;
-\ t: h. base @ >r hex     u. r> base ! ;
+\ : d. base @ >r decimal  . r> base ! ;
+\ : h. base @ >r hex     u. r> base ! ;
 
 \ 'holds' and '.base' can be defined as so:
 \ 
@@ -1533,7 +1532,7 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ rest of the interpreter can use the results. 'expect' gets a buffer from the
 \ use and stores the length of the resulting string in 'span'.
 
-: expect <expect> @execute span ! drop ; ( b u -- )
+: expect <expect> @execute span ! drop ;                     ( b u -- )
 : query tib tib-length <expect> @execute #tib ! drop-0 in! ; ( -- )
 
 \ 'query' stores its results in the Terminal Input Buffer (TIB), which is way
@@ -1543,7 +1542,6 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 
 \ Now we have a line based input system, and from the previous chapters we
 \ also have numeric output, the Forth interpreter is starting to take shape.
-
 
 \ ## Dictionary Words
 \ These words either navigate around the word header, or search through the
@@ -1887,8 +1885,8 @@ h: parser ( b u c -- b u delta )
 : parse ( c -- b u ; <string> )
    >r tib in@ + #tib @ in@ - r> parser >in +! -trailing 0 max ;
 : ) ; immediate ( -- : do nothing )
-: ( $29 parse 2drop ; immediate \ ) ( parse until matching paren )
-: .( $29 parse type ; ( print out text until matching parenthesis )
+:  ( [char] ) parse 2drop ; immediate \ ) ( parse until matching paren )
+: .( [char] ) parse type ; ( print out text until matching parenthesis )
 : \ #tib @ in! ; immediate ( comment until new line )
 h: ?length dup word-length u> if $13 -throw exit then ;
 : word 1depth parse ?length here pack$ ; ( c -- a ; <string> )
@@ -2104,7 +2102,7 @@ h: doThen  here chars over @ or swap! ;
 : repeat swap postpone again postpone then ; immediate compile-only
 h: last-cfa last-def @ cfa ;  ( -- u )
 : recurse last-cfa compile, ; immediate compile-only
-: tail last-cfa jump, ; immediate compile-only
+\ : tail last-cfa jump, ; immediate compile-only
 : create postpone : drop compile doVar get-current ! [ ;
 : >body cell+ ;
 h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
@@ -2325,9 +2323,9 @@ h: pipe $7c emit ;           ( -- )
 \ h: .line line -trailing $type ;    ( k u -- )
 h: .border 3 spaces c/l $2d nchars cr ; ( -- )
 h: #line dup 2 u.r ;         ( u -- u : print line number )
-: thru over- for dup load 1+ next drop ; ( k1 k2 -- )
-: blank =bl fill ;                  ( b u -- )
-\ t: message l/b extract .line cr ;  ( u -- )
+\ : thru over- for dup load 1+ next drop ; ( k1 k2 -- )
+h: blank =bl fill ;                  ( b u -- )
+\ : message l/b extract .line cr ;  ( u -- )
 h: retrieve block drop ;             ( k -- )
 : list
   dup retrieve
@@ -2485,7 +2483,7 @@ h: .name name ?dup 0= if $" ???" then print ;
 h: ?instruction ( i m e -- i 0 | e -1 )
    >r over and r> tuck = if nip [-1] exit then drop-0 ;
 
-h: .instruction
+h: .instruction ( u -- u )
    0x8000  0x8000 ?instruction if ." LIT " exit then
    $6000   $6000  ?instruction if ." ALU " exit then
    $6000   $4000  ?instruction if ." CAL " exit then
@@ -2517,9 +2515,8 @@ h: decompiler ( previous current -- : decompile starting at address )
 
 : see ( --, <string> : decompile a word )
   token finder 0= if not-found exit then
-  swap 2dup= if drop here then >r
-  cr colon space dup .id space dup
-  cr
+  swap      2dup= if drop here then >r
+  cr colon space dup .id space dup cr
   cfa r> decompiler space $3b emit
   dup compile-only? if ."  compile-only  " then 
   dup inline?       if ."  inline  "       then

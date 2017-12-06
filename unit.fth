@@ -17,24 +17,32 @@
 \ words which this test bench relies on and trivial words are also tested.
 \ 
 
+: undefined? token find nip 0= ; ( "name", -- f: Is word not in search order? )
+: defined? undefined? 0= ;       ( "name", -- f: Is word in search order? )
+: ?\ 0= if [compile] \ then ;    ( f --, <string>| : conditional compilation )
+
+undefined? 0<   ?\ : 0< 0 < ;
+undefined? 1-   ?\ : 1- 1 - ;
+undefined? 2*   ?\ : 2* 1 lshift ;
+undefined? rdup ?\ : rdup r> r> dup >r >r >r ; 
+undefined? 1+!  ?\ : 1+! 1 swap +! ;
+
 variable test
 test +order definitions hex
 
-variable total
-variable passed
-variable vsp
-variable vsp0
-variable n 
+variable total    ( total number of tests )
+variable passed   ( number of tests that passed )
+variable vsp      ( stack depth at execution of '->' )
+variable vsp0     ( stack depth at execution of 'T{' )
+variable n        ( temporary store for 'equal' )
 
-: 2* 1 lshift ;                           ( u -- u : multiply value by 2 )
-: 1+! 1 swap +! ;                         ( a -- : increment value at address )
-: quine source type cr ;                  ( -- : print out current input line )
-: ndrop for aft drop then next ;          ( a0...an n -- )
-: ndisplay for aft . then next ;          ( a0...an n -- )
-: empty-stacks depth ndrop ;              ( a0...an -- )
-: .pass   ."   ok: " space quine ;        ( -- )
-: .failed ." fail: " space quine ;        ( -- )
-: pass  passed 1+! total 1+! ;            ( -- )
+: quine source type cr ;                 ( -- : print out current input line )
+: ndrop for aft drop then next ;         ( a0...an n -- )
+: ndisplay for aft . then next ;         ( a0...an n -- )
+: empty-stacks depth ndrop ;             ( a0...an -- )
+: .pass   ."   ok: " space quine ;       ( -- )
+: .failed ." fail: " space quine ;       ( -- )
+: pass  passed 1+! total 1+! ;           ( -- )
 : fail total 1+! empty-stacks -b throw ; ( -- )
 
 \ 'equal' is the most complex word in this test bench, it tests whether two
@@ -73,6 +81,9 @@ variable n
 
 only forth definitions test +order
 
+\ @todo update forth syntax highlighting file for 'T{' and '}T' 
+\ in the <https://github.com/howerj/forth.vim> project
+
 : }T depth vsp0 @ - vsp @ 2* ?stacks vsp @ ?equal pass .pass ; 
 : -> depth vsp0 @ - vsp ! ;
 : T{ depth vsp0 ! ;
@@ -81,19 +92,6 @@ only forth definitions test +order
 
 hide test
 only forth definitions
-
-
-\ @todo update forth syntax highlighting file for 'T{' and '}T' 
-\ in the <https://github.com/howerj/forth.vim> project
-
-: undefined? token find nip 0= ; ( "name", -- f: Is word not in search order? )
-: defined? undefined? 0= ;       ( "name", -- f: Is word in search order? )
-: ?\ 0= if [compile] \ then ;    ( f --, <string>| : conditional compilation )
-
-undefined? 0< ?\ : 0< 0 < ;
-undefined? 1- ?\ : 1- 1 - ;
-undefined? 2* ?\ : 2* 1 lshift ;
-: rdup r> r> dup >r >r >r ; 
 
 \ We can define some more functions to test to make sure the arithmetic
 \ functions, control structures and recursion works correctly, it is

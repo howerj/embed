@@ -1,16 +1,105 @@
 0 ok! ( Turn off 'ok' prompt )
-\ | Project   | A Small Forth VM/Implementation |
-\ | --------- | ------------------------------- |
-\ | Author    | Richard James Howe              |
-\ | Copyright | 2017 Richard James Howe         |
-\ | License   | MIT                             |
-\ | Email     | howe.r.j.89@gmail.com           |
+\ # meta.fth
+\ 
+\ | Project    | A Small Forth VM/Implementation   |
+\ | ---------- | --------------------------------- |
+\ | Author     | Richard James Howe                |
+\ | Copyright  | 2017 Richard James Howe           |
+\ | License    | MIT                               |
+\ | Email      | howe.r.j.89@gmail.com             |
+\ | Repository | <https://github.com/howerj/embed> |
  
-\ ## A Meta-compiler, an implementation of eForth and a tutorial on both.
-\ Project site: <https://github.com/howerj/embed>
+\ ## A Meta-compiler, an implementation of eForth, and a tutorial on both.
 
-\ # Introduction
-
+\ ## Introduction
+\ In this file a meta-compiler (or a cross compiler written in Forth) is
+\ described and implemented, and after that a working Forth interpreter
+\ is both described and implemented. This new interpreter can be used in turn
+\ to meta-compile the original program, ad infinitum. The design decisions
+\ and the philosophy behind Forth and the system will also be elucidated.
+\ 
+\ ### What is Forth?
+\ 
+\ Forth is a stack based procedural language, which uses Reverse Polish
+\ Notation (RPN) to enter expressions. It is a minimal language with no type 
+\ checking and little to no error handling depending on the implementation. 
+\ Despite its small size and simplicity it has various features usually found 
+\ in higher level languages, such as reflection, incremental compilation and 
+\ an interactive read-evaluate-print loop.
+\ 
+\ It is still at heart a language that is close to the machine with low
+\ level capabilities and direct access to memory. Memory manage itself is
+\ mostly manual, with preallocation of all needed memory the preferred method
+\ of program writing.
+\ 
+\ Forth has mostly fallen out of favor in recent years, it performed admirably
+\ on the microcomputer systems available in the 1980s and is still suitable
+\ for very memory constrained embed systems (having on a few kilobytes of
+\ memory available to them), but lacks a lot of features modern languages
+\ provide. 
+\ 
+\ A catalogue of deficiencies hamper Forth adoption; poor string handling, 
+\ lack of libraries and poor integration with the operating system (on hosted 
+\ platforms), mutually incompatible and wildly different Forth implementations 
+\ and as mentioned - little error detection and handling. 
+\ 
+\ Despite this fact it has a core of adherents who find uses for the language,
+\ in fact some of its deficiencies are actually trade-offs. Having no type
+\ checking means there is no type checking to do, having very little in the way
+\ of error detection means errors do not have to be detected. This off loads
+\ the complexity of the problem to the programmer and means a Forth 
+\ implementation can be minimal and terse. 
+\ 
+\ The saying "Once you have seen one Forth implementation, you have seen 
+\ one Forth implementation." comes about because of how easy it is to implement
+\ a Forth, which is a double edged sword. It is possible to completely 
+\ understand a Forth system, the software, the hardware and the problems you
+\ are trying to solve and optimize everything towards this goal. This is oft
+\ not possible with modern systems, a single person cannot totally understand
+\ even subcomponents of modern systems in its entirety (such as compilers
+\ or the operating system kernels we use).
+\ 
+\ Another saying from the creator of Forth, Charles Moore, 
+\ "Forth is Sudoku for programmers". The reason the author uses Forth is
+\ because it is fun, no more justification is needed. 
+\ 
+\ ### Project Origins
+\ 
+\ This project derives from a simulator for a CPU written in VHDL, designed
+\ to execute Forth primitives directly, available on GitHub at,
+\ <https://github.com/howerj/forth-cpu>. The CPU and Forth interpreter 
+\ themselves have their own sources, which all makes for a confusing pedigree.
+\ The CPU, called the H2, was derived from a well known Forth CPU written
+\ in Verilog, called the J1 <http://excamera.com/sphinx/fpga-j1.html>, and
+\ the Forth running on the H2 comes from an adaption of eForth written
+\ for the J1 <https://github.com/samawati/j1eforth> which itself was derived
+\ from 'The Zen of eForth' by C. H. Ting. 
+\ 
+\ Instead of a metacompiler written in Forth a cross compiler for a Forth like 
+\ language was made, which could create an image readable by both the 
+\ simulator, and the FPGA development tools. The simulator was cut down and 
+\ modified for use on a computer, with new instructions for input and output.
+\ 
+\ This system, with a cross compiler and virtual machine written in C, was
+\ used to develop the present system which consists of only the virtual
+\ machine, a binary image containing a Forth interpreter, and this metacompiler
+\ with the metacompiled Forth. These changes and the discarding of the cross
+\ compiler written in C can be seen in the Git repository this project comes
+\ in (<https://github.com/howerj/embed>). 
+\ 
+\ ### The Virtual Machine
+\ 
+\ The virtual machine is incredibly simple and cut down at around 200 lines of
+\ C code, with most of the code being not being the virtual machine itself,
+\ but code to get data in and out of the system correctly, or setting the
+\ machine up. It is described in the appendix (at the end of this file), which
+\ also contains an example implementation of the virtual machine.
+\ 
+\ The virtual machine is 16-bit dual stack machine with an instruction set
+\ encoding which allows for many Forth words to be implemented in a single
+\ instruction. As the CPU is designed to execute Forth, Subroutine Threaded
+\ Code (STC) is the most efficient method of running Forth upon it.
+\ 
 \ @todo Complete the introduction
 \ - Describe where the Forth came from (from a VHDL CPU project, eForth, ...)
 \ - Philosophy of Forth
@@ -22,7 +111,7 @@
 \ - How Vocabularies work
 \ - Stack comments, also standardize stack comments
 \ - Conventions within Forth, Forth blocks, naming of words (for example
-\   using '@' or '!' within words).
+\   using '@' or '!' within word names).
 \ - Design tradeoffs and constraints
 \   - For example: having a separate string storage area
 \   - Limitations of the Virtual Machines code space
@@ -38,7 +127,7 @@
 \ way they are. The design decisions are just as important as the decision
 \ itself, more so even, as understand the why a decision was made allows
 \ you to change or challenge the implementation.
-
+\ 
 \ The project, documentation and Forth images are under an MIT license,
 \ <https://github.com/howerj/embed/blob/master/LICENSE> and the
 \ repository is available at <https://github.com/howerj/embed/>.
@@ -880,7 +969,7 @@ h: over- over - ;           ( u u -- u u )
 h: over+ over + ;           ( u1 u2 -- u1 u1+2 )
 : aligned dup first-bit + ; ( b -- a )
 : bye 0 (bye) ;             ( -- : leave the interpreter )
-h: cell- cell - ;            ( a -- a : adjust address to previous cell )
+: cell- cell - ;            ( a -- a : adjust address to previous cell )
 : cell+ cell + ;            ( a -- a : move address forward to next cell )
 : cells 1 lshift ;          ( n -- n : convert cells count to address count )
 : chars 1 rshift ;          ( n -- n : convert bytes to number of cells )
@@ -889,15 +978,15 @@ h: cell- cell - ;            ( a -- a : adjust address to previous cell )
 : u> swap u< ;              ( u1 u2 -- f : unsigned greater than, u1 > u2 )
 h: u>= u< invert ;          ( u1 u2 -- f : unsigned greater/equal )
 : <> = invert ;             ( n n -- f : not equal )
-h: 0<> 0= invert ;          ( n n -- f : not equal  to zero )
-h: 0> 0 > ;                 ( n -- f : greater than zero? )
-h: 0< 0 < ;                 ( n -- f : less than zero? )
+: 0<> 0= invert ;           ( n n -- f : not equal  to zero )
+: 0> 0 > ;                  ( n -- f : greater than zero? )
+: 0< 0 < ;                  ( n -- f : less than zero? )
 : 2dup over over ;          ( n1 n2 -- n1 n2 n1 n2 )
 : tuck swap over ;          ( n1 n2 -- n2 n1 n2 )
 : +! tuck @ +  fallthrough; ( n a -- : increment value at 'a' by 'n' )
 h: swap! swap ! ;           ( a u -- )
-h: 1+!  1 swap +! ;         ( a -- : increment value at address by 1 )
-\ : 1-! [-1] swap +! ;      ( a -- : decrement value at address by 1 )
+: 1+!  1 swap +! ;         ( a -- : increment value at address by 1 )
+: 1-! [-1] swap +! ;      ( a -- : decrement value at address by 1 )
 : 2! ( d a -- ) tuck ! cell+ ! ;      ( n n a -- )
 : 2@ ( a -- d ) dup cell+ @ swap @ ;  ( a -- n n )
 : get-current current @ ;             ( -- wid )
@@ -905,7 +994,7 @@ h: 1+!  1 swap +! ;         ( a -- : increment value at address by 1 )
 : bl =bl ;                            ( -- c )
 : within over- >r - r> u< ;           ( u lo hi -- f )
 : abs dup 0< if negate exit then ;    ( n -- u )
-h: tib #tib cell+ @ ;                 ( -- a )
+: tib #tib cell+ @ ;                 ( -- a )
 : source #tib 2@ ;                    ( -- a u )
 : source-id id @ ;                    ( -- 0 | -1 )
 \ : even first-bit 0= ;
@@ -1947,7 +2036,9 @@ h: ?compile dup compile-only? if source type $e -throw exit then ;
 \ NB. 'compile' only works for words, instructions, and numbers below $8000
 : compile  r> dup-@ , cell+ >r ; compile-only ( --:Compile next compiled word )
 : immediate last $4000 fallthrough; ( -- : previous word immediate )
+\ @todo swap toggle order
 h: toggle over @ xor swap! ;        ( a u -- : xor value at addr with u )
+\ : compile-only last $8000 toggle ;
 
 \ ## Strings 
 \ The string word set is quite small, there are words already defined for
@@ -2013,7 +2104,7 @@ h: {abort} do$ ?abort ;                                        ( -- )
 
 \ ## Evaluator
 
-h: .ok command? if ."  ok  " cr exit then ;   ( -- )
+h: (ok) command? if ."  ok  " cr exit then ;  ( -- )
 h: ok <ok> @execute ;                         ( -- : execute prompt )
 h: ?depth sp@ sp0 u< if 4 -throw exit then ;  ( u -- : depth check )
 h: eval begin token dup c@ while interpret ?depth repeat drop ok ; ( -- )
@@ -2061,7 +2152,7 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
 
 h: io! preset fallthrough;  ( -- : initialize I/O )
 h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
-h: hand ' .ok  ( ' drop <-- was emit )  ( ' ktap ) fallthrough;
+h: hand ' (ok)  ( ' drop <-- was emit )  ( ' ktap ) fallthrough;
 h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) ok! ;
 \ h: pace 11 emit ;
 \ t: file ' pace ' drop ' ktap xio ;

@@ -2,12 +2,12 @@
 
 \ @todo Add these word definitions to an extension file, the floating
 \ point routines will have to go into yet another file
-\ @todo Rewrite the do..loop to a more sensible 'for' loop.
+\ @todo Document all the new words, including stack comments
 : dnegate invert >r invert 1 um+ r> + ; ( d -- d )
 : 2* 1 lshift  ;
 : 2/ 1 rshift ;
 : d2* over $8000 and >r 2* swap 2* swap r> if 1 or then ;
-: d2/ dup     1 and >r 2/ swap 2/ r> if $8000 or then swap ;
+: d2/ dup      1 and >r 2/ swap 2/ r> if $8000 or then swap ;
 : arshift ( n u -- n : arithmetic right shift )
   2dup rshift >r swap $8000 and
   if $10 swap - -1 swap lshift else drop 0 then r> or ;
@@ -29,26 +29,52 @@ $f constant #bits
    next
    drop swap exit
  then drop 2drop -1 dup ;
+: +leading ( b u -- b u: skip leading space )
+    begin over c@ dup bl = swap 9 = or while 1 /string repeat ;
 
-: (do)  r> dup >r swap rot >r >r cell+ >r ;  ( compile-only ) 
-: do compile (do) 0 , here ;  ( compile-only )  immediate
-: (leave) r> drop r> drop r> drop ;  ( compile-only ) 
-: leave compile (leave) ;  ( compile-only )  immediate
-: (loop)
-   r> r> 1+ r> 2dup <> if
-    >r >r @ >r exit
-   then >r 1- >r cell+ >r ;  ( compile-only ) 
-: (unloop) r> r> drop r> drop r> drop >r ;  ( compile-only ) 
-: unloop compile (unloop) ;  ( compile-only )  immediate
-: (?do)
-   2dup <> if
-     r> dup >r swap rot >r >r cell+ >r exit
-   then 2drop exit ;  ( compile-only ) 
-: ?do  compile (?do) 0 , here ;  ( compile-only )  immediate
-: loop  
-  compile (loop) dup , compile (unloop) cell- here 1 rshift swap ! ; 
-   ( compile-only )  immediate
+\ @todo fix >number and numeric input to work with doubles...
+: >d ( a u -- d|ud )
+    0 0 2swap +leading
+    ?dup if
+	0 >r ( sign )
+	over c@
+	dup  [char] - = if drop rdrop -1 >r 1 /string 
+	else [char] + = if 1 /string then then
+	>number 2drop
+	r> if dnegate then ( retrieve sign )
+    else drop then ;
 
+: extract dup >r um/mod r> swap >r um/mod r> rot ; ( ud ud -- ud u )
+: digit  9 over < 7 and + [char] 0 + ;    ( u -- c )
+: #> 2drop hld @ pad over - ;             ( w -- b u )
+: # 0 base @ extract digit hold ;          ( d -- d )
+: #s begin # 2dup d0= until ; ( u -- 0 )
+: <# pad hld ! ;                           ( -- )
+
+: 2, swap , , ;
+: 2constant create 2, does> 2@ ;
+: 2variable create 2, does> ;
+
+
+\ : (do)  r> dup >r swap rot >r >r cell+ >r ;  compile-only 
+\ : do compile (do) 0 , here ;  compile-only  immediate
+\ : (leave) r> drop r> drop r> drop ;  compile-only 
+\ : leave compile (leave) ;  compile-only  immediate
+\ : (loop)
+\    r> r> 1+ r> 2dup <> if
+\     >r >r @ >r exit
+\    then >r 1- >r cell+ >r ;  compile-only 
+\ : (unloop) r> r> drop r> drop r> drop >r ;  compile-only 
+\ : unloop compile (unloop) ;  compile-only  immediate
+\ : (?do)
+\    2dup <> if
+\      r> dup >r swap rot >r >r cell+ >r exit
+\    then 2drop exit ;   compile-only  
+\ : ?do  compile (?do) 0 , here ;  compile-only  immediate
+\ : loop  
+\   compile (loop) dup , compile (unloop) cell- here 1 rshift swap ! ; 
+\     compile-only  immediate
+ 
 \ The following section implements the floating point word set in Forth, it 
 \ does so with an unusual way of representing floating point numbers, but it
 \ works and the word definitions are very small. The special values such
@@ -82,62 +108,77 @@ hex
 : zero  over 0= if drop 0 then ;
 : fnegate 8000 xor zero ;
 : fabs  7fff and ;
-: norm  >r 2dup or
-        if begin dup 0< not
-           while d2* r> 1- >r
-           repeat swap 0< - ?dup
-           if r> else 8000 r> 1+ then
-        else r> drop then ;
+: norm  
+  >r 2dup or
+  if begin dup 0< not
+    while d2* r> 1- >r
+    repeat swap 0< - ?dup
+    if r> else 8000 r> 1+ then
+  else r> drop then ;
 
 : f2*   1+ zero ;
 : f*    rot + 4000 - >r um* r> norm ;
 : fsq   2dup f* ;
-
 : f2/   1- zero ;
-: um/   dup >r um/mod swap r>
-        over 2* 1+ u< swap 0< or - ;
-: f/    rot swap - 4000 + >r
-        0 rot rot 2dup u<
-        if   um/ r> zero
-        else >r d2/ fabs r> um/ r> 1+
-        then ;
+: um/   dup >r um/mod swap r> over 2* 1+ u< swap 0< or - ;
+: f/    
+  rot swap - 4000 + >r
+  0 -rot 2dup u<
+  if   um/ r> zero
+  else >r d2/ fabs r> um/ r> 1+
+  then ;
 
-: align 20 min 0 do d2/ loop ;
-: ralign 1- ?dup if align then
-        1 0 d+ d2/ ;
-: fsign fabs over 0< if >r dnegate r>
-        8000 or then ;
+\ : align 20 min 0 do d2/ loop ;
+: nalign 20 min for aft d2/ then next ;
+: ralign 1- ?dup if nalign then 1 0 d+ d2/ ;
+: fsign fabs over 0< if >r dnegate r> 8000 or then ;
 
-: f+    rot 2dup >r >r fabs swap fabs -
-        dup if dup 0<
-                if   rot swap  negate
-                     r> r> swap >r >r
-                then 0 swap ralign
-        then swap 0 r> r@ xor 0<
-        if   r@ 0< if 2swap then d-
-             r> fsign rot swap norm
-        else d+ if 1+ 2/ 8000 or r> 1+
-                else r> then then ;
+: f+ rot 2dup >r >r fabs swap fabs -
+  dup if dup 0<
+    if   rot swap  negate
+      r> r> swap >r >r
+    then 0 swap ralign
+  then swap 0 r> r@ xor 0<
+    if   r@ 0< if 2swap then d-
+      r> fsign rot swap norm
+    else d+ if 1+ 2/ 8000 or r> 1+
+      else r> then then ;
 
 : f-    fnegate f+ ;
 : f<    f- 0< swap drop ;
-
-: shifts fabs 4010 - dup 0< not
-        abort" too big" negate ;
+: shifts fabs 4010 - dup 0< not if ( abort" too big" ) $2e throw then negate ;
 : dfloat 4020 fsign norm ;
 : float dup 0< dfloat ;
 : -+    drop swap 0< if negate then ;
 : fix   tuck 0 swap shifts ralign -+ ;
-: int   tuck 0 swap shifts  align -+ ;
-hide align
+: int   tuck 0 swap shifts nalign -+ ;
+
+\ @todo check these functions, and in different bases
+create pl 3 ,                  \ Double Number Table
+   $1   $0 , ,    $a    $0 , , \ 1           - 10
+  $64   $0 , ,  $3e8    $0 , , \ 100         - 1,000
+$2710   $0 , , $86a0    $1 , , \ 10,000      - 100,000
+$4240   $f , , $9680   $98 , , \ 1,000,000   - 10,000,000
+$e100 $5f5 , , $ca00 $3b9a , , \ 100,000,000 - 1,000,000,000
+
+: tens  2* 2* [ pl cell+ ] literal + 2@ ; 
+: places pl ! ;
+: f#    >r pl @ tens drop um* r> shifts
+        ralign pl @ ?dup if ( 0 do # loop ) for aft # then next
+        [char] . hold then #s rot sign ;
+: f.    tuck <# f# #> type space ;
+
+hide nalign
 hide ralign
 hide shifts
+
+bye
+
 
 \ The following code relies on F-83 number parsing, and will have to be
 \ adapted to run under more modern Forths, or portably.
 
 ( floating point input/output ) decimal
-bye
 create pl 3 , here  ,001 , ,   ,010 , ,
           ,100 , ,            1,000 , ,
         10,000 , ,          100,000 , ,

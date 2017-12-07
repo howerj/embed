@@ -522,6 +522,8 @@ a: return ( -- : Compile a return into the target )
 \ metacompiler, when one of these words is used in the metacompiled program
 \ it will be implemented in assembly.
 
+\ @todo implement 'd/mod', 'ud/mod', and 'ud*'?
+
 : nop     ]asm  #t       alu asm[ ;
 : dup     ]asm  #t       t->n   d+1   alu asm[ ;
 : over    ]asm  #n       t->n   d+1   alu asm[ ;
@@ -890,11 +892,19 @@ $400     tconstant b/buf ( size of a block )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
 0        tvariable <literal> ( holds execution vector for literal )
 0        tvariable <boot>  ( -- : execute program at startup )
+
+\ The following execution vectors would/will be added if there is enough
+\ space, it is very useful to have hooks into the system to change how
+\ the interpreter behaviour works. Being able to change how the Forth 
+\ interpreter handles number parsing allows the processing of double or
+\ floating point numbers in a system that could otherwise not handle them.
+
 \ 0        tvariable <error>      ( execution vector for interpreter error )
 \ 0        tvariable <interpret>  ( execution vector for interpreter )
 \ 0        tvariable <abort>      ( execution vector for abort handler )
 \ 0        tvariable <at-xy>      ( execution vector for at-xy )
 \ 0        tvariable <page>       ( execution vector for page )
+\ 0        tvariable <number>     ( execution vector for >number )
 \ 0        tvariable hidden       ( vocabulary for hidden words )
 
 
@@ -1434,6 +1444,7 @@ h: ?hold hld @ pad $100 + u> if $11 -throw exit then ;  ( -- )
 \ like '.', or 'u.r'.
 \ 
 
+\ @todo Pictured Numeric Output should work with double cell numbers
 : #> drop hld @ pad over- ;                 ( w -- b u )
 : #  1depth radix extract digit hold ;      ( u -- u )
 : #s begin # dup while repeat ;             ( u -- 0 )
@@ -1446,7 +1457,7 @@ h: ?hold hld @ pad $100 + u> if $11 -throw exit then ;  ( -- )
 \ of a number when operating with a hexadecimal base.
 \ 
 
-h: sign  0< if [char] - hold exit then ;     ( n -- )
+: sign  0< if [char] - hold exit then ;     ( n -- )
 h: str ( n -- b u : convert a signed integer to a numeric string )
   dup>r abs <# #s r> sign #> ;
 
@@ -1877,6 +1888,7 @@ h: digit? >lower numeric? base @ u< ; ( c -- f : is char a digit given base )
 \ characters, if any, as well as the converted number.
 \ 
 
+\ @todo Fix 'do-number' to work with double cell numbers
 h: do-number ( n b u -- n b u : convert string to number )
   begin
     ( get next character )
@@ -1919,7 +1931,9 @@ h: base? ( b u -- )
 \ the prefix handling. After it does the base restoration. It returns the
 \ same arguments as 'do-number'
 
-h: >number ( n b u -- n b u : convert string )
+\ @todo '>number' should accept a double cell number and return one
+
+: >number ( n b u -- n b u : convert string )
   radix >r
   negative? >r
   base?

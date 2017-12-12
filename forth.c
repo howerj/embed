@@ -143,8 +143,8 @@ static int forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 22: T = save(h, block, n>>1, ((ud_t)T+1)>>1); break;
 			case 23: T = fputc(t, out);        break;
 			case 24: T = fgetc(in);            break;
-			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
-			case 26: if(t) { T=(sw_t)n/(sw_t)t; t=(sw_t)n%(sw_t)t; n=t; } else { pc=1; T=10; n=T; t=n; } break;
+			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=1; T=10; } break;
+			case 26: if(t) { T=(sw_t)n/(sw_t)t; t=(sw_t)n%(sw_t)t; n=t; } else { pc=1; T=10; } break;
 			case 27: goto finished;
 			}
 			sp += delta[ instruction       & 0x3];

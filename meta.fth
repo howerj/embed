@@ -1,4 +1,4 @@
-0 ok! ( Turn off 'ok' prompt )
+0 <ok> ! ( Turn off 'ok' prompt )
 \ # meta.fth
 \ 
 \ | Project    | A Small Forth VM/Implementation   |
@@ -485,8 +485,8 @@ a: return ( -- : Compile a return into the target )
   token target.1 search-wordlist 0= abort" [t]? "
   cfa >body @ ;
 
-\ @warning only use "[u]" on variables, not tlocations 
-: [u] [t] =cell + ; ( "name", -- a )
+\ @warning only use "[v]" on variables, not tlocations 
+: [v] [t] =cell + ; ( "name", -- a )
 
 \ xchange takes two vocabularies defined in the target by their variable
 \ names, "name1" and "name2", and updates "name1" so it contains the previously
@@ -559,9 +559,11 @@ a: return ( -- : Compile a return into the target )
 : tx!     ]asm  #tx      n->t   d-1   alu asm[ ;
 : (save)  ]asm  #save    d-1    alu asm[ ;
 : u/mod   ]asm  #u/mod   t->n   alu asm[ ;
-: /mod    ]asm  #u/mod   t->n   alu asm[ ;
-: /       ]asm  #u/mod   d-1    alu asm[ ;
-: mod     ]asm  #u/mod   n->t   d-1   alu asm[ ;
+\ : u/    ]asm  #u/mod   d-1    alu asm[ ;
+\ : umod  ]asm  #u/mod   n->t   d-1   alu asm[ ;
+: /mod    ]asm  #/mod    t->n   alu asm[ ;
+: /       ]asm  #/mod    d-1    alu asm[ ;
+: mod     ]asm  #/mod    n->t   d-1   alu asm[ ;
 : rdrop   ]asm  #t       r-1    alu asm[ ;
 \ Some words can be implemented in a single instruction which have no
 \ analogue within Forth.
@@ -612,7 +614,7 @@ $4012 constant <emit>      ( c -- : emit character )
 $4014 constant <expect>    ( "accept" vector )
 \ $4016 constant <tap>     ( "tap" vector, for terminal handling )
 \ $4018 constant <echo>    ( c -- : emit character )
-$4020 constant <ok>     ( -- : display prompt )
+\ $4020 constant <ok>     ( -- : display prompt )
 \ $4022 constant _literal   ( u -- u | : handles literals )
 $4110 constant context     ( holds current context for search order )
 $4122 constant #tib        ( Current count of terminal input buffer )
@@ -892,6 +894,7 @@ $400     tconstant b/buf ( size of a block )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
 0        tvariable <literal> ( holds execution vector for literal )
 0        tvariable <boot>  ( -- : execute program at startup )
+0        tvariable <ok>
 
 \ The following execution vectors would/will be added if there is enough
 \ space, it is very useful to have hooks into the system to change how
@@ -2049,10 +2052,11 @@ h: ?compile dup compile-only? if source type $e -throw exit then ;
 
 \ NB. 'compile' only works for words, instructions, and numbers below $8000
 : compile  r> dup-@ , cell+ >r ; compile-only ( --:Compile next compiled word )
-: immediate last $4000 fallthrough; ( -- : previous word immediate )
-\ @todo swap toggle order
-h: toggle over @ xor swap! ;        ( a u -- : xor value at addr with u )
-\ : compile-only last $8000 toggle ;
+: immediate $4000 last fallthrough; ( -- : previous word immediate )
+h: toggle tuck @ xor swap! ;        ( u a -- : xor value at addr with u )
+\ : compile-only $8000 last toggle ;
+
+: smudge last nfa $80 swap toggle ;
 
 \ ## Strings 
 \ The string word set is quite small, there are words already defined for
@@ -2123,10 +2127,9 @@ h: ok <ok> @execute ;                         ( -- : execute prompt )
 h: ?depth sp@ sp0 u< if 4 -throw exit then ;  ( u -- : depth check )
 h: eval begin token dup c@ while interpret ?depth repeat drop ok ; ( -- )
 : quit preset [ begin query ' eval catch ?error again ; ( -- )
-: ok! <ok> ! ; ( xt -- : set ok prompt execution token )
 
 h: get-input source in@ id @ <ok> @ ; ( -- n1...n5 )
-h: set-input ok! id ! in! #tib 2! ;   ( n1...n5 -- )
+h: set-input <ok> ! id ! in! #tib 2! ;   ( n1...n5 -- )
 : evaluate ( a u -- )
   get-input 2>r 2>r >r
   0 [-1] 0 set-input
@@ -2152,7 +2155,7 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
   repeat 2drop r> ;
 
 : random ( -- u : pseudo random number )
-  seed @ 0= seed swap toggle seed @ 0 ccitt dup seed ! ; 
+  seed @ 0= seed toggle seed @ 0 ccitt dup seed ! ; 
 
 \ ## I/O Control 
 \ The I/O control section is a relic from eForth that is not really needed
@@ -2167,7 +2170,7 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
 h: io! preset fallthrough;  ( -- : initialize I/O )
 h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
 h: hand ' (ok)  ( ' drop <-- was emit )  ( ' ktap ) fallthrough;
-h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) ok! ;
+h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) <ok> ! ;
 \ h: pace 11 emit ;
 \ t: file ' pace ' drop ' ktap xio ;
 
@@ -2226,8 +2229,11 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 \    postpone literal postpone literal compile ! nop exit
 \  then
 \  swap! ; immediate
+
+\ @todo Use a 'SMUDGE' system to hide the current word from the search order
+\ @todo improve 'hide' so it unlinks a word from the linked list
 : hide ( "name", -- : hide a given word from the search order )
-  token find 0= if not-found exit then nfa $80 toggle ;
+  token find 0= if not-found exit then nfa $80 swap toggle ;
 
 \ ## Vocabulary Words 
 \ The vocabulary word set should already be well understood, if the
@@ -2266,10 +2272,10 @@ h: .words space
 
 xchange root-voc _forth-wordlist
 
-: previous get-order swap drop 1- set-order ; ( -- )
-: also get-order over swap 1+ set-order ;     ( wid -- )
+\ : previous get-order swap drop 1- set-order ; ( -- )
+\ : also get-order over swap 1+ set-order ;     ( wid -- )
 : only [-1] set-order ;                       ( -- )
-: order get-order for aft . then next cr ;    ( -- )
+\ : order get-order for aft . then next cr ;    ( -- )
 \ : anonymous get-order 1+ here 1 cells allot swap set-order ; ( -- )
 : definitions context @ set-current ;         ( -- )
 h: (order)                                    ( w wid*n n -- wid*n w n )
@@ -2419,20 +2425,20 @@ h: +block blk-@ + ;           ( -- )
 \ and easy to use database.
 \ 
 
-h: c/l* ( c/l * ) 6 lshift ; ( u -- u )
-h: c/l/ ( c/l / ) 6 rshift ; ( u -- u )
-h: line swap block swap c/l* + c/l ; ( k u -- a u )
-h: loadline line evaluate ;          ( k u -- )
+h: c/l* ( c/l * ) 6 lshift ;            ( u -- u )
+h: c/l/ ( c/l / ) 6 rshift ;            ( u -- u )
+h: line swap block swap c/l* + c/l ;    ( k u -- a u )
+h: loadline line evaluate ;             ( k u -- )
 : load 0 l/b 1- for 2dup 2>r loadline 2r> 1+ next 2drop ; ( k -- )
-h: pipe $7c emit ;           ( -- )
-\ h: .line line -trailing $type ;    ( k u -- )
+h: pipe $7c emit ;                      ( -- )
+\ h: .line line -trailing $type ;       ( k u -- )
 h: .border 3 spaces c/l $2d nchars cr ; ( -- )
-h: #line dup 2 u.r ;         ( u -- u : print line number )
+h: #line dup 2 u.r ;                    ( u -- u : print line number )
 \ : thru over- for dup load 1+ next drop ; ( k1 k2 -- )
-h: blank =bl fill ;                  ( b u -- )
-\ : message l/b extract .line cr ;  ( u -- )
-h: retrieve block drop ;             ( k -- )
-: list
+h: blank =bl fill ;                     ( b u -- )
+\ : message l/b extract .line cr ;      ( u -- )
+h: retrieve block drop ;                ( k -- )
+: list                                  ( k -- )
   dup retrieve
   cr
   .border
@@ -2440,7 +2446,7 @@ h: retrieve block drop ;             ( k -- )
     dup l/b <
   while
     2dup #line pipe line $type pipe cr 1+
-  repeat .border 2drop ; ( k -- )
+  repeat .border 2drop ; 
 
 \ t: index ( k1 k2 -- : show titles for block k1 to k2 )
 \  over- cr
@@ -2517,7 +2523,7 @@ h: retrieve block drop ;             ( k -- )
 \ 
 
 h: check-header? header-options @ first-bit 0= ; ( -- f )
-h: disable-check header-options $1 toggle ; ( -- )
+h: disable-check $1 header-options toggle ; ( -- )
 
 \ 'bist' checks the length field in the header matches 'here' and that the
 \ CRC in the header matches the CRC it calculates in the image, it has to
@@ -2534,17 +2540,17 @@ h: bist ( -- u : built in self test )
 \ vectors to sensible values, set the vocabularies to the default search
 \ order and reset the variable stack.
 
-: cold ( -- : cold boot )
+: cold ( -- : performs a cold boot  )
    bist ?dup if negate (bye) exit then
    $10 block b/buf 0 fill
    $12 retrieve io! 
-   forth sp0 sp! ;
+   forth sp0 sp! 
+   <boot> @execute bye ;
 
 \ 'hi' prints out the welcome message, 
 
-h: hi hex cr ." eFORTH V " ver 0 u.r cr here . .free cr [ ;
-h: normal-running hi quit ;               ( -- : boot word )
-h: boot-sequence cold <boot> @execute bye ; ( -- : perform the boot sequence )
+h: hi hex cr ." eFORTH V " ver 0 u.r cr here . .free cr [ ; ( -- )
+h: normal-running hi quit ;                 ( -- : boot word )
 
 \ ## See : The Forth Disassembler
 
@@ -2672,83 +2678,6 @@ h: dm+ chars for aft dup-@ space 5u.r cell+ then next ; ( a u -- a )
     then
   next drop ;
 
-\ ## Dynamic Memory Allocation
-\ alloc.fth
-\  Dynamic Memory Allocation package
-\  this code is an adaptation of the routines by
-\  Dreas Nielson, 1990; Dynamic Memory Allocation;
-\  Forth Dimensions, V. XII, No. 3, pp. 17-27
-\ @todo This could use refactoring and better error checking, 'free' could
-\ check that its arguments are within bounds and on the free list
-\ 
-\ 
-\ pointer to beginning of free space
-\  0 tlocation freelist  0 t, 
-\  
-\  \ : cell_size ( addr -- n ) >body cell+ @ ;       \ gets array cell size
-\  
-\  \ initialize memory pool at aligned address 'start_addr'
-\  : initialize ( start_addr length -- )
-\    over dup freelist !
-\    0 swap !
-\    swap cell+ ! ;
-\  
-\  : allocate ( u -- addr ior ) \ allocate n bytes, return pointer to block
-\                               \ and result flag ( 0 for success )
-\                               \ check to see if pool has been initialized 
-\    freelist @ 0= if ." pool not initialized! " abort then
-\    cell+ freelist dup
-\    begin
-\    while dup @ cell+ @ 2 pick u<
-\      if 
-\        @ @ dup   \ get new link
-\      else   
-\        dup @ cell+ @ 2 pick - 2 cells max dup 2 cells =
-\        if 
-\          drop dup @ dup @ rot !
-\        else  
-\          over over swap @ cell+ !   swap @ +
-\        then
-\        over over ! cell+ 0  \ store size, bump pointer
-\      then                   \ and set exit flag
-\    repeat
-\    swap drop
-\    dup 0= ;
-\  
-\  : free ( ptr -- ior ) \ free space at ptr, return status ( 0 for success )
-\    1 cells - dup @ swap over over cell+ ! freelist dup
-\    begin
-\      dup 3 pick u< and
-\    while
-\      @ dup @
-\    repeat
-\  
-\    dup @ dup 3 pick ! ?dup
-\    if 
-\      dup 3 pick 5 pick + =
-\      if 
-\        dup cell+ @ 4 pick + 3 pick cell+ ! @ 2 pick !
-\      else  
-\        drop 
-\      then
-\    then
-\  
-\    dup cell+ @ over + 2 pick =
-\    if  
-\      over cell+ @ over cell+ dup @ rot + swap ! swap @ swap !
-\    else 
-\      !
-\    then
-\    drop-0 ; \ this code always returns a success flag
-\  
-\  
-\  \ create pool  1000 allot
-\  \ pool 1000 dynamic-mem
-\  \ 5000 1000 initialize
-\  \ 5000 100 dump
-\  \ 40 allocate throw
-\  \ 80 allocate throw .s swap free throw .s 20 allocate throw .s cr
- 
 \ ## Terminal Handling
 \ @todo Implement terminal handling routines
 \ 
@@ -2893,9 +2822,9 @@ h: [line] [check] c/l* [block] + ; ( u -- a )
 \ ## Final Touches
 
 there           [t] cp t!
-[t] (literal) [u] <literal> t! ( set literal execution vector )
-[t] boot-sequence 2/ 0 t! ( set starting word )
-[t] normal-running [u] <boot> t!
+[t] (literal) [v] <literal> t! ( set literal execution vector )
+[t] cold 2/ 0 t! ( set starting word )
+[t] normal-running [v] <boot> t!
 
 there    6 tcells t! \ Set Length First!
 checksum 7 tcells t! \ Calculate image CRC
@@ -3185,32 +3114,6 @@ majority of jumps are to near locations. Perhaps relative addressing should
 only be used for branches and not calls, or vice versa. Absolute jumps could
 be faked if needed with the correct wordset, self modifying code, or the
 correct compliation methods.
-* Routines written in Forth for memory allocation, a soft floating point
-library, and a 16-bit metacompiler for the [8086][]/[DOS][] would be useful.
-* On the Windows platform the input and output streams should be reopened in
-binary mode. The following code can be used for this purpose:
-
-	#ifdef _WIN32
-	#include <windows.h>
-	#include <io.h>
-	#include <fcntl.h>
-	extern int _fileno(FILE *);
-	static void binary(FILE *f) { _setmode(_fileno(f), _O_BINARY); }
-	#else
-	static inline void binary(FILE *f) { UNUSED(f); }
-	#endif
-
-	int main(...) {
-		...
-
-		binary(stdin);
-		binary(stdout);
-
-		...
-	}
-
-
-
 * More assertions and range checks should be added to the interpreter, for
 example the **save** function needs checks for bounds.
 * The forth virtual machine in [forth.c][] should be made to be crash proof,
@@ -3247,6 +3150,8 @@ saving sections of the virtual machine image a 'block transfer' instruction
 could be made, which would index into a file and retrieve/create blocks, which
 would allow much more memory to be used as mass storage (65536*1024 Bytes).
 * Look at the libforth test bench and reimplement it
+* Talk about making 'state' an execution token, with '[' and ']' just changing
+the value of state.
 * Allow an arbitrary character to be used for numeric output alignment, not
 just spaces. This would allow leading zeros to be added to numbers.
 * Some more words need adding in, like "postpone", "[']", "[if]", "[else]",

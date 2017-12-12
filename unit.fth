@@ -1,10 +1,8 @@
-0 ok!
-\ This is a test bench for the Forth available at:
-\ <https://github.com/howerj/embed>
-\ It creates a new vocabulary for the support words for the test bench to live 
-\ in, called 'test', and defines three words needed to implement a useful test 
-\ bench, which are 'T{', '->' and '}T', the three words should always appear 
-\ together as a matching set. 
+0 <ok> !
+\ This is a Forth test bench for: <https://github.com/howerj/embed>
+\ 
+\ The test bench consists of a few support words, and three words that should
+\ be used together, they are 'T{', '->' and '}T'.
 \ 
 \ 'T{' sets up the test, the test itself should appear on a single line, with 
 \ the '}T' terminating it. The arguments to a function to test and function to 
@@ -12,15 +10,33 @@
 \ should to the right of it. The test bench must also account for any items 
 \ already on the stack prior to calling 'T{' which must be ignored. 
 \ 
+\ A few other words are also defined, but they are not strictly needed, they
+\ are 'throws?' and 'statistics'. 'throws?' parses the next word in the
+\ input stream, and executes it, catching any exceptions. It empties the
+\ variable stack and only returns the exception number thrown. This can be
+\ used to test that words throw the correct exception in given circumstances.
+\ 'statistics' is used for information about the tests; how many tests failed,
+\ and how many tests were executed.
+\ 
 \ The test benches are not only used to test the internals of the Forth system,
 \ and their edge cases, but also to document how the words should be used, so
-\ words which this test bench relies on and trivial words are also tested.
+\ words which this test bench relies on and trivial words are also tested. The
+\ best test bench is actually the cross compilation method used to create new 
+\ images with the metacompiler, it tests nearly every single aspect of the 
+\ Forth system.
+\ 
+\ It might be worth setting up another interpreter loop until the corresponding
+\ '}T' is reached so any exceptions can be caught and dealt with.
 \ 
 
+\ A few generic helper words will be built, to check if a word is defined, or
+\ not, and to conditionally execute a line.
 : undefined? token find nip 0= ; ( "name", -- f: Is word not in search order? )
 : defined? undefined? 0= ;       ( "name", -- f: Is word in search order? )
 : ?\ 0= if [compile] \ then ;    ( f --, <string>| : conditional compilation )
 
+\ As a space saving measure some standard words may not be defined in the
+\ core Forth image. If they are not defined, we define them here.
 undefined? 0<   ?\ : 0< 0 < ;
 undefined? 1-   ?\ : 1- 1 - ;
 undefined? 2*   ?\ : 2* 1 lshift ;
@@ -74,8 +90,8 @@ variable n        ( temporary store for 'equal' )
   dup >r
   equal nip 0= if
     .failed ." Argument Value Mismatch" cr 
-    ." expected:  " r@ ndisplay cr
-    ." got: "       r@ ndisplay cr
+    ." Expected:  " r@ ndisplay cr
+    ." Got: "       r@ ndisplay cr
     fail exit
   then r> 2* ndrop ;
 
@@ -87,8 +103,8 @@ only forth definitions test +order
 : }T depth vsp0 @ - vsp @ 2* ?stacks vsp @ ?equal pass .pass ; 
 : -> depth vsp0 @ - vsp ! ;
 : T{ depth vsp0 ! ;
-: statistics passed total ;
-: throws? [compile] ' catch >r empty-stacks r> ; ( "name", n -- f  )
+: statistics total @ passed @ ;
+: throws? [compile] ' catch >r empty-stacks r> ; ( "name" -- n  )
 
 hide test
 only forth definitions
@@ -143,13 +159,14 @@ T{  4 2 4 within ->  0 }T
 T{ 98 4 min      ->  4 }T
 T{  1  5 min     ->  1 }T
 T{ -1  5 min     -> -1 }T
+T{ -6  0 min     -> -6 }T
 T{  55 3 max     -> 55 }T
 T{ -55 3 max     ->  3 }T
 T{  3 10 max     -> 10 }T
 T{ -2 negate     ->  2 }T
 T{  0 negate     ->  0 }T
 T{  2 negate     -> -2 }T
-T{    char 0     -> $30 }T
+T{ $8000 negate  -> $8000 }T
 T{  0 aligned    ->  0 }T
 T{  1 aligned    ->  2 }T
 T{  2 aligned    ->  2 }T
@@ -213,21 +230,29 @@ T{ 2 2   throws? / -> 0 }T
 .( hex mode ) cr
 hex
 
-: s1 $" xxx" ;
-: s2 $" hello" ;
+: s1 $" xxx"   count ;
+: s2 $" hello" count ;
+: s3 $" 123"   count ;
+: <#> <# #s #> ; ( n -- b u )
 
 .( Test Strings: ) cr
-.( s1:  ) space s1 count type cr
-.( s2:  ) space s2 count type cr
+.( s1:  ) space s1 type cr
+.( s2:  ) space s2 type cr
+.( s3:  ) space s3 type cr
 
-T{ s1 count crc -> $C35A }T
-T{ s2 count crc -> $D26E }T
+T{ s1 crc -> $C35A }T
+T{ s2 crc -> $D26E }T
 
-T{ s1 count s1 count =string -> -1 }T
-T{ s1 count s2 count =string ->  0 }T
-T{ s2 count s1 count =string ->  0 }T
-T{ s2 count s2 count =string -> -1 }T
-hide s1 hide s2
+T{ s1 s1 =string -> -1 }T
+T{ s1 s2 =string ->  0 }T
+T{ s2 s1 =string ->  0 }T
+T{ s2 s2 =string -> -1 }T
+
+T{ s3  123 <#> =string -> -1 }T
+T{ s3 -123 <#> =string ->  0 }T
+T{ s3   99 <#> =string ->  0 }T
+
+hide s1 hide s2 hide s3
 
 T{ 0 ?dup -> 0 }T
 T{ 3 ?dup -> 3 3 }T
@@ -235,20 +260,132 @@ T{ 3 ?dup -> 3 3 }T
 T{ 1 2 3  rot -> 2 3 1 }T
 T{ 1 2 3 -rot -> 3 1 2 }T
 
+T{ 2 3 ' + execute -> 5 }T
+T{ : test-1 [ $5 $3 * ] literal ; test-1 -> $f }T
+
 .( Defined variable 'x' ) cr
 variable x 
-T{ 9 x ! x @ -> 9 }T
+T{ 9 x  ! x @ ->  9 }T
 T{ 1 x +! x @ -> $a }T
 hide x
 
+T{     0 invert -> -1 }T
+T{    -1 invert -> 0 }T
+T{       $5555 invert -> $aaaa }T
 
-0 ok!
+T{     0     0 and ->     0 }T
+T{     0    -1 and ->     0 }T
+T{    -1     0 and ->     0 }T
+T{    -1    -1 and ->    -1 }T
+T{ $fa50 $05af and -> $0000 }T
+T{ $fa50 $fa00 and -> $fa00 }T
+
+T{     0     0  or ->     0 }T
+T{     0    -1  or ->    -1 }T
+T{    -1     0  or ->    -1 }T
+T{    -1    -1  or ->    -1 }T
+T{ $fa50 $05af  or -> $ffff }T
+T{ $fa50 $fa00  or -> $fa50 }T
+
+T{     0     0 xor ->     0 }T
+T{     0    -1 xor ->    -1 }T
+T{    -1     0 xor ->    -1 }T
+T{    -1    -1 xor ->     0 }T
+T{ $fa50 $05af xor -> $ffff }T
+T{ $fa50 $fa00 xor -> $0050 }T
+
+T{ $ffff     1 um+ -> 0 1  }T
+T{ $40   $ffff um+ -> $3f 1  }T
+T{ 4         5 um+ -> 9 0  }T
+
+T{ $ffff     1 um* -> $ffff     0 }T
+T{ $ffff     2 um* -> $fffe     1 }T
+T{ $1004  $100 um* ->  $400   $10 }T
+T{     3     4 um* ->    $c     0 }T
+
+
+T{     1     1   < ->  0 }T
+T{     1     2   < -> -1 }T
+T{    -1     2   < -> -1 }T
+T{    -2     0   < -> -1 }T
+T{ $8000     5   < -> -1 }T
+T{     5    -1   < -> 0 }T
+
+T{     1     1  u< ->  0 }T
+T{     1     2  u< -> -1 }T
+T{    -1     2  u< ->  0 }T
+T{    -2     0  u< ->  0 }T
+T{ $8000     5  u< ->  0 }T
+T{     5    -1  u< -> -1 }T
+
+T{     1     1   = ->  -1 }T
+T{    -1     1   = ->   0 }T
+T{     1     0   = ->   0 }T
+
+T{   2 dup -> 2 2 }T
+T{ 1 2 nip -> 2 }T
+T{ 1 2 over -> 1 2 1 }T
+T{ 1 2 tuck -> 2 1 2 }T
+T{ 1 negate -> -1 }T
+T{ 3 4 swap -> 4 3 }T
+T{ 0 0= -> -1 }T
+T{ 3 0= ->  0 }T
+T{ -5 0< -> -1 }T
+T{ 1 2 3 2drop -> 1 }T
+
+T{ 1 2 lshift -> 4 }T
+T{ 1 $10 lshift -> 0 }T
+T{ $4001 4 lshift -> $0010 }T
+
+T{ 8     2 rshift -> 2 }T
+T{ $4001 4 rshift -> $0400 }T
+T{ $8000 1 rshift -> $4000 }T
+
+T{ 99 throws? throw -> 99 }T
+
+\ @todo u/mod tests, and more sign related tests
+T{ 50 10 /mod ->  0  5 }T
+T{ -4 3  /mod -> -1 -1 }T
+T{ -8 3  /mod -> -2 -2 }T
+
+.( Created word 'y' 0 , 0 , ) cr
+create y 0 , 0 ,
+T{ 4 5 y 2! -> }T
+T{ y 2@ -> 4 5 }T
+hide y
+
+: e1 $" 2 5 + " count ;
+: e2 $" 4 0 / " count ;
+: e3 $" : z [ 4 dup * ] literal ; " count ;
+.( e1: ) space e1 type cr
+.( e2: ) space e2 type cr
+.( e3: ) space e3 type cr
+T{ e1 evaluate -> 7 }T
+T{ e2 throws? evaluate -> $a negate }T
+T{ e3 evaluate z -> $10 }T
+hide e1 hide e2 hide e3 hide z
+
+T{ here 4 , @ -> 4 }T
+T{ here 0 , here cell- = -> -1 }T
+
+T{ depth depth depth -> 0 1 2 }T
+
+T{ char 0     -> $30 }T
+T{ char 1     -> $31 }T
+T{ char g     -> $67 }T
+T{ char ghijk -> $67 }T
+
+T{ #vocs 8 min -> 8 }T    \ minimum number of vocabularies is 8
+T{ b/buf      -> $400 }T  \ b/buf should always be 1024
+T{ sp@ 2 3 4 sp@ nip nip nip - abs chars -> 4 }T
+T{ here 4 allot -4 allot here = -> -1 }T
+
+\  T{ random random <> -> -1 }T
 
 .( TESTS COMPLETE ) cr
 decimal
-.( passed: ) statistics swap @ u. .( / ) @ 0 u.r cr
-statistics @ swap @ = ?\ .( [ALL PASSED] ) cr
-hex
-
-bye
+.( passed: ) statistics u. .( / ) 0 u.r cr
+.( here:   ) here . cr
+statistics  = ?\ .( [ALL PASSED] ) cr     bye
+statistics <> ?\ .( [FAILED]     ) cr -4 (bye)
 

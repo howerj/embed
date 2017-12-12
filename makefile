@@ -7,7 +7,7 @@ META=meta1.blk
 XX=meta2.blk
 TEMP=tmp.blk
 
-.PHONY: all clean run cross cross-run double-cross default static tests
+.PHONY: all clean run cross cross-run double-cross default static tests more
 
 default: all
 
@@ -49,6 +49,9 @@ tests: ${FORTH} ${META} unit.fth
 tron: CFLAGS += -DTRON
 tron: forth.c
 	${CC} ${CFLAGS} $< -o $@
+
+more: cross
+	${DF}${FORTH} i ${META} ${XX} more.fth
 
 static: CC = musl-gcc
 static: CFLAGS += -static

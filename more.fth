@@ -1,7 +1,27 @@
-0 ok!
+0 <ok> !
+\ This file contains utility functions, more of the core Forth word set,
+\ a soft floating point library and allocation functions. Different sections
+\ of the file come from different sources and are clearly marked.
+\ 
+\ This file contains experimental code, which may not work.
+\ 
 
-\ @todo Add these word definitions to an extension file, the floating
-\ point routines will have to go into yet another file
+\ @todo Adapt the pattern matcher from <http://c-faq.com/lib/regex.html>
+\ int match(char *pat, char *str)
+\ {
+\ 	switch(*pat) {
+\ 	case '\0':  return !*str;
+\ 	case '*':   return match(pat+1, str) ||
+\ 				*str && match(pat, str+1);
+\ 	case '?':   return *str && match(pat+1, str+1);
+\ 	default:    return *pat == *str && match(pat+1, str+1);
+\ 	}
+\ }
+ 
+\ variable hidden hidden +order
+\ : hidden: get-current >r hidden set-current : r> set-current ;
+
+\ @todo Hide internal words in a separate vocabulary
 \ @todo Document all the new words, including stack comments
 : dnegate invert >r invert 1 um+ r> + ; ( d -- d )
 : 2* 1 lshift  ;
@@ -15,6 +35,7 @@
 : d- dnegate d+ ;
 : not invert ;
 : d0= 0= swap 0= and ;
+: d= rot = -rot = and ;
 : 2swap >r -rot r> -rot ;
 : dabs  dup 0< if dnegate then ;
 : s>d dup 0< ; 
@@ -29,32 +50,61 @@ $f constant #bits
    next
    drop swap exit
  then drop 2drop -1 dup ;
+: 2over ( n1 n2 n3 n4 -- n1 n2 n3 n4 n1 n2 )
+  >r >r 2dup r> swap >r swap r> r> -rot ;
+
+$fffe constant rp0
+: rdepth rp0 rp@ - chars ;
+\ @todo 'rpick' picks the wrong way around
+: rpick cells cell+ rp0 swap - @ ; 
+
+\ @todo do not print out 'r.s' on its loop counter when 'r.s' runs
+: r.s ( -- print out the return stack )
+  [char] < emit rdepth 0 u.r [char] > emit
+  rdepth for aft r@ rpick then next 
+  rdepth for aft u. then next ;
+
 : +leading ( b u -- b u: skip leading space )
     begin over c@ dup bl = swap 9 = or while 1 /string repeat ;
 
 \ @todo fix >number and numeric input to work with doubles...
 : >d ( a u -- d|ud )
-    0 0 2swap +leading
-    ?dup if
-	0 >r ( sign )
-	over c@
-	dup  [char] - = if drop rdrop -1 >r 1 /string 
-	else [char] + = if 1 /string then then
-	>number 2drop
-	r> if dnegate then ( retrieve sign )
-    else drop then ;
+  0 0 2swap +leading
+  ?dup if
+    0 >r ( sign )
+    over c@
+    dup  [char] - = if drop rdrop -1 >r 1 /string 
+    else [char] + = if 1 /string then then
+    >number 2drop
+    r> if dnegate then ( retrieve sign )
+  else drop then ;
 
 : extract dup >r um/mod r> swap >r um/mod r> rot ; ( ud ud -- ud u )
 : digit  9 over < 7 and + [char] 0 + ;    ( u -- c )
 : #> 2drop hld @ pad over - ;             ( w -- b u )
-: # 0 base @ extract digit hold ;          ( d -- d )
-: #s begin # 2dup d0= until ; ( u -- 0 )
-: <# pad hld ! ;                           ( -- )
+: # 0 base @ extract digit hold ;         ( d -- d )
+: #s begin # 2dup d0= until ;             ( u -- 0 )
+: <# pad hld ! ;                          ( -- )
 
-: 2, swap , , ;
+: 2, , , ;
 : 2constant create 2, does> 2@ ;
 : 2variable create 2, does> ;
+: rdup r> r> dup >r >r >r ;  ( --, R: u -- u u )
 
+: log ( u base -- u : command the integer logarithm of u in base )
+  >r dup 0= if -$b throw then ( logarithm of zero is an error )
+  0 swap begin
+    swap 1+ swap r@ / dup 0= ( keep dividing until 'u' is zero )
+  until
+  drop 1- rdrop ;
+
+: log2 2 log ; ( u -- u : binary integer logarithm )
+
+: #digits ( u -- u : characters needed to represent 'u' in base )
+  dup 0= if 1+ exit then base @ log 1+ ;
+
+: digits ( -- u : characters needed to represent largest number in base )
+ -1 #digits ;
 
 \ : (do)  r> dup >r swap rot >r >r cell+ >r ;  compile-only 
 \ : do compile (do) 0 , here ;  compile-only  immediate
@@ -74,7 +124,84 @@ $f constant #bits
 \ : loop  
 \   compile (loop) dup , compile (unloop) cell- here 1 rshift swap ! ; 
 \     compile-only  immediate
+
+\ ## Dynamic Memory Allocation
+\ alloc.fth
+\  Dynamic Memory Allocation package
+\  this code is an adaptation of the routines by
+\  Dreas Nielson, 1990; Dynamic Memory Allocation;
+\  Forth Dimensions, V. XII, No. 3, pp. 17-27
+\ @todo This could use refactoring and better error checking, 'free' could
+\ check that its arguments are within bounds and on the free list
+
+\ pointer to beginning of free space
+variable freelist  0 , 
+
+\ : cell_size ( addr -- n ) >body cell+ @ ;       \ gets array cell size
+
+: initialize ( start_addr length -- : initialize memory pool )
+  over dup freelist !  0 swap !  swap cell+ ! ;
+
+: allocate ( u -- addr ior ) \ allocate n bytes, return pointer to block
+                             \ and result flag ( 0 for success )
+                             \ check to see if pool has been initialized 
+  freelist @ 0= abort" pool not initialized! " 
+  cell+ freelist dup
+  begin
+  while dup @ cell+ @ 2 pick u<
+    if 
+      @ @ dup   \ get new link
+    else   
+      dup @ cell+ @ 2 pick - 2 cells max dup 2 cells =
+      if 
+        drop dup @ dup @ rot !
+      else  
+        over over swap @ cell+ !   swap @ +
+      then
+      over over ! cell+ 0  \ store size, bump pointer
+    then                   \ and set exit flag
+  repeat
+  swap drop
+  dup 0= ;
+
+: free ( ptr -- ior ) \ free space at ptr, return status ( 0 for success )
+  1 cells - dup @ swap over over cell+ ! freelist dup
+  begin
+    dup 3 pick u< and
+  while
+    @ dup @
+  repeat
+
+  dup @ dup 3 pick ! ?dup
+  if 
+    dup 3 pick 5 pick + =
+    if 
+      dup cell+ @ 4 pick + 3 pick cell+ ! @ 2 pick !
+    else  
+      drop 
+    then
+  then
+
+  dup cell+ @ over + 2 pick =
+  if  
+    over cell+ @ over cell+ dup @ rot + swap ! swap @ swap !
+  else 
+    !
+  then
+  drop 0 ; \ this code always returns a success flag
+
+\ create pool  1000 allot
+\ pool 1000 dynamic-mem
+\ 5000 1000 initialize
+\ 5000 100 dump
+\ 40 allocate throw
+\ 80 allocate throw .s swap free throw .s 20 allocate throw .s cr
  
+
+\ ===========================================================================
+\                         SOFT FLOATING POINT  
+\ ===========================================================================
+\ 
 \ The following section implements the floating point word set in Forth, it 
 \ does so with an unusual way of representing floating point numbers, but it
 \ works and the word definitions are very small. The special values such
@@ -105,33 +232,34 @@ $f constant #bits
 
 hex
 
-: zero  over 0= if drop 0 then ;
-: fnegate 8000 xor zero ;
-: fabs  7fff and ;
 : norm  
   >r 2dup or
   if begin dup 0< not
     while d2* r> 1- >r
     repeat swap 0< - ?dup
-    if r> else 8000 r> 1+ then
+    if r> else $8000 r> 1+ then
   else r> drop then ;
 
+: zero  over 0= if drop 0 then ;
+: fnegate $8000 xor zero ;
+: fabs  $7fff and ;
 : f2*   1+ zero ;
-: f*    rot + 4000 - >r um* r> norm ;
+: f*    rot + $4000 - >r um* r> norm ;
 : fsq   2dup f* ;
 : f2/   1- zero ;
 : um/   dup >r um/mod swap r> over 2* 1+ u< swap 0< or - ;
-: f/    
-  rot swap - 4000 + >r
+: nalign $20 min for aft d2/ then next ;
+: ralign 1- ?dup if nalign then 1 0 d+ d2/ ;
+: fsign fabs over 0< if >r dnegate r> $8000 or then ;
+
+: f0= d0= ;
+: f/ 
+  2dup f0= if -$2a throw then
+  rot swap - $4000 + >r
   0 -rot 2dup u<
   if   um/ r> zero
   else >r d2/ fabs r> um/ r> 1+
   then ;
-
-\ : align 20 min 0 do d2/ loop ;
-: nalign 20 min for aft d2/ then next ;
-: ralign 1- ?dup if nalign then 1 0 d+ d2/ ;
-: fsign fabs over 0< if >r dnegate r> 8000 or then ;
 
 : f+ rot 2dup >r >r fabs swap fabs -
   dup if dup 0<
@@ -141,19 +269,18 @@ hex
   then swap 0 r> r@ xor 0<
     if   r@ 0< if 2swap then d-
       r> fsign rot swap norm
-    else d+ if 1+ 2/ 8000 or r> 1+
+    else d+ if 1+ 2/ $8000 or r> 1+
       else r> then then ;
 
 : f-    fnegate f+ ;
 : f<    f- 0< swap drop ;
-: shifts fabs 4010 - dup 0< not if ( abort" too big" ) $2e throw then negate ;
-: dfloat 4020 fsign norm ;
+: shifts fabs $4010 - dup 0< not if -$2e throw then negate ;
+: dfloat $4020 fsign norm ;
 : float dup 0< dfloat ;
 : -+    drop swap 0< if negate then ;
 : fix   tuck 0 swap shifts ralign -+ ;
 : int   tuck 0 swap shifts nalign -+ ;
 
-\ @todo check these functions, and in different bases
 create pl 3 ,                  \ Double Number Table
    $1   $0 , ,    $a    $0 , , \ 1           - 10
   $64   $0 , ,  $3e8    $0 , , \ 100         - 1,000
@@ -163,14 +290,32 @@ $e100 $5f5 , , $ca00 $3b9a , , \ 100,000,000 - 1,000,000,000
 
 : tens  2* 2* [ pl cell+ ] literal + 2@ ; 
 : places pl ! ;
-: f#    >r pl @ tens drop um* r> shifts
-        ralign pl @ ?dup if ( 0 do # loop ) for aft # then next
-        [char] . hold then #s rot sign ;
+: f# base @ >r decimal >r pl @ tens drop um* r> shifts
+     ralign pl @ ?dup if 
+       for aft # then next
+       [char] . hold 
+     then #s rot sign r> base ! ;
 : f.    tuck <# f# #> type space ;
 
-hide nalign
-hide ralign
-hide shifts
+\ @bug '.f' is a hack, it is super buggy, and doesn't work for negative floats
+\ This can be fixed by changing the f+ to f- if negative, it also needs to
+\ leading zeros, and large unsigned numbers (that also could be negative)
+: .f swap float rot dup #digits >r float r> tens dfloat f/ f+ ; ( u u -- F )
+: fconstant .f 2constant ;
+
+\ @bug These routines do not work correctly
+1 0                fconstant one decimal     ( 1.      )
+34 6680            fconstant x1              ( 34.6680 )
+28914 0 .f fnegate f2* 2constant x2          ( -57828. )
+2001 18            fconstant x3              ( 2001.18 )
+1 4427             fconstant x4             ( 1.4427 )
+hex
+
+: exp   2dup int dup >r float f-
+        f2* x2 2over fsq x3 f+ f/
+        2over f2/ f-     x1 f+ f/
+        one f+ fsq r> + ;
+: fexp  x4 f* exp ;
 
 bye
 
@@ -220,7 +365,8 @@ create pl 3 , here  ,001 , ,   ,010 , ,
         [char] e hold f# #>     type space ;
 
 bye
-\ ======================  The Original File ==================================
+\ ## Appendix 
+\ ### Floating Point File 
 
 Vierte Dimension Vol.2, No.4 1986
 

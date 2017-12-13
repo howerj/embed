@@ -58,8 +58,8 @@ variable n        ( temporary store for 'equal' )
 : empty-stacks depth ndrop ;             ( a0...an -- )
 : .pass   ."   ok: " space quine ;       ( -- )
 : .failed ." fail: " space quine ;       ( -- )
-: pass  passed 1+! total 1+! ;           ( -- )
-: fail total 1+! empty-stacks -b throw ; ( -- )
+: pass passed 1+! ;                      ( -- )
+: fail empty-stacks -b throw ;           ( -- )
 
 \ 'equal' is the most complex word in this test bench, it tests whether two
 \ groups of numbers of the same length are equal, the length of the numbers
@@ -102,7 +102,7 @@ only forth definitions test +order
 
 : }T depth vsp0 @ - vsp @ 2* ?stacks vsp @ ?equal pass .pass ; 
 : -> depth vsp0 @ - vsp ! ;
-: T{ depth vsp0 ! ;
+: T{ depth vsp0 ! total 1+! ;
 : statistics total @ passed @ ;
 : throws? [compile] ' catch >r empty-stacks r> ; ( "name" -- n  )
 
@@ -366,7 +366,7 @@ T{ e3 evaluate z -> $10 }T
 hide e1 hide e2 hide e3 hide z
 
 T{ here 4 , @ -> 4 }T
-T{ here 0 , here cell- = -> -1 }T
+T{ here 0 , here swap cell+ = -> -1 }T
 
 T{ depth depth depth -> 0 1 2 }T
 

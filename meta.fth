@@ -712,7 +712,7 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 0 tlocation cp                ( Dictionary Pointer: Set at end of file )
 0 tlocation root-voc          ( root vocabulary )
 0 tlocation editor-voc        ( editor vocabulary )
-0 tlocation assembler-voc     ( assembler vocabulary )
+\ 0 tlocation assembler-voc     ( assembler vocabulary )
 0 tlocation _forth-wordlist   ( set at the end near the end of the file )
 0 tlocation current           ( WID to add definitions to )
 
@@ -747,7 +747,7 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ 'forth-wordlist' and in the assembly search order.
 \ 
 
-: nop      nop      ; ( -- : do nothing )
+\ : nop      nop      ; ( -- : do nothing )
 : dup      dup      ; ( n -- n n : duplicate value on top of stack )
 : over     over     ; ( n1 n2 -- n1 n2 n1 : duplicate second value on stack )
 : invert   invert   ; ( u -- u : bitwise invert of value on top of stack )
@@ -879,7 +879,7 @@ there constant inline-end
 \ to this problem, but they are not worth further complicating the Forth just
 \ yet. 
 
-[last] [t] assembler-voc t!
+\ [last] [t] assembler-voc t!
 
 $2       tconstant cell  ( size of a cell in bytes )
 $0       tvariable >in   ( Hold character pointer when parsing input )
@@ -982,7 +982,7 @@ h: over- over - ;           ( u u -- u u )
 h: over+ over + ;           ( u1 u2 -- u1 u1+2 )
 : aligned dup first-bit + ; ( b -- a )
 : bye 0 (bye) ;             ( -- : leave the interpreter )
-: cell- cell - ;            ( a -- a : adjust address to previous cell )
+h: cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+ cell + ;            ( a -- a : move address forward to next cell )
 : cells 1 lshift ;          ( n -- n : convert cells count to address count )
 : chars 1 rshift ;          ( n -- n : convert bytes to number of cells )
@@ -2154,8 +2154,8 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
    string@ r> swap ccitt >r 1 /string
   repeat 2drop r> ;
 
-: random ( -- u : pseudo random number )
-  seed @ 0= seed toggle seed @ 0 ccitt dup seed ! ; 
+\ : random ( -- u : pseudo random number )
+\  seed @ 0= seed toggle seed @ 0 ccitt dup seed ! ; 
 
 \ ## I/O Control 
 \ The I/O control section is a relic from eForth that is not really needed
@@ -2289,13 +2289,13 @@ h: (order)                                    ( w wid*n n -- wid*n w n )
 : +order dup>r -order get-order r> swap 1+ set-order ; ( wid -- )
 
 : editor decimal editor-voc +order ;                   ( -- )
-: assembler root-voc assembler-voc 2 set-order ;       ( -- )
-: ;code assembler ; immediate                          ( -- )
-: code postpone : assembler ;                          ( -- )
+\ : assembler root-voc assembler-voc 2 set-order ;       ( -- )
+\ : ;code assembler ; immediate                          ( -- )
+\ : code postpone : assembler ;                          ( -- )
 
-xchange _forth-wordlist assembler-voc
-: end-code forth postpone ; ; immediate ( -- )
-xchange assembler-voc _forth-wordlist
+\ xchange _forth-wordlist assembler-voc
+\ : end-code forth postpone ; ; immediate ( -- )
+\ xchange assembler-voc _forth-wordlist
 
 \ ## Block Word Set
 \ The block word set abstracts out how access to mass storage works in just

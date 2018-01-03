@@ -570,7 +570,7 @@ a: return ( -- : Compile a return into the target )
 : dup-@   ]asm  #[t]     t->n   d+1 alu asm[ ;
 : dup>r   ]asm  #t       t->r   r+1 alu asm[ ;
 : 2dup=   ]asm  #t==n    t->n   d+1 alu asm[ ;
-: 2dup-xor ]asm #t^n     t->n   d+1 alu asm[ ;
+: 2dupxor ]asm #t^n     t->n   d+1 alu asm[ ;
 : rxchg   ]asm  #r       t->r       alu asm[ ;
 
 \ 'for' needs the new definition of '>r' to work correctly.
@@ -601,6 +601,7 @@ $40   constant c/l         ( characters per line in a block )
 $10   constant l/b         ( lines in a block )
 $4400 constant sp0         ( start of variable stack )
 $7fff constant rp0         ( start of return stack )
+$2bad constant magic       ( magic number for compiler security )
 
 ( Volatile variables )
 $4000 constant <test>      ( used in skip/test )
@@ -1146,8 +1147,10 @@ h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 
 
 \ 'key' retrieves a single character of input, it is a vectored word so the
-\ method used to get data can be changed. It also calls 'bye' is the End of
-\ File character is returned (-1, which is outside the normal byte range).
+\ method used to get data can be changed. 
+\ 
+\ It calls 'bye' if the End of File character is returned (-1, which is 
+\ outside the normal byte range).
 \ 
 
 : key <key> @execute dup [-1] = if bye 0x0000 exit then ; ( -- c )
@@ -1163,6 +1166,30 @@ h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 h: +string 1 /string ;                 ( b u -- b u : )
 : count dup 1+ swap c@ ;               ( b -- b u )
 h: string@ over c@ ;                   ( b u -- b u c )
+
+\ 'crc' computes the 16-bit CCITT CRC over a segment of memory, and 'ccitt'
+\ is the word that does the polynomial checking. It can be also be used as a
+\ crude Pseudo Random Number Generator. CRC routines are useful for detecting
+\ memory corruption in the Forth image.
+\ 
+
+h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
+  over $8 rshift xor   ( crc x )
+  dup  $4 rshift xor   ( crc x )
+  dup  $5 lshift xor   ( crc x )
+  dup  $c lshift xor   ( crc x )
+  swap $8 lshift xor ; ( crc )
+
+: crc ( b u -- u : calculate ccitt-ffff CRC )
+  $ffff >r
+  begin
+    dup
+  while
+   string@ r> swap ccitt >r 1 /string
+  repeat 2drop r> ;
+
+\ : random ( -- u : pseudo random number )
+\  seed @ 0= seed toggle seed @ 0 ccitt dup seed ! ; 
 
 \ 'address' and '@address' are for use with the previous word point in the word 
 \ header,  the top two bits for other purposes (a 'compile-only' and an 
@@ -1198,7 +1225,7 @@ h: last get-current @address ;         ( -- pwd )
 \ h: echo <echo> @execute ;            ( c -- )
 : emit <emit> @execute ;               ( c -- : write out a char )
 : cr =cr emit =lf emit ;               ( -- : emit a newline )
-h: colon [char] : emit ; ( -- )
+h: colon [char] : emit ;               ( -- )
 : space =bl emit ;                     ( -- : emit a space )
 h: spaces =bl fallthrough;             ( +n -- )
 h: nchars                              ( +n c -- : emit c n times )
@@ -1225,7 +1252,7 @@ h: nchars                              ( +n c -- : emit c n times )
 \ 
 
 : depth sp@ sp0 - chars ;             ( -- u : get current depth )
-: pick cells sp@ swap - @ ;            ( vn...v0 u -- vn...v0 vu )
+: pick cells sp@ swap - @ ;           ( vn...v0 u -- vn...v0 vu )
 
 \ '>char' takes a character and converts it to an underscore if it is not
 \ printable, which is useful for printing out arbitrary sections of memory
@@ -1620,7 +1647,7 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 : accept ( b u -- b u )
   over+ over
   begin
-    2dup-xor
+    2dupxor
   while
     key dup =lf xor if tap else drop nip dup then
     \ The alternative 'accept' code replaces the line above:
@@ -2001,21 +2028,6 @@ h: ?length dup word-length u> if $13 -throw exit then ;
 
 \ ## The Interpreter
 
-h: preset ( tib ) tib-start #tib cell+ ! 0 in! 0 id ! ;
-: ] [-1]       state ! ;
-: [  0 state ! ; immediate
-
-h: ?error ( n -- : perform actions on error )
-  ?dup if
-    .             ( print error number )
-    [char] ? emit ( print '?' )
-    cr
-    sp0 sp!       ( empty stack )
-    preset        ( reset I/O streams )
-    [             ( back into interpret mode )
-    exit
-  then ;
-
 h: ?dictionary dup $3f00 u> if 8 -throw exit then ;
 : , here dup cell+ ?dictionary cp! ! ; ( u -- : store 'u' in dictionary )
 : c, here ?dictionary c! cp 1+! ; ( c -- : store 'c' in the dictionary )
@@ -2117,18 +2129,78 @@ h: parse-string [char] " word count + cp! ;              ( -- )
 : ."  compile .string parse-string ; immediate compile-only ( <string>, -- )
 : abort [-1] (bye) ;                                           ( -- )
 h: ?abort swap if print cr abort else drop then ;              ( u a -- )
-h: {abort} do$ ?abort ;                                        ( -- )
-: abort" compile {abort} parse-string ; immediate compile-only ( u -- ) 
+h: (abort) do$ ?abort ;                                        ( -- )
+: abort" compile (abort) parse-string ; immediate compile-only ( u -- ) 
 
 \ ## Evaluator
+\ With the following few words extra words we will have a working Forth 
+\ interpreter, capable of reading in a line of text and executing it. More
+\ words will need to be defined to make the system usable, as well as some
+\ house keeping.
+\ 
+\ 'quit' is the name for the word which implements the interpreter loop,
+\ which is an odd name for its function, but this is what it is traditionally
+\ called. 'quit' calls a few minor functions:
+\ 
+\ * '<ok>', which is the execution vector for the Forth prompt, its contents
+\ are executed by 'eval'.
+\ * '(ok)' defines the default prompt, it only prints 'ok' if we are in 
+\ command mode.
+\ * '[' and ']' for changing the interpreter state to command and compile mode
+\ respectively. Note that '[' must be an immediate word.
+\ * 'preset' which resets the input line variables
+\ * '?error' handles an error condition from 'throw', it forms the error
+\ handling part of the error handler of last resort. It prints out the
+\ non-zero error number that occurred and attempts to return the interpreter
+\ into a sensible state.
+\ * '?depth' checks for a stack underflow
+\ * 'eval' tokenizes the current input line which 'quit' has fetched and
+\ calls 'interpret' on each token until there is no more. Any errors that
+\ occur within 'interpreter' or 'eval' will be caught by 'quit'.
+
+h: preset tib-start #tib cell+ ! 0 in! 0 id ! ;
+: ] [-1] state ! ;
+: [   0  state ! ; immediate
+
+h: ?error ( n -- : perform actions on error )
+  ?dup if
+    .             ( print error number )
+    [char] ? emit ( print '?' )
+    cr
+    sp0 sp!       ( empty stack )
+    preset        ( reset I/O streams )
+    [             ( back into interpret mode )
+    exit
+  then ;
 
 h: (ok) command? if ."  ok  " cr exit then ;  ( -- )
-h: ok <ok> @execute ;                         ( -- : execute prompt )
 h: ?depth sp@ sp0 u< if 4 -throw exit then ;  ( u -- : depth check )
-h: eval begin token dup c@ while interpret ?depth repeat drop ok ; ( -- )
+h: eval ( -- )
+  begin
+    token dup c@ 
+  while 
+    interpret ?depth 
+  repeat drop <ok> @execute ; 
+
+\ 'quit' can now be defined, it sets up the input line variables, sets the 
+\ interpreter into command mode, enters an infinite loop it does not exit 
+\ from, and within that loop it reads in a line of input, evaluates it and 
+\ processes any errors that occur, if any.
+
 : quit preset [ begin query ' eval catch ?error again ; ( -- )
 
-h: get-input source in@ id @ <ok> @ ; ( -- n1...n5 )
+\ 'evaluate' is used to evaluate a string of text as if it were typed in by
+\ the programmer. It takes an address and its length, this is used in the
+\ word 'load'. It needs two new words apart from 'eval', which are 'get-input'
+\ and 'set-input', these two words are used to retrieve and set the input
+\ input stream, which 'evaluate' needs to manipulate. 'evaluate' saves the
+\ current input stream specification and changes it to the new string, 
+\ restoring to what it was before the evaluation took place. It is careful
+\ to catch errors and always perform the restore, any errors that thrown are
+\ rethrown after the input is restored.
+\ 
+
+h: get-input source in@ id @ <ok> @ ;    ( -- n1...n5 )
 h: set-input <ok> ! id ! in! #tib 2! ;   ( n1...n5 -- )
 : evaluate ( a u -- )
   get-input 2>r 2>r >r
@@ -2136,26 +2208,6 @@ h: set-input <ok> ! id ! in! #tib 2! ;   ( n1...n5 -- )
   ' eval catch
   r> 2r> 2r> set-input
   throw ;
-
-\ ## Miscellaneous Words
-
-h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
-  over $8 rshift xor   ( crc x )
-  dup  $4 rshift xor   ( crc x )
-  dup  $5 lshift xor   ( crc x )
-  dup  $c lshift xor   ( crc x )
-  swap $8 lshift xor ; ( crc )
-
-: crc ( b u -- u : calculate ccitt-ffff CRC )
-  $ffff >r
-  begin
-    dup
-  while
-   string@ r> swap ccitt >r 1 /string
-  repeat 2drop r> ;
-
-\ : random ( -- u : pseudo random number )
-\  seed @ 0= seed toggle seed @ 0 ccitt dup seed ! ; 
 
 \ ## I/O Control 
 \ The I/O control section is a relic from eForth that is not really needed
@@ -2174,10 +2226,28 @@ h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) <ok> ! ;
 \ h: pace 11 emit ;
 \ t: file ' pace ' drop ' ktap xio ;
 
-\ ## Control Structures
+\ ## Control Structures and defining words
+\ The next set of words defines relating to control structures and defining
+\ new words, along with some basic error checking for the control structures 
+\ (which is known as 'compiler security' in the Forth community). Some of the
+\ words defined here are quite complex, even if their definitions are only
+\ a few lines long.
+\ 
+\ Control structure words include 'if', 'else', 'then', 'begin', 'again',
+\ 'until', 'for', 'next', 'recurse' and 'tail'. These words are all immediate
+\ words and are also compile only.
+\ 
+\ New control structure words can be defined by the user quite easily, for 
+\ example a word called 'unless' can be made which executes a clause if the 
+\ test provided is false, which is the opposite of 'if'. This is one of the
+\ many unique features of Forth, that new words can be defined.
+\ 
+\ 
 
-h: ?check ( $cafe -- : check for magic number on the stack )
-   $cafe <> if $16 -throw exit then ;
+\ @todo rename some primitives to their 'mark' and 'resolve' equivalents
+
+h: ?check ( magic-number -- : check for magic number on the stack )
+   magic <> if $16 -throw exit then ;
 h: ?unique ( a -- a : print a message if a word definition is not unique )
   dup last @ searcher
   if
@@ -2195,32 +2265,31 @@ h: find-cfa token find if cfa exit then not-found ; ( -- xt, <string> )
 : ; ( ?quit ) ?check =exit , [ fallthrough; immediate compile-only
 h: get-current! ?dup if get-current ! exit then ; ( -- wid )
 : : align here dup last-def ! ( "name", -- colon-sys )
-    last , token ?nul ?unique count + cp! $cafe ] ;
+    last , token ?nul ?unique count + cp! magic ] ;
 : begin here  ; immediate compile-only      ( -- a )
-: until fallthrough; immediate compile-only  ( a -- )
-h: jumpz, chars $2000 or , ;
-: again fallthrough; immediate compile-only
-h: jump, chars ( $0000 or ) , ;
+: until chars $2000 or , ; immediate compile-only  ( a -- )
+: again chars , ; immediate compile-only ( a -- )
 h: here-0 here 0x0000 ;
-: if here-0 jumpz, ; immediate compile-only
+h: >mark here-0 postpone again ; 
+: if here-0 postpone until ; immediate compile-only
 : then fallthrough; immediate compile-only
-h: doThen  here chars over @ or swap! ;
-: else here-0 jump, swap doThen ; immediate compile-only
+h: >resolve here chars over @ or swap! ;
+: else >mark swap >resolve ; immediate compile-only
 : while postpone if ; immediate compile-only
 : repeat swap postpone again postpone then ; immediate compile-only
 h: last-cfa last-def @ cfa ;  ( -- u )
 : recurse last-cfa compile, ; immediate compile-only
-: tail last-cfa jump, ; immediate compile-only
+: tail last-cfa postpone again ; immediate compile-only
 : create postpone : drop compile doVar get-current ! [ ;
-: >body cell+ ;
+: >body cell+ ; ( a -- a )
 h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 : does> compile doDoes nop ; immediate compile-only
 : variable create 0 , ;
 : constant create ' doConst make-callable here cell- ! , ;
-: :noname here 0 $cafe ]  ;
+: :noname here-0 magic ]  ;
 : for =>r , here ; immediate compile-only
 : next compile doNext , ; immediate compile-only
-: aft drop here-0 jump, postpone begin swap ; immediate compile-only
+: aft drop >mark postpone begin swap ; immediate compile-only
 \ : doer create =exit last-cfa ! =exit ,  ;
 \ : make ( "name1", "name2", -- : make name1 do name2 )
 \  find-cfa find-cfa make-callable
@@ -2241,7 +2310,8 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 \ and controls visibility of words.
 \ 
 
-h: find-empty-cell begin dup-@ while cell+ repeat ; ( a -- a )
+h: find-empty-cell 0 fallthrough; ( a -- )
+h: find-cell >r begin dup-@ r@ <> while cell+ repeat rdrop ; ( u a -- a )
 
 : get-order ( -- widn ... wid1 n : get the current search order )
   context

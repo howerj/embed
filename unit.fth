@@ -233,7 +233,7 @@ hex
 : s1 $" xxx"   count ;
 : s2 $" hello" count ;
 : s3 $" 123"   count ;
-: <#> <# #s #> ; ( n -- b u )
+: <#> 0 <# #s #> ; ( n -- b u )
 
 .( Test Strings: ) cr
 .( s1:  ) space s1 type cr
@@ -377,7 +377,7 @@ T{ char ghijk -> $67 }T
 
 T{ #vocs 8 min -> 8 }T    \ minimum number of vocabularies is 8
 T{ b/buf      -> $400 }T  \ b/buf should always be 1024
-T{ sp@ 2 3 4 sp@ nip nip nip - abs chars -> 4 }T
+defined? sp@ \? T{ sp@ 2 3 4 sp@ nip nip nip - abs chars -> 4 }T
 T{ here 4 allot -4 allot here = -> -1 }T
 
 \  T{ random random <> -> -1 }T

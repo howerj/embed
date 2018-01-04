@@ -20,6 +20,10 @@
  
 \ variable hidden hidden +order
 \ : hidden: get-current >r hidden set-current : r> set-current ;
+only forth definitions
+variable more
+more +order definitions
+: m: get-current >r [compile] : r> set-current ;
 
 \ @todo Hide internal words in a separate vocabulary
 \ @todo Document all the new words, including stack comments
@@ -34,35 +38,23 @@
 : d+ rot + -rot um+ rot + ;
 : d- dnegate d+ ;
 : not invert ;
-: d0= 0= swap 0= and ;
 : d= rot = -rot = and ;
 : 2swap >r -rot r> -rot ;
 : dabs  dup 0< if dnegate then ;
 : s>d dup 0< ; 
-$f constant #bits
-: um/mod ( ud u -- ur uq )
- ?dup 0= if -a throw then
- 2dup u<
- if negate #bits
-   for >r dup um+ >r >r dup um+ r> + dup
-     r> r@ swap >r um+ r> or
-     if >r drop 1+ r> else drop then r>
-   next
-   drop swap exit
- then drop 2drop -1 dup ;
 : 2over ( n1 n2 n3 n4 -- n1 n2 n3 n4 n1 n2 )
   >r >r 2dup r> swap >r swap r> r> -rot ;
 
-$fffe constant rp0
-: rdepth rp0 rp@ - chars ;
+\ $fffe constant rp0
+\ : rdepth rp0 rp@ - chars ;
 \ @todo 'rpick' picks the wrong way around
-: rpick cells cell+ rp0 swap - @ ; 
+\ : rpick cells cell+ rp0 swap - @ ; 
 
 \ @todo do not print out 'r.s' on its loop counter when 'r.s' runs
-: r.s ( -- print out the return stack )
-  [char] < emit rdepth 0 u.r [char] > emit
-  rdepth for aft r@ rpick then next 
-  rdepth for aft u. then next ;
+\ : r.s ( -- print out the return stack )
+\  [char] < emit rdepth 0 u.r [char] > emit
+\  rdepth for aft r@ rpick then next 
+\  rdepth for aft u. then next ;
 
 : +leading ( b u -- b u: skip leading space )
     begin over c@ dup bl = swap 9 = or while 1 /string repeat ;
@@ -78,14 +70,6 @@ $fffe constant rp0
     >number 2drop
     r> if dnegate then ( retrieve sign )
   else drop then ;
-
-: extract dup >r um/mod r> swap >r um/mod r> rot ; ( ud ud -- ud u )
-: digit  9 over < 7 and + [char] 0 + ;    ( u -- c )
-: #> 2drop hld @ pad over - ;             ( w -- b u )
-: # 0 base @ extract digit hold ;         ( d -- d )
-: #s begin # 2dup d0= until ;             ( u -- 0 )
-: <# pad hld ! ;                          ( -- )
-
 : 2, , , ;
 : 2constant create 2, does> 2@ ;
 : 2variable create 2, does> ;
@@ -106,6 +90,8 @@ $fffe constant rp0
 : digits ( -- u : characters needed to represent largest number in base )
  -1 #digits ;
 
+\ ## DO LOOP
+
 \ : (do)  r> dup >r swap rot >r >r cell+ >r ;  compile-only 
 \ : do compile (do) 0 , here ;  compile-only  immediate
 \ : (leave) r> drop r> drop r> drop ;  compile-only 
@@ -124,6 +110,34 @@ $fffe constant rp0
 \ : loop  
 \   compile (loop) dup , compile (unloop) cell- here 1 rshift swap ! ; 
 \     compile-only  immediate
+
+\ ## Terminal Handling
+
+variable <page>
+variable <at-xy>
+
+: not-implemented -$f throw ;
+' not-implemented <page>  !
+' not-implemented <at-xy> !
+
+: page <page> @ execute ;   ( -- : page screen )
+: at-xy <at-xy> @ execute ; ( x y -- : set cursor position )
+
+: CSI $1b emit [char] [ emit ; 
+: 10u. base @ >r decimal 0 <# #s #> type r> base ! ; ( u -- )
+: ansi swap CSI 10u. emit ; ( n c -- )
+: (at-xy) CSI 10u. $3b emit 10u. [char] H emit ; ( x y -- )
+: (page) 2 [char] J ansi 1 1 at-xy ; ( -- )
+: sgr [char] m ansi ; ( -- )
+
+1 constant red 2 constant green 4 constant blue
+
+: color $1e + sgr ;
+
+
+' (at-xy) <at-xy> !
+' (page)  <page>  !
+
 
 \ ## Dynamic Memory Allocation
 \ alloc.fth
@@ -241,13 +255,13 @@ hex
   else r> drop then ;
 
 : zero  over 0= if drop 0 then ;
-: fnegate $8000 xor zero ;
-: fabs  $7fff and ;
-: f2*   1+ zero ;
-: f*    rot + $4000 - >r um* r> norm ;
-: fsq   2dup f* ;
-: f2/   1- zero ;
-: um/   dup >r um/mod swap r> over 2* 1+ u< swap 0< or - ;
+: fnegate $8000 xor zero ; ( f -- f )
+: fabs  $7fff and ; ( f -- f )
+: f2*   1+ zero ; ( f -- f )
+: f*    rot + $4000 - >r um* r> norm ; ( f f -- f )
+: fsq   2dup f* ; ( f -- f )
+: f2/   1- zero ; ( f -- f )
+: um/   dup >r um/mod swap r> over 2* 1+ u< swap 0< or - ; ( ud u -- u )
 : nalign $20 min for aft d2/ then next ;
 : ralign 1- ?dup if nalign then 1 0 d+ d2/ ;
 : fsign fabs over 0< if >r dnegate r> $8000 or then ;
@@ -316,6 +330,8 @@ hex
         2over f2/ f-     x1 f+ f/
         one f+ fsq r> + ;
 : fexp  x4 f* exp ;
+
+\ hide x1 hide x2 hide x3 hide x4
 
 bye
 

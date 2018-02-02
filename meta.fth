@@ -1981,6 +1981,16 @@ h: base? ( b u -- )
 
 \ @todo '>number' should accept a double cell number and return one
 
+\ : digit? ( c base -- u f ) 
+\  >r [char] 0 - 9 over <
+\  if 7 - dup 10 < or then dup r> u< ;
+
+\ : >number ( ud a u -- ud a u ) 
+\  begin dup
+\  while >r  dup >r c@ base @ digit?
+\  while swap base @ um* drop rot base @ um* d+ r> char+ r> 1 -
+\  repeat drop r> r> then ;
+
 : >number ( n b u -- n b u : convert string )
   radix >r
   negative? >r

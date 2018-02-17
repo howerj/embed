@@ -62,10 +62,10 @@ static int binary_memory_load(FILE *input, uw_t *p, const size_t length)
 	return 0;
 }
 
-static int binary_memory_save(FILE *output, uw_t *p, const size_t start, const size_t length)
+static int binary_memory_save(FILE *output, uw_t *p, const size_t length)
 {
 	assert(output && p /* && ((start + length) < 0x8000 || (start > length))*/);
-	for(size_t i = start; i < length; i++) {
+	for(size_t i = 0; i < length; i++) {
 		errno = 0;
 		const int r1 = fputc((p[i])       & 0xff, output);
 		const int r2 = fputc((p[i] >> 8u) & 0xff, output);
@@ -93,7 +93,7 @@ static int save(forth_t *h, const char *name, size_t start, size_t length)
 	if(!name)
 		return -1;
 	FILE *output = fopen_or_die(name, "wb");
-	const int r  = binary_memory_save(output, h->core, start, length);
+	const int r  = binary_memory_save(output, h->core + start, length);
 	fclose(output);
 	return r;
 }

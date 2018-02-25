@@ -2044,7 +2044,8 @@ h: parser ( b u c -- b u delta )
   r> scanner swap r> - >r - r> 1+ ;
 
 : parse ( c -- b u ; <string> )
-   >r tib in@ + #tib @ in@ - r> parser >in +! -trailing 0 max ;
+   >r tib in@ + #tib @ in@ - r@ parser >in +! 
+   r> bl = if -trailing then 0 max ;
 : ) ; immediate ( -- : do nothing )
 :  ( [char] ) parse 2drop ; immediate \ ) ( parse until matching paren )
 : .( [char] ) parse type ; ( print out text until matching parenthesis )
@@ -2694,11 +2695,11 @@ h: ?instruction ( i m e -- i 0 | e -1 )
    >r over and r> tuck = if nip [-1] exit then drop-0 ;
 
 h: .instruction ( u -- u )
-   0x8000  0x8000 ?instruction if ." LIT " exit then
-   $6000   $6000  ?instruction if ." ALU " exit then
-   $6000   $4000  ?instruction if ." CAL " exit then
-   $6000   $2000  ?instruction if ." BRZ " exit then
-   drop-0 ." BRN " ;
+   0x8000  0x8000 ?instruction if ." LIT" exit then
+   $6000   $6000  ?instruction if ." ALU" exit then
+   $6000   $4000  ?instruction if ." CAL" exit then
+   $6000   $2000  ?instruction if ." BRZ" exit then
+   drop-0 ." BRN" ;
 
 : decompile ( u -- : decompile instruction )
    dup .instruction $4000 =
@@ -2728,9 +2729,9 @@ h: decompiler ( previous current -- : decompile starting at address )
   swap      2dup= if drop here then >r
   cr colon space dup .id space dup cr
   cfa r> decompiler space $3b emit
-  dup compile-only? if ."  compile-only  " then 
-  dup inline?       if ."  inline  "       then
-      immediate?    if ."  immediate  "    then cr ;
+  dup compile-only? if ."  compile-only " then 
+  dup inline?       if ."  inline "       then
+      immediate?    if ."  immediate "    then cr ;
 
 \ A few useful utility words will be added next, which are not strictly 
 \ necessary but are useful. Those are '.s' for examining the contents of the 
@@ -2760,7 +2761,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ the current output base would have to be saved and then restored.
 \ 
 
-: .s cr depth for aft r@ pick . then next ."  <sp " ;          ( -- )
+: .s cr depth for aft r@ pick . then next ."  <sp" ;          ( -- )
 h: dm+ chars for aft dup-@ space 5u.r cell+ then next ;        ( a u -- a )
 \ h: dc+ chars for aft dup-@ space decompile cell+ then next ; ( a u -- a )
 
@@ -3231,7 +3232,9 @@ it would not necessarily have to be able to meta-compile.
 * A more traditional block storage method would be more useful, instead of
 saving sections of the virtual machine image a 'block transfer' instruction
 could be made, which would index into a file and retrieve/create blocks, which
-would allow much more memory to be used as mass storage (65536*1024 Bytes).
+would allow much more memory to be used as mass storage (65536*1024 Bytes). The
+way the block storage mechanism works really needs improvment, not just the
+workings from Forth, but also how it works on the command line as well.
 * Look at the libforth test bench and reimplement it
 * Talk about making 'state' an execution token, with '[' and ']' just changing
 the value of state.

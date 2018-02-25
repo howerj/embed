@@ -89,11 +89,11 @@ static int load(forth_t *h, const char *name)
 
 static int save(forth_t *h, const char *name, size_t start, size_t length)
 {
-	assert(h);
+	assert(h && ((length - start) < length));
 	if(!name)
 		return -1;
 	FILE *output = fopen_or_die(name, "wb");
-	const int r  = binary_memory_save(output, h->core + start, length);
+	const int r  = binary_memory_save(output, h->core + start, length - start);
 	fclose(output);
 	return r;
 }

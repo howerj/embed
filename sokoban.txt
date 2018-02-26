@@ -2,59 +2,11 @@
 
 ================================================================
 
-    XXXXX             
-    X   X             
-    X*  X             
-  XXX  *XXX           
-  X  *  * X           
-XXX X XXX X     XXXXXX
-X   X XXX XXXXXXX  ..X
-X *  *             ..X
-XXXXX XXXX X@XXXX  ..X
-    X      XXX  XXXXXX
-    XXXXXXXX          
+================================================================
+
 
 ================================================================
 
-XXXXXXXXXXXX  
-X..  X     XXX
-X..  X *  *  X
-X..  X*XXXX  X
-X..    @ XX  X
-X..  X X  * XX
-XXXXXX XX* * X
-  X *  * * * X
-  X    X     X
-  XXXXXXXXXXXX
-
-================================================================
-
-        XXXXXXXX 
-        X     @X 
-        X *X* XX 
-        X *  *X  
-        XX* * X  
-XXXXXXXXX * X XXX
-X....  XX *  *  X
-XX...    *  *   X
-X....  XXXXXXXXXX
-XXXXXXXX         
-
-================================================================
-
-              XXXXXXXX
-              X  ....X
-   XXXXXXXXXXXX  ....X
-   X    X  * *   ....X
-   X ***X*  * X  ....X
-   X  *     * X  ....X
-   X ** X* * *XXXXXXXX
-XXXX  * X     X       
-X   X XXXXXXXXX       
-X    *  XX            
-X **X** @X            
-X   X   XX            
-XXXXXXXXX             
 
 ================================================================
 

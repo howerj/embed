@@ -7,7 +7,7 @@ META=meta1.blk
 XX=meta2.blk
 TEMP=tmp.blk
 
-.PHONY: all clean run cross cross-run double-cross default static tests more
+.PHONY: all clean run cross cross-run double-cross default static tests more sokoban
 
 default: all
 
@@ -57,6 +57,9 @@ static: CC = musl-gcc
 static: CFLAGS += -static
 static: ${FORTH}
 	strip ${FORTH}
+
+sokoban: ${FORTH} ${EFORTH} sokoban.fth
+	${DF}${FORTH} i ${EFORTH} new.blk sokoban.fth
 
 clean:
 	rm -fv ${COMPILER} ${FORTH} ${META} ${XX}

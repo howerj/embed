@@ -1,4 +1,0 @@
-#!/bin/sh
-set -eu
-make forth
-./forth i eforth.blk /dev/null sokoban.fth

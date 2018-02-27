@@ -11,7 +11,7 @@ sokoban-wordlist +order definitions
 \ @todo change character set
 $20    constant maze
 char X constant wall
-char * constant bolder
+char * constant boulder
 char . constant off
 char & constant on
 char @ constant player
@@ -92,18 +92,18 @@ create rule 3 c, 0 c, 0 c, 0 c,
      3reverse r> count! count! count! 
   then drop ;
 
-: #bolders ( -- n )
+: #boulders ( -- n )
    0 arena 
    for aft 
-     dup c@ bolder = if n1+ then 
+     dup c@ boulder = if n1+ then 
      1+ 
    then next drop ; 
-: .bolders  ." BOLDERS: " #bolders u. cr ; ( -- )
+: .boulders  ." BOLDERS: " #boulders u. cr ; ( -- )
 : .moves    ." MOVES: " moves    @ u. cr ; ( -- )
 : .help     ." WASD - MOVEMENT" cr ." H    - HELP" cr ; ( -- )
 : .maze blk @ list ;                  ( -- )
-: show ( page cr ) .maze .bolders .moves .help ; ( -- )
-: solved? #bolders 0= ;               ( -- )
+: show ( page cr ) .maze .boulders .moves .help ; ( -- )
+: solved? #boulders 0= ;               ( -- )
 : finished? solved? if 1 throw then ; ( -- )
 : instructions ;                      ( -- )
 : where >r arena r> locate ;          ( c -- u f )
@@ -139,7 +139,7 @@ sokoban-wordlist +order
 $20 maze!
 only forth definitions
 
-editor x
+editor x blk @
  1 i            XXXXX             
  2 i            X   X             
  3 i            X*  X             
@@ -152,7 +152,7 @@ editor x
 10 i            X      XXX  XXXXXX
 11 i            XXXXXXXX          
 12 i        
-n x
+dup 1+ b x
  1 i       XXXXXXXXXXXX  
  2 i       X..  X     XXX
  3 i       X..  X *  *  X
@@ -164,7 +164,7 @@ n x
  9 i         X    X     X
 10 i         XXXXXXXXXXXX
 11 i       
-n x
+dup 1+ b x
  1 i               XXXXXXXX 
  2 i               X     @X 
  3 i               X *X* XX 
@@ -175,7 +175,7 @@ n x
  8 i       XX...    *  *   X
  9 i       X....  XXXXXXXXXX
 10 i       XXXXXXXX         
-n x
+dup 1+ b x
  1 i                     XXXXXXXX
  2 i                     X  ....X
  3 i          XXXXXXXXXXXX  ....X
@@ -189,6 +189,10 @@ n x
 11 i       X **X** @X            
 12 i       X   X   XX            
 13 i       XXXXXXXXX             
+drop
+q hex 
 
-q hex bye
+.( Type '# sokoban' to play, where '#' is a block number ) cr
+bye
+
 

@@ -9,9 +9,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CORE (65536u)  /* core size in bytes */
-#define SP0  (8704u)   /* Variable Stack Start: 8192 (end of program area) + 512 (block size) */
-#define RP0  (32767u)  /* Return Stack Start: end of CORE in words */
+#define CORE (65536u)  /* core size in BYTES */
+#define SP0  (8704u)   /* Variable Stack Start in WORDS: 8192 + 512 */
+#define RP0  (32767u)  /* Return Stack Start: end of CORE in WORDS */
 #define UNUSED(VARIABLE) ((void)(VARIABLE))
 
 #ifdef TRON
@@ -174,7 +174,8 @@ int main(int argc, char **argv)
 {
 	static forth_t h;
 	int interactive = 0;
-	binary(stdin); binary(stdout);
+	binary(stdin); 
+	binary(stdout);
 	if(argc < 4)
 		goto fail;
 	if(!strcmp(argv[1], "i"))

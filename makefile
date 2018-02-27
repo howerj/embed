@@ -7,7 +7,7 @@ META=meta1.blk
 XX=meta2.blk
 TEMP=tmp.blk
 
-.PHONY: all clean run cross cross-run double-cross default static tests more sokoban
+.PHONY: all clean run cross cross-run double-cross default static tests more sokoban life
 
 default: all
 
@@ -60,6 +60,9 @@ static: ${FORTH}
 
 sokoban: ${FORTH} ${EFORTH} sokoban.fth
 	${DF}${FORTH} i ${EFORTH} new.blk sokoban.fth
+
+life: ${FORTH} ${EFORTH} life.fth
+	${DF}${FORTH} i ${EFORTH} new.blk life.fth
 
 clean:
 	rm -fv ${COMPILER} ${FORTH} ${META} ${XX}

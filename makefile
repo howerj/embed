@@ -7,7 +7,7 @@ META=meta1.blk
 XX=meta2.blk
 TEMP=tmp.blk
 
-.PHONY: all clean run cross cross-run double-cross default static tests more sokoban life
+.PHONY: all clean run cross cross-run double-cross default static tests sokoban life
 
 default: all
 
@@ -50,16 +50,10 @@ tron: CFLAGS += -DTRON
 tron: main.c embed.c embed.h
 	${CC} ${CFLAGS} $^ -o $@
 
-more: cross
-	${DF}${FORTH} i ${META} ${XX} more.fth
-
 static: CC = musl-gcc
 static: CFLAGS += -static
 static: ${FORTH}
 	strip ${FORTH}
-
-sokoban: ${FORTH} ${EFORTH} sokoban.fth
-	${DF}${FORTH} i ${EFORTH} new.blk sokoban.fth
 
 life: ${FORTH} ${EFORTH} life.fth
 	${DF}${FORTH} i ${EFORTH} new.blk life.fth

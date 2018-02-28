@@ -1,4 +1,4 @@
-CFLAGS=-O2 -std=c99 -Wall -Wextra
+CFLAGS=-O2 -std=c99 -g -Wall -Wextra
 CC=gcc
 EXE=
 DF=
@@ -25,8 +25,8 @@ FORTH=forth${EXE}
 
 all: ${FORTH}
 
-${FORTH}: forth.c
-	${CC} ${CFLAGS} $< -o $@
+${FORTH}: main.o embed.o embed.h
+	${CC} ${CFLAGS} $^ -o $@
 
 run: ${FORTH} ${EFORTH}
 	${DF}${FORTH} i ${EFORTH} new.blk
@@ -47,8 +47,8 @@ tests: ${FORTH} ${META} unit.fth
 	${DF}${FORTH} f ${META} ${TEMP} unit.fth
 
 tron: CFLAGS += -DTRON
-tron: forth.c
-	${CC} ${CFLAGS} $< -o $@
+tron: main.c embed.c embed.h
+	${CC} ${CFLAGS} $^ -o $@
 
 more: cross
 	${DF}${FORTH} i ${META} ${XX} more.fth

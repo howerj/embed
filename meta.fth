@@ -3218,6 +3218,9 @@ such as the block editor, and 'see', as well as any words not actually used
 in the metacompilation process.
 * An image could be prepared with the smallest possible Forth interpreter,
 it would not necessarily have to be able to meta-compile.
+* A more generic virtual machine would allow functions for fgetc, fputc,
+and for saving to block storage, to be passed in via the C interface
+somehow, as well as for arbitrary C callbacks.
 * A more traditional block storage method would be more useful, instead of
 saving sections of the virtual machine image a 'block transfer' instruction
 could be made, which would index into a file and retrieve/create blocks, which

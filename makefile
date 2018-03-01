@@ -3,11 +3,11 @@ CC=gcc
 EXE=
 DF=
 EFORTH=eforth.blk
-META=meta1.blk
-XX=meta2.blk
+META1=meta1.blk
+META2=meta2.blk
 TEMP=tmp.blk
 
-.PHONY: all clean run cross cross-run double-cross default static tests sokoban life
+.PHONY: all clean run cross cross-run double-cross default static tests 
 
 default: all
 
@@ -25,26 +25,28 @@ FORTH=forth${EXE}
 
 all: ${FORTH}
 
+embed.o: embed.c embed.h
+
 ${FORTH}: main.o embed.o embed.h
 	${CC} ${CFLAGS} $^ -o $@
 
 run: ${FORTH} ${EFORTH}
 	${DF}${FORTH} i ${EFORTH} new.blk
 
-${META}: ${FORTH} ${EFORTH} meta.fth
-	${DF}${FORTH} f ${EFORTH} ${META} meta.fth
+${META1}: ${FORTH} ${EFORTH} meta.fth
+	${DF}${FORTH} f ${EFORTH} ${META1} meta.fth
 
-cross: ${META}
+cross: ${META1}
 
 cross-run: cross
-	${DF}${FORTH} i ${META} ${META}
+	${DF}${FORTH} i ${META1} ${META1}
 
 double-cross: cross
-	${DF}${FORTH} f ${META} ${XX} meta.fth
-	cmp ${META} ${XX}
+	${DF}${FORTH} f ${META1} ${META2} meta.fth
+	cmp ${META1} ${META2}
 
-tests: ${FORTH} ${META} unit.fth
-	${DF}${FORTH} f ${META} ${TEMP} unit.fth
+tests: ${FORTH} ${META1} unit.fth
+	${DF}${FORTH} f ${META1} ${TEMP} unit.fth
 
 tron: CFLAGS += -DTRON
 tron: main.c embed.c embed.h
@@ -55,8 +57,8 @@ static: CFLAGS += -static
 static: ${FORTH}
 	strip ${FORTH}
 
-life: ${FORTH} ${EFORTH} life.fth
-	${DF}${FORTH} i ${EFORTH} new.blk life.fth
+small: embed.o small.o
 
 clean:
-	rm -fv ${COMPILER} ${FORTH} ${META} ${XX}
+	rm -fv ${COMPILER} ${FORTH} ${META1} ${META2} ${SIMPLE} ${TRON} *.o
+

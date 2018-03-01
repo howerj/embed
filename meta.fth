@@ -3191,16 +3191,7 @@ This is a list of Error codes, not all of which are used by the application.
 
 ## To Do / Wish List
 
-* Relative jumps could be used instead of absolute jumps in the code, this
-would make relocation easier, and could make all code position independent. It
-may also make the resulting code easier to compress, especially if the 
-majority of jumps are to near locations. Perhaps relative addressing should
-only be used for branches and not calls, or vice versa. Absolute jumps could
-be faked if needed with the correct wordset, self modifying code, or the
-correct compliation methods.
-* More assertions and range checks should be added to the interpreter, for
-example the **save** function needs checks for bounds.
-* The forth virtual machine in [forth.c][] should be made to be crash proof,
+* The forth virtual machine in [embed.c][] should be made to be crash proof,
 with checks to make sure indices never go out of bounds.
 * Documentation could be extracted from the [meta.fth][] file, which should
 describe the entire system: The metacompiler, the target virtual machine,
@@ -3221,8 +3212,6 @@ of all the words is correct
 * This Forth lacks a version of 'FORGET', as well as 'MARKER', which is
 unfortunate, as they are useful. This is due to how word lists are
 implemented.
-* For Floating Point Routines, written in portable Forth for a 16-bit platform,
-look at the Forth Dimensions magazine, volume 4, issue 1
 * One possible exercise would be to reduce the image size to its absoluate
 minimum, by removing unneeded functionality for the metacompilation process,
 such as the block editor, and 'see', as well as any words not actually used

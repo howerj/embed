@@ -87,7 +87,7 @@ static int binary_memory_load(FILE *input, uw_t *p, const size_t length)
 
 static int binary_memory_save(FILE *output, uw_t *p, const size_t length)
 {
-	assert(output && p /* && ((start + length) < 0x8000 || (start > length))*/);
+	assert(output && p);
 	for(size_t i = 0; i < length; i++) {
 		errno = 0;
 		const int r1 = fputc((p[i])       & 0xff, output);
@@ -110,20 +110,20 @@ int embed_load(forth_t *h, const char *name)
 	return r;
 }
 
-static int embed_save_section(forth_t *h, const char *name, size_t start, size_t length)
+static int save(forth_t *h, const char *name, size_t start, size_t length)
 {
 	assert(h && ((length - start) <= length));
 	if(!name)
 		return -1;
 	FILE *output = embed_fopen_or_die(name, "wb");
-	const int r  = binary_memory_save(output, h->core + start, length - start);
+	const int r = binary_memory_save(output, h->core+start, length-start);
 	fclose(output);
 	return r;
 }
 
 int embed_save(forth_t *h, const char *name)
 {
-	return embed_save_section(h, name, 0, CORE/sizeof(uw_t));
+	return save(h, name, 0, CORE/sizeof(uw_t));
 }
 
 int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
@@ -168,7 +168,7 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 19: T = rp << 1;              break;
 			case 20: sp = t >> 1;              break;
 			case 21: rp = t >> 1; T = n;       break;
-			case 22: T = embed_save_section(h, block, n>>1, ((ud_t)T+1)>>1); break;
+			case 22: T = save(h, block, n>>1, ((ud_t)T+1)>>1); break;
 			case 23: T = fputc(t, out);        break;
 			case 24: T = fgetc(in);            break;
 			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=1; T=10; } break;

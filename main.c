@@ -3,6 +3,7 @@
  *  @copyright Richard James Howe (2017,2018)
  *  @license   MIT */
 #include "embed.h"
+#include <assert.h>
 #include <string.h>
 
 #ifdef _WIN32 /* Making standard input streams on Windows binary mode */
@@ -10,14 +11,15 @@
 #include <io.h>
 #include <fcntl.h>
 extern int _fileno(FILE *);
-static void binary(FILE *f) { _setmode(_fileno(f), _O_BINARY); }
+static void binary(FILE *f) { assert(f); _setmode(_fileno(f), _O_BINARY); }
 #else
 #define UNUSED(VARIABLE) ((void)(VARIABLE))
-static inline void binary(FILE *f) { UNUSED(f); }
+static inline void binary(FILE *f) { assert(f); UNUSED(f); }
 #endif
 
 static void usage(const char *arg_0)
 {
+	assert(arg_0);
 	embed_die("usage: %s f|i input.blk output.blk file.fth", arg_0);
 }
 
@@ -38,16 +40,16 @@ int main(int argc, char **argv)
 	embed_load(h, argv[2]);
 	for(int i = 4; i < argc; i++) {
 		FILE *in = embed_fopen_or_die(argv[i], "rb");
-		const int r = embed_forth(h, in, stdout, argv[3]);
+		r = embed_forth(h, in, stdout, argv[3]);
 		fclose(in);
 		if(r != 0) {
-			embed_free(h);
 			fprintf(stderr, "run failed: %d\n", r);
-			return r;
+			goto failed;
 		}
 	}
 	if(interactive)
 		r = embed_forth(h, stdin, stdout, argv[3]);
+failed:
 	embed_free(h);
 	return r;
 }

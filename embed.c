@@ -11,19 +11,14 @@
 #include <string.h>
 #include <stdarg.h>
 
-#define CORE (65536u)  /* core size in BYTES */
-#define SP0  (8704u)   /* Variable Stack Start in WORDS: 8192 + 512 */
-#define RP0  (32767u)  /* Return Stack Start: end of CORE in WORDS */
+#define SP0  (8704u)   /**< Variable Stack Start in WORDS: 8192 + 512 */
+#define RP0  (32767u)  /**< Return Stack Start: end of CORE in WORDS */
 
-typedef uint16_t uw_t;
-typedef int16_t  sw_t;
-typedef uint32_t ud_t; 
+typedef uint16_t uw_t; /**< embed machine word size */
+typedef int16_t  sw_t; /**< 'sw_t' is used for signed arithmetic */
+typedef uint32_t ud_t; /**< embed double machine word size */ 
 
-typedef struct forth_t { uw_t pc, t, rp, sp, core[CORE/sizeof(uw_t)]; } forth_t;
-
-#ifdef INCLUDE_DEFAULT_IMAGE
-#include "eforth.gen.c"
-#endif
+typedef struct forth_t { uw_t pc, t, rp, sp, m[32768]; } forth_t;
 
 void embed_die(const char *fmt, ...)
 {
@@ -32,45 +27,39 @@ void embed_die(const char *fmt, ...)
 	vfprintf(stderr, fmt, arg);
 	va_end(arg);
 	fputc('\n', stderr);
-	fflush(stderr);
 	exit(EXIT_FAILURE);
 }
 
 FILE *embed_fopen_or_die(const char *file, const char *mode)
 {
-	FILE *f = NULL;
+	FILE *h = NULL;
 	errno = 0;
 	assert(file && mode);
-	if(!(f = fopen(file, mode)))
+	if(!(h = fopen(file, mode)))
 		embed_die("failed to open file '%s' (mode %s): %s", file, mode, strerror(errno));
-	return f;
+	return h;
 }
 
 forth_t *embed_new(void)
 {
 	errno = 0;
-	forth_t *f = calloc(1, sizeof(*f));
-	if(!f)
-		embed_die("allocation of size %u failed: %s", (unsigned)sizeof(*f), strerror(errno));
-	f->pc = 0; f->t = 0; f->rp = RP0; f->sp = SP0;
-#ifdef INCLUDE_DEFAULT_IMAGE
-	memcpy(f->core, block, sizeof(block));
-#endif
-	return f;
+	forth_t *h = calloc(1, sizeof(*h));
+	if(!h)
+		embed_die("allocation of size %u failed", (unsigned)sizeof(*h));
+	h->pc = 0; h->t = 0; h->rp = RP0; h->sp = SP0;
+	return h;
 }
 
-forth_t *embed_copy(forth_t *f)
+forth_t *embed_copy(forth_t *h)
 {
-	assert(f);
+	assert(h);
 	forth_t *r = embed_new();
-	return memcpy(r, f, sizeof(*r));
+	return memcpy(r, h, sizeof(*r));
 }
 
-void embed_free(forth_t *f)
+void embed_free(forth_t *h)
 {
-	assert(f);
-	memset(f, 0, sizeof(*f));
-	free(f);
+	free(h);
 }
 
 static int binary_memory_load(FILE *input, uw_t *p, const size_t length)
@@ -86,13 +75,13 @@ static int binary_memory_load(FILE *input, uw_t *p, const size_t length)
 	return 0;
 }
 
-static int binary_memory_save(FILE *output, uw_t *p, const size_t length)
+static int binary_memory_save(FILE *out, uw_t *p, const size_t length)
 {
-	assert(output && p);
+	assert(out && p);
 	for(size_t i = 0; i < length; i++) {
 		errno = 0;
-		const int r1 = fputc((p[i])       & 0xff, output);
-		const int r2 = fputc((p[i] >> 8u) & 0xff, output);
+		const int r1 = fputc((p[i])       & 0xff, out);
+		const int r2 = fputc((p[i] >> 8u) & 0xff, out);
 		if(r1 < 0 || r2 < 0) {
 			fprintf(stderr, "write failed: %s\n", strerror(errno));
 			return -1;
@@ -105,7 +94,7 @@ int embed_load(forth_t *h, const char *name)
 {
 	assert(h && name);
 	FILE *input = embed_fopen_or_die(name, "rb");
-	const int r = binary_memory_load(input, h->core, CORE/sizeof(uw_t));
+	const int r = binary_memory_load(input, h->m, sizeof(h->m)/sizeof(h->m[0]));
 	fclose(input);
 	return r;
 }
@@ -115,22 +104,22 @@ static int save(forth_t *h, const char *name, size_t start, size_t length)
 	assert(h && ((length - start) <= length));
 	if(!name)
 		return -1;
-	FILE *output = embed_fopen_or_die(name, "wb");
-	const int r = binary_memory_save(output, h->core+start, length-start);
-	fclose(output);
+	FILE *out = embed_fopen_or_die(name, "wb");
+	const int r = binary_memory_save(out, h->m+start, length-start);
+	fclose(out);
 	return r;
 }
 
 int embed_save(forth_t *h, const char *name)
 {
-	return save(h, name, 0, CORE/sizeof(uw_t));
+	return save(h, name, 0, sizeof(h->m)/sizeof(h->m[0]));
 }
 
 int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
 	static const uw_t delta[] = { 0, 1, -2, -1 };
 	assert(h && in && out);
-	uw_t pc = h->pc, t = h->t, rp = h->rp, sp = h->sp, *m = h->core;
+	uw_t pc = h->pc, t = h->t, rp = h->rp, sp = h->sp, *m = h->m;
 	ud_t d;
 	for(;;) {
 		const uw_t instruction = m[pc];
@@ -150,8 +139,8 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case  2: T = m[rp];                break;
 			case  3: T = m[t>>1];              break;
 			case  4: m[t>>1] = n; T = m[--sp]; break;
-			case  5: d = (ud_t)t + (ud_t)n; T = d >> 16; m[sp] = d; n = d; break;
-			case  6: d = (ud_t)t * (ud_t)n; T = d >> 16; m[sp] = d; n = d; break;
+			case  5: d = (ud_t)t + n; T = d >> 16; m[sp] = d; n = d; break;
+			case  6: d = (ud_t)t * n; T = d >> 16; m[sp] = d; n = d; break;
 			case  7: T &= n;                   break;
 			case  8: T |= n;                   break;
 			case  9: T ^= n;                   break;

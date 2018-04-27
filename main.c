@@ -1,41 +1,26 @@
-/** @file      main.c
- *  @brief     Embed Forth Virtual Machine Driver
- *  @copyright Richard James Howe (2017,2018)
- *  @license   MIT */
+/* Embed forth main driver - Richard James Howe */
 #include "embed.h"
-#include <assert.h>
 #include <string.h>
 
-static void usage(const char *arg_0)
-{
-	assert(arg_0);
-	embed_die("usage: %s f|i input.blk output.blk file.fth", arg_0);
-}
+static const char *usage = "usage: forth f|i input.blk output.blk file.fth";
 
 int main(int argc, char **argv)
 {
-	forth_t *h;
+	forth_t *h = embed_new();
 	int interactive = 0, r = 0;
-	h = embed_new();
 	if(argc < 4)
-		usage(argv[0]);
-	if(!strcmp(argv[1], "i"))
-		interactive = 1;
-	else if(strcmp(argv[1], "f"))
-		usage(argv[0]);
+		embed_die(usage);
+	interactive = !strcmp(argv[1], "-i");
+	if(!interactive && strcmp(argv[1], "-f"))
+		embed_die(usage);
 	embed_load(h, argv[2]);
 	for(int i = 4; i < argc; i++) {
 		FILE *in = embed_fopen_or_die(argv[i], "rb");
-		r = embed_forth(h, in, stdout, argv[3]);
+		if((r = embed_forth(h, in, stdout, argv[3])))
+			embed_die("run failed: %d\n", r);
 		fclose(in);
-		if(r != 0) {
-			fprintf(stderr, "run failed: %d\n", r);
-			goto failed;
-		}
 	}
 	if(interactive)
 		r = embed_forth(h, stdin, stdout, argv[3]);
-failed:
-	embed_free(h);
-	return r;
+	return r != 0 ? -1 : 0;
 }

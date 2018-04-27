@@ -22,3 +22,4 @@ blk2c
 eforth.blk.c
 eforth
 *.gen.c
+*.s

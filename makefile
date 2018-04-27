@@ -1,4 +1,4 @@
-CFLAGS=-O2 -std=c99 -g -Wall -Wextra
+CFLAGS= -O2 -std=c99 -g -Wall -Wextra
 CC=gcc
 EXE=
 DF=
@@ -7,7 +7,7 @@ META1=meta1.blk
 META2=meta2.blk
 TEMP=tmp.blk
 
-.PHONY: all clean run cross cross-run double-cross default static tests 
+.PHONY: all clean run cross cross-run double-cross default tests 
 
 default: all
 
@@ -31,30 +31,23 @@ ${FORTH}: main.o embed.o embed.h
 	${CC} ${CFLAGS} $^ -o $@
 
 run: ${FORTH} ${EFORTH}
-	${DF}${FORTH} i ${EFORTH} new.blk
+	${DF}${FORTH} -i ${EFORTH} new.blk
 
 ${META1}: ${FORTH} ${EFORTH} meta.fth
-	${DF}${FORTH} f ${EFORTH} ${META1} meta.fth
+	${DF}${FORTH} -f ${EFORTH} ${META1} meta.fth
 
 cross: ${META1}
 
 cross-run: cross
-	${DF}${FORTH} i ${META1} ${META1}
+	${DF}${FORTH} -i ${META1} ${META1}
 
 double-cross: cross
-	${DF}${FORTH} f ${META1} ${META2} meta.fth
+	${DF}${FORTH} -f ${META1} ${META2} meta.fth
 	cmp ${META1} ${META2}
 
-eforth.gen.c: blk2c ${EFORTH}
-	./$^ ${EFORTH} > $@
-
 tests: ${FORTH} ${META1} unit.fth
-	${DF}${FORTH} f ${META1} ${TEMP} unit.fth
-
-eforth: embed.c eforth.gen.c main.c
-	${CC} ${CFLAGS} -DINCLUDE_DEFAULT_IMAGE embed.c eforth.c -o $@
-
+	${DF}${FORTH} -f ${META1} ${TEMP} unit.fth
 
 clean:
-	rm -fv ${COMPILER} ${FORTH} ${META1} ${META2} ${SIMPLE} ${TRON} *.o *.gen.c eforth blk2c
+	rm -fv ${COMPILER} ${FORTH} ${META1} ${META2} *.o 
 

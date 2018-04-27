@@ -6,12 +6,12 @@
 #ifndef EMBED_H
 #define EMBED_H
 
-#include <stdio.h>
-#include <stdint.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <stdio.h>
+#include <stdint.h>
 
 struct forth_t;                 /**< Forth Virtual Machine State */
 typedef struct forth_t forth_t; /**< Forth Virtual Machine State Type Define */

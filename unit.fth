@@ -1,15 +1,15 @@
 0 <ok> !
 \ This is a Forth test bench for: <https://github.com/howerj/embed>
-\ 
+\
 \ The test bench consists of a few support words, and three words that should
 \ be used together, they are 'T{', '->' and '}T'.
-\ 
-\ 'T{' sets up the test, the test itself should appear on a single line, with 
-\ the '}T' terminating it. The arguments to a function to test and function to 
-\ test should appear to the left of the '->' word, and the values it returns 
-\ should to the right of it. The test bench must also account for any items 
-\ already on the stack prior to calling 'T{' which must be ignored. 
-\ 
+\
+\ 'T{' sets up the test, the test itself should appear on a single line, with
+\ the '}T' terminating it. The arguments to a function to test and function to
+\ test should appear to the left of the '->' word, and the values it returns
+\ should to the right of it. The test bench must also account for any items
+\ already on the stack prior to calling 'T{' which must be ignored.
+\
 \ A few other words are also defined, but they are not strictly needed, they
 \ are 'throws?' and 'statistics'. 'throws?' parses the next word in the
 \ input stream, and executes it, catching any exceptions. It empties the
@@ -17,17 +17,17 @@
 \ used to test that words throw the correct exception in given circumstances.
 \ 'statistics' is used for information about the tests; how many tests failed,
 \ and how many tests were executed.
-\ 
+\
 \ The test benches are not only used to test the internals of the Forth system,
 \ and their edge cases, but also to document how the words should be used, so
 \ words which this test bench relies on and trivial words are also tested. The
-\ best test bench is actually the cross compilation method used to create new 
-\ images with the metacompiler, it tests nearly every single aspect of the 
+\ best test bench is actually the cross compilation method used to create new
+\ images with the metacompiler, it tests nearly every single aspect of the
 \ Forth system.
-\ 
+\
 \ It might be worth setting up another interpreter loop until the corresponding
 \ '}T' is reached so any exceptions can be caught and dealt with.
-\ 
+\
 
 \ A few generic helper words will be built, to check if a word is defined, or
 \ not, and to conditionally execute a line.
@@ -40,7 +40,7 @@
 undefined? 0<   ?\ : 0< 0 < ;
 undefined? 1-   ?\ : 1- 1 - ;
 undefined? 2*   ?\ : 2* 1 lshift ;
-undefined? rdup ?\ : rdup r> r> dup >r >r >r ; 
+undefined? rdup ?\ : rdup r> r> dup >r >r >r ;
 undefined? 1+!  ?\ : 1+! 1 swap +! ;
 
 variable test
@@ -63,22 +63,22 @@ variable n        ( temporary store for 'equal' )
 
 \ 'equal' is the most complex word in this test bench, it tests whether two
 \ groups of numbers of the same length are equal, the length of the numbers
-\ is specified by the first argument to 'equal'. 
+\ is specified by the first argument to 'equal'.
 : equal ( a0...an b0...bn n -- a0...an b0...bn n f )
   dup n !
-  for aft 
-    r@ pick r@ n @ 1+ + pick xor if rdrop n @ 0 exit then 
+  for aft
+    r@ pick r@ n @ 1+ + pick xor if rdrop n @ 0 exit then
   then next n @ -1 ;
 
 
 \ '?stacks' is given two numbers representing stack depths, if they are
 \ not equal it prints out an error message, and calls 'abort'.
 : ?stacks ( u u -- )
-  2dup xor 
-  if 
+  2dup xor
+  if
     .failed ." Too Few/Many Arguments Provided" cr
     ." Expected:  " u. cr
-    ." Got: "       u. cr 
+    ." Got: "       u. cr
     ." Full Stack:" .s cr
     fail exit
   else 2drop then ;
@@ -89,7 +89,7 @@ variable n        ( temporary store for 'equal' )
 : ?equal ( a0...an b0...bn n -- )
   dup >r
   equal nip 0= if
-    .failed ." Argument Value Mismatch" cr 
+    .failed ." Argument Value Mismatch" cr
     ." Expected:  " r@ ndisplay cr
     ." Got: "       r@ ndisplay cr
     fail exit
@@ -97,10 +97,10 @@ variable n        ( temporary store for 'equal' )
 
 only forth definitions test +order
 
-\ @todo update forth syntax highlighting file for 'T{' and '}T' 
+\ @todo update forth syntax highlighting file for 'T{' and '}T'
 \ in the <https://github.com/howerj/forth.vim> project
 
-: }T depth vsp0 @ - vsp @ 2* ?stacks vsp @ ?equal pass .pass ; 
+: }T depth vsp0 @ - vsp @ 2* ?stacks vsp @ ?equal pass .pass ;
 : -> depth vsp0 @ - vsp ! ;
 : T{ depth vsp0 ! total 1+! ;
 : statistics total @ passed @ ;
@@ -133,7 +133,7 @@ only forth definitions
   1+ dup square             ( u sc lc lc^2 : 'lc' == unsigned large candidate )
   >r rot r> <               ( sc lc bool )
   if drop else nip then ;   ( return small or large candidate respectively )
-  
+
 : log ( u base -- u : compute the integer logarithm of u in 'base' )
 	>r
 	dup 0= if -b throw then ( logarithm of zero is an error )
@@ -264,7 +264,7 @@ T{ 2 3 ' + execute -> 5 }T
 T{ : test-1 [ $5 $3 * ] literal ; test-1 -> $f }T
 
 .( Defined variable 'x' ) cr
-variable x 
+variable x
 T{ 9 x  ! x @ ->  9 }T
 T{ 1 x +! x @ -> $a }T
 hide x

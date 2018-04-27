@@ -6,6 +6,9 @@ EFORTH=eforth.blk
 META1=meta1.blk
 META2=meta2.blk
 TEMP=tmp.blk
+TARGET=embed
+CMP=cmp
+RM=rm -fv
 
 .PHONY: all clean run cross cross-run double-cross default tests 
 
@@ -14,24 +17,21 @@ default: all
 ifeq ($(OS),Windows_NT)
 DF=
 EXE=.exe
-.PHONY: forth compiler
-forth:  ${FORTH}
+.PHONY: ${TARGET}
 else # assume unixen
 DF=./
 EXE=
 endif
 
-FORTH=forth${EXE}
+FORTH=${TARGET}${EXE}
 
 all: ${FORTH}
 
-embed.o: embed.c embed.h
-
-${FORTH}: main.o embed.o embed.h
-	${CC} ${CFLAGS} $^ -o $@
+${FORTH}: embed.c embed.h
+	${CC} ${CFLAGS} -DUSE_EMBED_MAIN $< -o $@
 
 run: ${FORTH} ${EFORTH}
-	${DF}${FORTH} -i ${EFORTH} new.blk
+	${DF}${FORTH} -i ${EFORTH} ${TEMP}
 
 ${META1}: ${FORTH} ${EFORTH} meta.fth
 	${DF}${FORTH} -f ${EFORTH} ${META1} meta.fth
@@ -43,11 +43,11 @@ cross-run: cross
 
 double-cross: cross
 	${DF}${FORTH} -f ${META1} ${META2} meta.fth
-	cmp ${META1} ${META2}
+	${CMP} ${META1} ${META2}
 
 tests: ${FORTH} ${META1} unit.fth
 	${DF}${FORTH} -f ${META1} ${TEMP} unit.fth
 
 clean:
-	rm -fv ${COMPILER} ${FORTH} ${META1} ${META2} *.o 
+	${RM} ${FORTH} ${META1} ${META2} *.o 
 

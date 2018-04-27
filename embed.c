@@ -16,7 +16,7 @@
 
 typedef uint16_t uw_t; /**< embed machine word size */
 typedef int16_t  sw_t; /**< 'sw_t' is used for signed arithmetic */
-typedef uint32_t ud_t; /**< embed double machine word size */ 
+typedef uint32_t ud_t; /**< embed double machine word size */
 
 typedef struct forth_t { uw_t pc, t, rp, sp, m[32768]; } forth_t;
 
@@ -185,4 +185,23 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 finished: h->pc = pc; h->sp = sp; h->rp = rp; h->t = t;
 	return (int16_t)t;
 }
+
+#ifdef USE_EMBED_MAIN
+int main(int argc, char **argv)
+{
+	forth_t *h = embed_new();
+	if(argc < 4 || (strcmp(argv[1], "-i") && strcmp(argv[1], "-f")))
+		embed_die("usage: %s -f|i in.blk out.blk file.fth", argv[0]);
+	embed_load(h, argv[2]);
+	for(int i = 4; i < argc; i++) {
+		FILE *in = embed_fopen_or_die(argv[i], "rb");
+		if(embed_forth(h, in, stdout, argv[3]))
+			embed_die("run failed");
+		fclose(in);
+	}
+	if(!strcmp(argv[1], "-i"))
+		return !!embed_forth(h, stdin, stdout, argv[3]);
+	return 0;
+}
+#endif
 

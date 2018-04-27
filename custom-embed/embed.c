@@ -19,11 +19,7 @@ typedef uint16_t uw_t;
 typedef int16_t  sw_t;
 typedef uint32_t ud_t; 
 
-typedef struct forth_t { uw_t pc, t, rp, sp, core[CORE/sizeof(uw_t)]; } forth_t;
-
-#ifdef INCLUDE_DEFAULT_IMAGE
-#include "eforth.gen.c"
-#endif
+typedef struct forth_t { uw_t pc, t, rp, sp, core[CORE]; /**< @note CORE instead of CORE/sizeof(uw_t) for memory safety */ } forth_t;
 
 void embed_die(const char *fmt, ...)
 {
@@ -32,8 +28,8 @@ void embed_die(const char *fmt, ...)
 	vfprintf(stderr, fmt, arg);
 	va_end(arg);
 	fputc('\n', stderr);
-	fflush(stderr);
-	exit(EXIT_FAILURE);
+	fflush(stderr);	
+	exit(EXIT_FAILURE);	
 }
 
 FILE *embed_fopen_or_die(const char *file, const char *mode)
@@ -52,10 +48,6 @@ forth_t *embed_new(void)
 	forth_t *f = calloc(1, sizeof(*f));
 	if(!f)
 		embed_die("allocation of size %u failed: %s", (unsigned)sizeof(*f), strerror(errno));
-	f->pc = 0; f->t = 0; f->rp = RP0; f->sp = SP0;
-#ifdef INCLUDE_DEFAULT_IMAGE
-	memcpy(f->core, block, sizeof(block));
-#endif
 	return f;
 }
 
@@ -76,11 +68,12 @@ void embed_free(forth_t *f)
 static int binary_memory_load(FILE *input, uw_t *p, const size_t length)
 {
 	assert(input && p && length <= 0x8000);
+
 	for(size_t i = 0; i < length; i++) {
 		const int r1 = fgetc(input);
 		const int r2 = fgetc(input);
 		if(r1 < 0 || r2 < 0)
-			return -1;
+			return -1;		
 		p[i] = (((unsigned)r1 & 0xffu))|(((unsigned)r2 & 0xffu) << 8u);
 	}
 	return 0;
@@ -107,6 +100,7 @@ int embed_load(forth_t *h, const char *name)
 	FILE *input = embed_fopen_or_die(name, "rb");
 	const int r = binary_memory_load(input, h->core, CORE/sizeof(uw_t));
 	fclose(input);
+	h->pc = 0; h->t = 0; h->rp = RP0; h->sp = SP0;
 	return r;
 }
 
@@ -126,15 +120,20 @@ int embed_save(forth_t *h, const char *name)
 	return save(h, name, 0, CORE/sizeof(uw_t));
 }
 
-int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
+int embed_eval(forth_t *h, const char *in, const size_t in_size, char *out, const size_t out_size) 
 {
+	size_t in_pos = 0;
+	size_t out_pos = 0;
+
+	if(!h || !in || !out)
+		return -1;
+
 	static const uw_t delta[] = { 0, 1, -2, -1 };
-	assert(h && in && out);
+
 	uw_t pc = h->pc, t = h->t, rp = h->rp, sp = h->sp, *m = h->core;
 	ud_t d;
 	for(;;) {
 		const uw_t instruction = m[pc];
-		assert(!(sp & 0x8000) && !(rp & 0x8000));
 
 		if(0x8000 & instruction) { /* literal */
 			m[++sp] = t;
@@ -142,6 +141,7 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			pc++;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
 			uw_t n = m[sp], T = t;
+			uw_t opc = pc;
 			pc = instruction & 0x10 ? m[rp] >> 1 : pc + 1;
 
 			switch((instruction >> 8u) & 0x1f) {
@@ -167,9 +167,24 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 19: T = rp << 1;              break;
 			case 20: sp = t >> 1;              break;
 			case 21: rp = t >> 1; T = n;       break;
-			case 22: T = save(h, block, n>>1, ((ud_t)T+1)>>1); break;
-			case 23: T = fputc(t, out);        break;
-			case 24: T = fgetc(in);            break;
+			case 22: T = 0; /**@note not used in this version */ break;
+			case 23:
+				if(out_pos >= (out_size - 1)) {
+					pc = opc;
+					goto finished;
+				}
+				T = t;
+				out[out_pos++] = t;
+				break;
+			case 24: 
+				if(in_pos < in_size) {
+					T = in[in_pos]; 
+					in_pos++;
+				} else {
+					pc = opc;
+					goto finished;
+				}
+				break;
 			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=1; T=10; } break;
 			case 26: if(t) { T=(sw_t)n/(sw_t)t; t=(sw_t)n%(sw_t)t; n=t; } else { pc=1; T=10; } break;
 			case 27: goto finished;
@@ -194,6 +209,7 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 		}
 	}
 finished: h->pc = pc; h->sp = sp; h->rp = rp; h->t = t;
+	out[out_pos] = '\0';
 	return (int16_t)t;
 }
 

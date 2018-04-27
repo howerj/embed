@@ -6,17 +6,6 @@
 #include <assert.h>
 #include <string.h>
 
-#ifdef _WIN32 /* Making standard input streams on Windows binary mode */
-#include <windows.h>
-#include <io.h>
-#include <fcntl.h>
-extern int _fileno(FILE *);
-static void binary(FILE *f) { assert(f); _setmode(_fileno(f), _O_BINARY); }
-#else
-#define UNUSED(VARIABLE) ((void)(VARIABLE))
-static inline void binary(FILE *f) { assert(f); UNUSED(f); }
-#endif
-
 static void usage(const char *arg_0)
 {
 	assert(arg_0);
@@ -27,9 +16,6 @@ int main(int argc, char **argv)
 {
 	forth_t *h;
 	int interactive = 0, r = 0;
-	binary(stdin); 
-	binary(stdout);
-	binary(stderr);
 	h = embed_new();
 	if(argc < 4)
 		usage(argv[0]);

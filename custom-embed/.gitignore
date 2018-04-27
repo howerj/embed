@@ -1,0 +1,4 @@
+*.o
+forth
+custom-embed/*
+*.tgz

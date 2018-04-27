@@ -18,3 +18,7 @@ vgcore.*
 *.exe
 simple
 small
+blk2c
+eforth.blk.c
+eforth
+*.gen.c

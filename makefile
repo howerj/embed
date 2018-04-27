@@ -45,20 +45,16 @@ double-cross: cross
 	${DF}${FORTH} f ${META1} ${META2} meta.fth
 	cmp ${META1} ${META2}
 
+eforth.gen.c: blk2c ${EFORTH}
+	./$^ ${EFORTH} > $@
+
 tests: ${FORTH} ${META1} unit.fth
 	${DF}${FORTH} f ${META1} ${TEMP} unit.fth
 
-tron: CFLAGS += -DTRON
-tron: main.c embed.c embed.h
-	${CC} ${CFLAGS} $^ -o $@
+eforth: embed.c eforth.gen.c main.c
+	${CC} ${CFLAGS} -DINCLUDE_DEFAULT_IMAGE embed.c eforth.c -o $@
 
-static: CC = musl-gcc
-static: CFLAGS += -static
-static: ${FORTH}
-	strip ${FORTH}
-
-small: embed.o small.o
 
 clean:
-	rm -fv ${COMPILER} ${FORTH} ${META1} ${META2} ${SIMPLE} ${TRON} *.o
+	rm -fv ${COMPILER} ${FORTH} ${META1} ${META2} ${SIMPLE} ${TRON} *.o *.gen.c eforth blk2c
 

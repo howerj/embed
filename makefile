@@ -30,20 +30,21 @@ all: ${FORTH}
 ${FORTH}: embed.c embed.h
 	${CC} ${CFLAGS} -DUSE_EMBED_MAIN $< -o $@
 
-run: ${FORTH} ${EFORTH}
-	${DF}${FORTH} ${EFORTH} ${TEMP}
-
 ${META1}: ${FORTH} ${EFORTH} meta.fth
 	${DF}${FORTH} ${EFORTH} ${META1} meta.fth
 
+${META2}: ${FORTH} ${META1} meta.fth
+	${DF}${FORTH} ${META1} ${META2} meta.fth
+
 cross: ${META1}
+
+double-cross: ${META2}
+
+run: ${FORTH} ${EFORTH}
+	${DF}${FORTH} ${EFORTH} ${TEMP}
 
 cross-run: cross
 	${DF}${FORTH} ${META1} ${META1}
-
-double-cross: cross
-	${DF}${FORTH} ${META1} ${META2} meta.fth
-	${CMP} ${META1} ${META2}
 
 tests: ${FORTH} ${META1} unit.fth
 	${DF}${FORTH} ${META1} ${TEMP} unit.fth

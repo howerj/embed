@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdarg.h>
 
+#define MAX(X, Y) ((X) < (Y) ? (Y) : (X))
 typedef struct forth_t { uint16_t m[32768]; } forth_t;
 
 void embed_die(const char *fmt, ...)
@@ -26,7 +27,7 @@ FILE *embed_fopen_or_die(const char *file, const char *mode)
 	errno = 0;
 	assert(file && mode);
 	if(!(h = fopen(file, mode)))
-		embed_die("failed to open file '%s' (mode %s): %s", file, mode, strerror(errno));
+		embed_die("file open %s (mode %s) failed: %s", file, mode, strerror(errno));
 	return h;
 }
 
@@ -34,15 +35,8 @@ forth_t *embed_new(void)
 {
 	forth_t *h = calloc(1, sizeof(*h));
 	if(!h)
-		embed_die("allocation of size %u failed", (unsigned)sizeof(*h));
+		embed_die("allocation (of %u) failed", (unsigned)sizeof(*h));
 	return h;
-}
-
-forth_t *embed_copy(forth_t *h)
-{
-	assert(h);
-	forth_t *r = embed_new();
-	return memcpy(r, h, sizeof(*r));
 }
 
 void embed_free(forth_t *h)
@@ -50,76 +44,71 @@ void embed_free(forth_t *h)
 	free(h);
 }
 
-static long binary_memory_load(FILE *input, uint16_t *p, const size_t length)
+forth_t *embed_copy(forth_t const * const h)
 {
-	for(size_t i = 0; i < length; i++) {
-		int r1 = 0, r2 = 0;
-		if((r1 = fgetc(input)) < 0 || (r2 = fgetc(input)) < 0)
-			return i;
-		p[i] = (((unsigned)r1 & 0xffu))|(((unsigned)r2 & 0xffu) << 8u);
-	}
-	return 0;
-}
-
-static int binary_memory_save(FILE *out, uint16_t *p, const size_t length)
-{
-	for(size_t i = 0; i < length; i++) {
-		errno = 0;
-		if(fputc((p[i]) & 255, out) < 0 || fputc(p[i] >> 8, out) < 0) {
-			fprintf(stderr, "write failed: %s\n", strerror(errno));
-			return -1;
-		}
-	}
-	return 0;
+	assert(h);
+	forth_t *r = embed_new();
+	return memcpy(r, h, sizeof(*r));
 }
 
 int embed_load(forth_t *h, const char *name)
 {
 	assert(h && name);
 	FILE *input = embed_fopen_or_die(name, "rb");
-	const long r = binary_memory_load(input, h->m, sizeof(h->m)/sizeof(h->m[0]));
+	long r = 0, c1 = 0, c2 = 0;
+	for(size_t i = 0; i < MAX(64, h->m[5]); i++) {
+		if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0) {
+			r = i;
+			break;;
+		}
+		h->m[i] = ((c1 & 0xffu))|((c2 & 0xffu) << 8u);
+	}
 	fclose(input);
 	return r < 64 ? -1 : 0; /* minimum size checks, 128 bytes */
 }
 
-static int save(forth_t *h, const char *name, size_t start, size_t length)
+static int save(forth_t *h, const char *name, const size_t start, const size_t length)
 {
 	assert(h && ((length - start) <= length));
 	if(!name)
 		return -1;
 	FILE *out = embed_fopen_or_die(name, "wb");
-	const int r = binary_memory_save(out, h->m+start, length-start);
+	int r = 0;
+	for(size_t i = start; i < length; i++)
+		if(fputc(h->m[i] & 255, out) < 0 || fputc(h->m[i] >> 8, out) < 0)
+			r = -1;
 	fclose(out);
 	return r;
 }
 
 int embed_save(forth_t *h, const char *name)
 {
-	return save(h, name, 0, sizeof(h->m)/sizeof(h->m[0]));
+	return save(h, name, 0, h->m[5]);
 }
 
 int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
-	static const uint16_t delta[] = { 0, 1, -2, -1 };
 	assert(h && in && out);
-	uint16_t pc = h->m[0], t = h->m[1], rp = h->m[2], sp = h->m[3], *m = h->m;
+	static const uint16_t delta[] = { 0, 1, -2, -1 };
+	const uint16_t l = h->m[5]; 
+	uint16_t * const m = h->m;
+	uint16_t pc = m[0], t = m[1], rp = m[2], sp = m[3];
 	for(uint32_t d;;) {
-		const uint16_t instruction = m[pc];
-		assert(!(sp & 0x8000) && !(rp & 0x8000));
+		const uint16_t instruction = m[pc++];
+		assert(sp < l && rp < l && pc < l);
 
 		if(0x8000 & instruction) { /* literal */
 			m[++sp] = t;
 			t       = instruction & 0x7FFF;
-			pc++;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
 			uint16_t n = m[sp], T = t;
-			pc = instruction & 0x10 ? m[rp] >> 1 : pc + 1;
+			pc = instruction & 0x10 ? m[rp] >> 1 : pc;
 
 			switch((instruction >> 8u) & 0x1f) {
 			case  1: T = n;                    break;
 			case  2: T = m[rp];                break;
-			case  3: T = m[t>>1];              break;
-			case  4: m[t>>1] = n; T = m[--sp]; break;
+			case  3: T = m[(t>>1)%l];          break;
+			case  4: m[(t>>1)%l] = n; T = m[--sp]; break;
 			case  5: d = (uint32_t)t + n; T = d >> 16; m[sp] = d; n = d; break;
 			case  6: d = (uint32_t)t * n; T = d >> 16; m[sp] = d; n = d; break;
 			case  7: T &= n;                   break;
@@ -154,16 +143,16 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 				m[sp] = t;
 			t = T;
 		} else if (0x4000 & instruction) { /* call */
-			m[--rp] = (pc + 1) << 1;
+			m[--rp] = pc << 1;
 			pc      = instruction & 0x1FFF;
 		} else if (0x2000 & instruction) { /* 0branch */
-			pc = !t ? instruction & 0x1FFF : pc + 1;
+			pc = !t ? instruction & 0x1FFF : pc;
 			t  = m[sp--];
 		} else { /* branch */
 			pc = instruction & 0x1FFF;
 		}
 	}
-finished: h->m[0] = pc, h->m[1] = t, h->m[2] = rp, h->m[3] = sp;
+finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp;
 	return (int16_t)t;
 }
 
@@ -174,12 +163,11 @@ int main(int argc, char **argv)
 	if(argc != 3 && argc != 4)
 		embed_die("usage: %s in.blk out.blk [file.fth]", argv[0]);
 	if(embed_load(h, argv[1]) < 0)
-		return -1;
+		embed_die("embed: load failed");;
 	FILE *in = argc == 3 ? stdin : embed_fopen_or_die(argv[3], "rb");
 	if(embed_forth(h, in, stdout, argv[2]))
-		embed_die("run failed");
-	fclose(in);
-	return 0;
+		embed_die("embed: run failed");
+	return 0; /* exiting takes care of closing files, freeing memory */
 }
 #endif
 

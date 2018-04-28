@@ -1,6 +1,6 @@
 *~
 *.blk
-*.exe
 embed
+*.exe
 *.o
 vgcore.*

@@ -625,9 +625,9 @@ $4124 constant tib-buf     ( ... and address )
 $4126 constant tib-start   ( backup tib-buf value )
 \ $4280 == pad-area
 
-$12   constant header-length  ( location of length in header )
-$14   constant header-crc     ( location of CRC in header )
-$1a   constant header-options ( location of options bits in header )
+$14   constant header-length  ( location of length in header )
+$16   constant header-crc     ( location of CRC in header )
+$1c   constant header-options ( location of options bits in header )
 
 target.1 +order         ( Add target word dictionary to search order )
 meta -order meta +order ( Reorder so 'meta' has a higher priority )
@@ -663,17 +663,21 @@ forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 (rp0)    t, \  $4: RP0, return stack pointer 
 (sp0)    t, \  $6: SP0, variable stack pointer
 0        t, \  $8: Instruction exception vector
-$4689    t, \  $A: 0x89 'F'
-$4854    t, \  $C: 'T'  'H'
-$0a0d    t, \  $E: '\r' '\n'
-$0a1a    t, \ $10: ^Z   '\n'
-0        t, \ $12: For Length
-0        t, \ $14: For CRC
-$0001    t, \ $16: Endianess check
-#version t, \ $18: Version information
-$0001    t, \ $1A: Header options
+$8000    t, \  $A: VM Memory Size in cells
+$4689    t, \  $C: 0x89 'F'
+$4854    t, \  $E: 'T'  'H'
+$0a0d    t, \ $10: '\r' '\n'
+$0a1a    t, \ $12: ^Z   '\n'
+0        t, \ $14: For Length of Forth image, different from VM size
+0        t, \ $16: For CRC of Forth image, not entire VM memory
+$0001    t, \ $18: Endianess check
+#version t, \ $1A: Version information
+$0001    t, \ $1C: Header options
 
-$0000    t, \ @bug removing this causes things to fail, why!?
+\ @bug There is something very weird going on with the initial header size
+\ It should be possible to allocate memory how I want here, up to a point,
+\ but it causes things to fail. Sometimes '0 t,' does not work, but '0 t, 0t,'
+\ does.
 
 \ ## First Word Definitions
 \
@@ -2919,8 +2923,8 @@ there [t] cp t!
 [t] cold 2/ 0 t!                 ( set starting word )
 [t] normal-running [v] <boot> t!
 
-there    $9 tcells t! \ Set Length First!
-checksum $a tcells t! \ Calculate image CRC
+there    $a tcells t! \ Set Length First!
+checksum $b tcells t! \ Calculate image CRC
 
 finished
 bye

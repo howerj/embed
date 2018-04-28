@@ -11,14 +11,11 @@
 #include <string.h>
 #include <stdarg.h>
 
-#define SP0  (8704u)   /**< Variable Stack Start in WORDS: 8192 + 512 */
-#define RP0  (32767u)  /**< Return Stack Start: end of CORE in WORDS */
+typedef uint16_t uw_t;
+typedef int16_t  sw_t;
+typedef uint32_t ud_t;
 
-typedef uint16_t uw_t; /**< embed machine word size */
-typedef int16_t  sw_t; /**< 'sw_t' is used for signed arithmetic */
-typedef uint32_t ud_t; /**< embed double machine word size */
-
-typedef struct forth_t { uw_t pc, t, rp, sp, m[32768]; } forth_t;
+typedef struct forth_t { uw_t m[32768]; } forth_t;
 
 void embed_die(const char *fmt, ...)
 {
@@ -42,11 +39,9 @@ FILE *embed_fopen_or_die(const char *file, const char *mode)
 
 forth_t *embed_new(void)
 {
-	errno = 0;
 	forth_t *h = calloc(1, sizeof(*h));
 	if(!h)
 		embed_die("allocation of size %u failed", (unsigned)sizeof(*h));
-	h->pc = 0; h->t = 0; h->rp = RP0; h->sp = SP0;
 	return h;
 }
 
@@ -119,9 +114,8 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
 	static const uw_t delta[] = { 0, 1, -2, -1 };
 	assert(h && in && out);
-	uw_t pc = h->pc, t = h->t, rp = h->rp, sp = h->sp, *m = h->m;
-	ud_t d;
-	for(;;) {
+	uw_t pc = h->m[0], t = h->m[1], rp = h->m[2], sp = h->m[3], *m = h->m;
+	for(ud_t d;;) {
 		const uw_t instruction = m[pc];
 		assert(!(sp & 0x8000) && !(rp & 0x8000));
 
@@ -159,8 +153,8 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 22: T = save(h, block, n>>1, ((ud_t)T+1)>>1); break;
 			case 23: T = fputc(t, out);        break;
 			case 24: T = fgetc(in);            break;
-			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=1; T=10; } break;
-			case 26: if(t) { T=(sw_t)n/(sw_t)t; t=(sw_t)n%(sw_t)t; n=t; } else { pc=1; T=10; } break;
+			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=4; T=10; } break;
+			case 26: if(t) { T=(sw_t)n/(sw_t)t; t=(sw_t)n%(sw_t)t; n=t; } else { pc=4; T=10; } break;
 			case 27: goto finished;
 			}
 			sp += delta[ instruction       & 0x3];
@@ -182,7 +176,7 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			pc = instruction & 0x1FFF;
 		}
 	}
-finished: h->pc = pc; h->sp = sp; h->rp = rp; h->t = t;
+finished: h->m[0] = pc, h->m[1] = t, h->m[2] = rp, h->m[3] = sp;
 	return (int16_t)t;
 }
 
@@ -190,17 +184,13 @@ finished: h->pc = pc; h->sp = sp; h->rp = rp; h->t = t;
 int main(int argc, char **argv)
 {
 	forth_t *h = embed_new();
-	if(argc < 4 || (strcmp(argv[1], "-i") && strcmp(argv[1], "-f")))
-		embed_die("usage: %s -f|i in.blk out.blk file.fth", argv[0]);
-	embed_load(h, argv[2]);
-	for(int i = 4; i < argc; i++) {
-		FILE *in = embed_fopen_or_die(argv[i], "rb");
-		if(embed_forth(h, in, stdout, argv[3]))
-			embed_die("run failed");
-		fclose(in);
-	}
-	if(!strcmp(argv[1], "-i"))
-		return !!embed_forth(h, stdin, stdout, argv[3]);
+	if(argc != 3 && argc != 4)
+		embed_die("usage: %s in.blk out.blk [file.fth]", argv[0]);
+	embed_load(h, argv[1]);
+	FILE *in = argc == 3 ? stdin : embed_fopen_or_die(argv[3], "rb");
+	if(embed_forth(h, in, stdout, argv[2]))
+		embed_die("run failed");
+	fclose(in);
 	return 0;
 }
 #endif

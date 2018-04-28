@@ -31,11 +31,11 @@ implementation is provided [eforth.blk][].
 
 Linux:
 
-	./forth i eforth.blk new.blk
+	./forth eforth.blk new.blk
 
 Windows:
 
-	forth.exe i eforth.blk new.blk
+	forth.exe eforth.blk new.blk
 
 To exit the virtual machine cleanly either type "bye" and then hit
 return, or press CTRL+D (on Linux) / CTRL+Z (on Windows) and then return.
@@ -48,7 +48,7 @@ little about [Forth][] itself.
 If you do not have a copy of [make][], but do have a [C99][] compiler, the
 following command should build the project:
 
-	cc -std=c99 embed.c main.c -o forth
+	cc -std=c99 -DUSE_EMBED_MAIN embed.c -o embed
 
 ## Project Organization
 

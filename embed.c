@@ -129,7 +129,7 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 22: T = save(h, block, n>>1, ((uint32_t)T+1)>>1); break;
 			case 23: T = fputc(t, out);        break;
 			case 24: T = fgetc(in);            break;
-			case 25: if(t) { T=n/t; t=n%t; n=t; } else { pc=4; T=10; } break;
+			case 25: if(t) { d = m[--sp]|(uint32_t)n; T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t) { T=(int16_t)n/t; t=(int16_t)n%t; n=t; } else { pc=4; T=10; } break;
 			case 27: goto finished;
 			}

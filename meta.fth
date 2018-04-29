@@ -209,7 +209,7 @@ variable fence         ( Do not peephole optimize before this point )
 0    constant swap-endianess ( if true, swap the endianess )
 $4280 constant pad-area    ( area for pad storage )
 variable header -1 header ! ( If true Headers in the target will be generated )
-$7fff constant (rp0)   ( start of return stack )
+$7FFF constant (rp0)   ( start of return stack )
 $4400 constant (sp0)   ( start of variable stack )
 
 1   constant verbose   ( verbosity level, higher is more verbose )
@@ -227,7 +227,7 @@ $4400 constant (sp0)   ( start of variable stack )
 : [last] tlast @ ;      ( -- a )
 : low  swap-endianess 0= if 1+ then ; ( b -- b )
 : high swap-endianess    if 1+ then ; ( b -- b )
-: t! over ff and over high tc! swap 8 rshift swap low tc! ; ( u a -- )
+: t! over $FF and over high tc! swap 8 rshift swap low tc! ; ( u a -- )
 : t@ dup high tc@ swap low tc@ 8 lshift or ; ( a -- u )
 : 2/ 1 rshift ;                ( u -- u )
 : talign there 1 and tcp +! ;  ( -- )
@@ -249,7 +249,7 @@ $4400 constant (sp0)   ( start of variable stack )
     dup
     nfa count type space dup
     cfa >body @ u. cr
-    $3fff and @
+    $3FFF and @
   repeat drop ;
 : display ( -- : display metacompilation and target information )
   verbose 0= if exit then
@@ -307,67 +307,71 @@ a: #branch  $0000 a; ( unconditional branch )
 \ C code. Unfortunately this would not include that rationale that led to
 \ the virtual machine being the way it is.
 
+\ @note if the meta-compilers assembler words were included in the default
+\ image they could be used by 'see'. It would also mean an assembler would
+\ be included in the default image.
+
 \ ALU Operations
-a: #t      0000 a; ( T = t )
-a: #n      0100 a; ( T = n )
-a: #r      0200 a; ( T = Top of Return Stack )
-a: #[t]    0300 a; ( T = memory[t] )
-a: #n->[t] 0400 a; ( memory[t] = n )
-a: #t+n    0500 a; ( n = n+t, T = carry )
-a: #t*n    0600 a; ( n = n*t, T = upper bits of multiplication )
-a: #t&n    0700 a; ( T = T and N )
-a: #t|n    0800 a; ( T = T  or N )
-a: #t^n    0900 a; ( T = T xor N )
-a: #~t     0a00 a; ( Invert T )
-a: #t-1    0b00 a; ( T == t - 1 )
-a: #t==0   0c00 a; ( T == 0? )
-a: #t==n   0d00 a; ( T = n == t? )
-a: #nu<t   0e00 a; ( T = n < t )
-a: #n<t    0f00 a; ( T = n < t, signed version )
-a: #n>>t   1000 a; ( T = n right shift by t places )
-a: #n<<t   1100 a; ( T = n left  shift by t places )
-a: #sp@    1200 a; ( T = variable stack depth )
-a: #rp@    1300 a; ( T = return stack depth )
-a: #sp!    1400 a; ( set variable stack depth )
-a: #rp!    1500 a; ( set return stack depth )
-a: #save   1600 a; ( Save memory disk: n = start, T = end, T' = error )
-a: #tx     1700 a; ( Transmit Byte: t = byte, T' = error )
-a: #rx     1800 a; ( Block until byte received, T = byte/error )
-a: #u/mod  1900 a; ( Remainder/Divide: )
-a: #/mod   1a00 a; ( Signed Remainder/Divide: )
-a: #bye    1b00 a; ( Exit Interpreter )
+a: #t      $0000 a; ( T = t )
+a: #n      $0100 a; ( T = n )
+a: #r      $0200 a; ( T = Top of Return Stack )
+a: #[t]    $0300 a; ( T = memory[t] )
+a: #n->[t] $0400 a; ( memory[t] = n )
+a: #t+n    $0500 a; ( n = n+t, T = carry )
+a: #t*n    $0600 a; ( n = n*t, T = upper bits of multiplication )
+a: #t&n    $0700 a; ( T = T and N )
+a: #t|n    $0800 a; ( T = T  or N )
+a: #t^n    $0900 a; ( T = T xor N )
+a: #~t     $0A00 a; ( Invert T )
+a: #t-1    $0B00 a; ( T == t - 1 )
+a: #t==0   $0C00 a; ( T == 0? )
+a: #t==n   $0D00 a; ( T = n == t? )
+a: #nu<t   $0E00 a; ( T = n < t )
+a: #n<t    $0F00 a; ( T = n < t, signed version )
+a: #n>>t   $1000 a; ( T = n right shift by t places )
+a: #n<<t   $1100 a; ( T = n left  shift by t places )
+a: #sp@    $1200 a; ( T = variable stack depth )
+a: #rp@    $1300 a; ( T = return stack depth )
+a: #sp!    $1400 a; ( set variable stack depth )
+a: #rp!    $1500 a; ( set return stack depth )
+a: #save   $1600 a; ( Save memory disk: n = start, T = end, T' = error )
+a: #tx     $1700 a; ( Transmit Byte: t = byte, T' = error )
+a: #rx     $1800 a; ( Block until byte received, T = byte/error )
+a: #u/mod  $1900 a; ( Remainder/Divide: )
+a: #/mod   $1A00 a; ( Signed Remainder/Divide: )
+a: #bye    $1B00 a; ( Exit Interpreter )
 
 \ The Stack Delta Operations occur after the ALU operations have been executed.
 \ They affect either the Return or the Variable Stack. An ALU instruction
 \ without one of these operations (generally) do not affect the stacks.
-a: d+1     0001 or a; ( increment variable stack by one )
-a: d-1     0003 or a; ( decrement variable stack by one )
-a: d-2     0002 or a; ( decrement variable stack by two )
-a: r+1     0004 or a; ( increment variable stack by one )
-a: r-1     000c or a; ( decrement variable stack by one )
-a: r-2     0008 or a; ( decrement variable stack by two )
+a: d+1     $0001 or a; ( increment variable stack by one )
+a: d-1     $0003 or a; ( decrement variable stack by one )
+a: d-2     $0002 or a; ( decrement variable stack by two )
+a: r+1     $0004 or a; ( increment variable stack by one )
+a: r-1     $000C or a; ( decrement variable stack by one )
+a: r-2     $0008 or a; ( decrement variable stack by two )
 
 \ All of these instructions execute after the ALU and stack delta operations
 \ have been performed except r->pc, which occurs before. They form part of
 \ an ALU operation.
-a: r->pc   0010 or a; ( Set Program Counter to Top of Return Stack )
-a: n->t    0020 or a; ( Set Top of Variable Stack to Next on Variable Stack )
-a: t->r    0040 or a; ( Set Top of Return Stack to Top on Variable Stack )
-a: t->n    0080 or a; ( Set Next on Variable Stack to Top on Variable Stack )
+a: r->pc   $0010 or a; ( Set Program Counter to Top of Return Stack )
+a: n->t    $0020 or a; ( Set Top of Variable Stack to Next on Variable Stack )
+a: t->r    $0040 or a; ( Set Top of Return Stack to Top on Variable Stack )
+a: t->n    $0080 or a; ( Set Next on Variable Stack to Top on Variable Stack )
 
 \ There are five types of instructions; ALU operations, branches,
 \ conditional branches, function calls and literals. ALU instructions
 \ comprise of an ALU operation, stack effects and register move bits. Function
 \ returns are part of the ALU operation instruction set.
 
-: ?set dup $e000 and abort" argument too large " ;
+: ?set dup $E000 and abort" argument too large " ;
 a: branch  2/ ?set [a] #branch  or t, a; ( a -- : an Unconditional branch )
 a: ?branch 2/ ?set [a] #?branch or t, a; ( a -- : Conditional branch )
 a: call    2/ ?set [a] #call    or t, a; ( a -- : Function call )
 a: ALU        ?set [a] #alu     or    a; ( u -- : Make ALU instruction )
 a: alu                    [a] ALU  t, a; ( u -- : ALU operation )
 a: literal ( n -- : compile a number into target )
-  dup [a] #literal and if   ( numbers above $7fff take up two instructions )
+  dup [a] #literal and if   ( numbers above $7FFF take up two instructions )
     invert recurse  ( the number is inverted, an literal is called again )
     [a] #~t [a] alu ( then an invert instruction is compiled into the target )
   else
@@ -413,10 +417,10 @@ a: return ( -- : Compile a return into the target )
 
 : previous there =cell - ;                      ( -- a )
 : lookback previous t@ ;                        ( -- u )
-: call? lookback $e000 and [a] #call = ;        ( -- t )
-: call>goto previous dup t@ $1fff and swap t! ; ( -- )
+: call? lookback $E000 and [a] #call = ;        ( -- t )
+: call>goto previous dup t@ $1FFF and swap t! ; ( -- )
 : fence? fence @  previous u> ;                 ( -- t )
-: safe? lookback $e000 and [a] #alu = lookback $001c and 0= and ; ( -- t )
+: safe? lookback $E000 and [a] #alu = lookback $001C and 0= and ; ( -- t )
 : alu>return previous dup t@ [a] r->pc [a] r-1 swap t! ; ( -- )
 : exit-optimize                                 ( -- )
   fence? if [a] return exit then
@@ -449,7 +453,7 @@ a: return ( -- : Compile a return into the target )
 : literal [a] literal ;                      ( u -- )
 : h: ( -- : create a word with no name in the target dictionary )
  ' literal <literal> !
- $f00d tcreate there , update-fence does> @ [a] call ;
+ $F00D tcreate there , update-fence does> @ [a] call ;
 
 : t: ( "name", -- : creates a word in the target dictionary )
   lookahead thead h: ;
@@ -457,7 +461,7 @@ a: return ( -- : Compile a return into the target )
 \ @warning: Only use 'fallthrough' to fallthrough to words defined with 'h:'.
 : fallthrough;
   ' (literal) <literal> !
-  $f00d <> if source type cr 1 abort" unstructured! " then ;
+  $F00D <> if source type cr 1 abort" unstructured! " then ;
 : t;
   fallthrough; optimize if exit, else [a] return then ;
 
@@ -567,6 +571,7 @@ a: return ( -- : Compile a return into the target )
 \ Some words can be implemented in a single instruction which have no
 \ analogue within Forth.
 : dup-@   ]asm  #[t]     t->n   d+1 alu asm[ ;
+: dup0=   ]asm  #t==0    t->n   d+1 alu asm[ ;
 : dup>r   ]asm  #t       t->r   r+1 alu asm[ ;
 : 2dup=   ]asm  #t==n    t->n   d+1 alu asm[ ;
 : 2dupxor ]asm  #t^n     t->n   d+1 alu asm[ ;
@@ -588,21 +593,22 @@ hide t;
 ]asm #t  r->pc    r-1 ALU asm[ constant =exit   ( return/exit instruction )
 ]asm #n  t->r d-1 r+1 ALU asm[ constant =>r     ( to r. stk. instruction )
 $20   constant =bl         ( blank, or space )
-$d    constant =cr         ( carriage return )
-$a    constant =lf         ( line feed )
+$FFDF constant =!bl        ( inverse of =bl )
+$D    constant =cr         ( carriage return )
+$A    constant =lf         ( line feed )
 $8    constant =bs         ( back space )
-$1b   constant =escape     ( escape character )
+$1B   constant =escape     ( escape character )
 
 $10   constant dump-width  ( number of columns for 'dump' )
 $50   constant tib-length  ( size of terminal input buffer )
-$1f   constant word-length ( maximum length of a word )
+$1F   constant word-length ( maximum length of a word )
 
 $40   constant c/l         ( characters per line in a block )
 $10   constant l/b         ( lines in a block )
 (rp0) constant rp0         ( start of return stack )
 (sp0) constant sp0         ( start of variable stack )
-$2bad constant magic       ( magic number for compiler security )
-$f    constant #highest    ( highest bit in cell )
+$2BAD constant magic       ( magic number for compiler security )
+$F    constant #highest    ( highest bit in cell )
 
 ( Volatile variables )
 $4000 constant <test>      ( used in skip/test )
@@ -626,7 +632,7 @@ $4126 constant tib-start   ( backup tib-buf value )
 
 $14   constant header-length  ( location of length in header )
 $16   constant header-crc     ( location of CRC in header )
-$1c   constant header-options ( location of options bits in header )
+$1C   constant header-options ( location of options bits in header )
 
 target.1 +order         ( Add target word dictionary to search order )
 meta -order meta +order ( Reorder so 'meta' has a higher priority )
@@ -665,8 +671,8 @@ forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 $8000    t, \  $A: VM Memory Size in cells
 $4689    t, \  $C: 0x89 'F'
 $4854    t, \  $E: 'T'  'H'
-$0a0d    t, \ $10: '\r' '\n'
-$0a1a    t, \ $12: ^Z   '\n'
+$0A0D    t, \ $10: '\r' '\n'
+$0A1A    t, \ $12: ^Z   '\n'
 0        t, \ $14: For Length of Forth image, different from VM size
 0        t, \ $16: For CRC of Forth image, not entire VM memory
 $0001    t, \ $18: Endianess check
@@ -813,9 +819,9 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \         or 0 < r> and invert 1 +
 \         r> swap ;
 \
-\       $f constant #highest
+\       $F constant #highest
 \       : um/mod ( ud u -- r q )
-\         ?dup 0= if $a -throw exit then
+\         ?dup 0= if $A -throw exit then
 \         2dup u<
 \         if negate #highest
 \           for >r dup um+ >r >r dup um+ r> + dup
@@ -925,7 +931,7 @@ pad-area tconstant pad   ( pad variable - offset into temporary storage )
 \
 \ The following section of words is purely a space saving measure, or
 \ they allow for other optimizations which also save space. Examples
-\ of this include "[-1]"; any number about $7fff requires two instructions
+\ of this include "[-1]"; any number about $7FFF requires two instructions
 \ to encode, numbers below only one, -1 is a commonly used number so this
 \ allows us to save on space.
 \
@@ -974,6 +980,7 @@ h: state@ state @ ;          ( -- u )
 h: first-bit 1 and ;         ( u -- u )
 h: in! >in ! ;               ( u -- )
 h: in@ >in @ ;               ( -- u )
+h: base-@ base @ ;           ( -- u )
 
 \ Now the implementation of the Forth interpreter without the apologies
 \ for the words in the prior section. This group of words implement some
@@ -1023,8 +1030,13 @@ h: s>d dup 0< ;                       ( n -- d )
 : source-id id @ ;                    ( -- 0 | -1 )
 : d0= 0= swap 0= and ;                ( d -- t )
 : dnegate invert >r invert 1 um+ r> + ; ( d -- d )
+: d+  >r swap >r um+ r> + r> + ;      ( d d -- d )
+\ : d- dnegate d+ ;                   ( d d -- d )
+\ : dabs  s>d if dnegate exit then ;  ( d -- ud )
 \ : even first-bit 0= ;               ( u -- t )
 \ : odd even 0= ;                     ( u -- t )
+\ : pow2? dup dup 1- and 0= and ;     ( u -- u|0 : is u a power of 2? )
+\ : opposite? xor 0< ;                ( n n -- f : true if opposite signs )
 
 \ 'execute' requires an understanding of the return stack, much like
 \ 'doConst' and 'doVar', when given an execution token of a word, a pointer
@@ -1047,24 +1059,12 @@ h: @execute @ ?dup if >r then ;  ( cfa -- )
 \ but does mean these two primitives are slower than might be first thought.
 \
 
-\ : c@ ( b -- c : load character from address  )
-\   dup-@ swap first-bit 
-\   if
-\      8 rshift exit
-\   then
-\   $ff and ;
-
-: c@ dup-@ swap first-bit 3 lshift rshift $ff and ; ( b --c : char load )
-
-\ : c!                      ( c b -- : store character at address )
-\  swap $ff and dup 8 lshift or
-\  over dup @ swap first-bit 0= $ff xor
-\  >r over xor r> and xor swap ! ;
+: c@ dup-@ swap first-bit 3 lshift rshift $FF and ; ( b --c : char load )
 
 : c! ( c b -- : store character at address )
   tuck first-bit 3 lshift dup>r
   lshift over @
-  $ff r> 8 xor lshift and or swap! ;
+  $FF r> 8 xor lshift and or swap! ;
 
 \ 'command?' will be used later for words that are state away. State awareness
 \ and whether the interpreter is in command mode, or compile mode, as well as
@@ -1197,7 +1197,7 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
   over $8 rshift xor   ( crc x )
   dup  $4 rshift xor   ( crc x )
   dup  $5 lshift xor   ( crc x )
-  dup  $c lshift xor   ( crc x )
+  dup  $C lshift xor   ( crc x )
   swap $8 lshift xor ; ( crc )
 
 : crc ( b u -- u : calculate ccitt-ffff CRC )
@@ -1223,7 +1223,7 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
 \
 
 h: @address @ fallthrough;             ( a -- a )
-h: address $3fff and ;                 ( a -- a : mask off address bits )
+h: address $3FFF and ;                 ( a -- a : mask off address bits )
 
 \ 'last' gets a pointer to the most recently defined word, which is used to
 \ implement words like 'recurse', as well as in words which must traverse the
@@ -1281,7 +1281,7 @@ h: nchars                              ( +n c -- : emit c n times )
 \ or it can print out the value regardless if it is printable.
 \
 
-h: >char $7f and dup $7f =bl within if drop [char] _ then ; ( c -- c )
+h: >char $7F and dup $7F =bl within if drop [char] _ then ; ( c -- c )
 : type 0 fallthrough;                  ( b u -- )
 h: typist                              ( b u f -- : print a string )
   >r begin dup while
@@ -1428,9 +1428,9 @@ h: 2depth 2 ?ndepth ;    ( ??? -- :  check depth is at least two )
 \ thrown.
 \
 
-: decimal  $a base ! ;                      ( -- )
+: decimal  $A base ! ;                      ( -- )
 : hex     $10 base ! ;                      ( -- )
-h: radix base @ dup 2 - $22 u> if hex $28 -throw exit then ; ( -- u )
+h: radix base-@ dup 2 - $22 u> if hex $28 -throw exit then ; ( -- u )
 
 \ 'digit' converts a number to its character representation, but it only
 \ deals with numbers less than 36, it does no checking for the output base,
@@ -1497,7 +1497,7 @@ h: digit  9 over < 7 and + [char] 0 + ;                ( u -- c )
 \
 
 : #> 2drop hld @ pad over - ;             ( w -- b u )
-: # 2depth 0 base @ extract digit hold ;  ( d -- d )
+: # 2depth 0 base-@ extract digit hold ;  ( d -- d )
 : #s begin # 2dup d0= until ;             ( d -- 0 )
 : <# pad hld ! ;                          ( -- )
 
@@ -1529,14 +1529,14 @@ h: adjust over- spaces type ;    ( b n n -- )
 h: 5u.r 5 u.r ;                  ( u -- )
 \ :  .r >r str r> adjust ;       ( n n -- : print n, right justified by +n )
 : u.  (u.) space type ;          ( u -- : print unsigned number )
-:  .  radix $a xor if u. exit then str space type ; ( n -- print number )
-\ : d. base @ >r decimal  . r> base ! ;
-\ : h. base @ >r hex     u. r> base ! ;
+:  .  radix $A xor if u. exit then str space type ; ( n -- print number )
+\ : d. base-@ >r decimal  . r> base ! ;
+\ : h. base-@ >r hex     u. r> base ! ;
 
 \ 'holds' and '.base' can be defined as so:
 \
 \        : holds begin dup while 1- 2dup + c@ hold repeat 2drop ;
-\        : .base base @ dup decimal base ! ; ( -- )
+\        : .base base-@ dup decimal base ! ; ( -- )
 \
 \ If needed. '?' is another common utility for printing out the contents at an
 \ address:
@@ -1823,7 +1823,7 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ point to different sections of the word.
 
 : nfa address cell+ ; ( pwd -- nfa : move to name field address)
-: cfa nfa dup c@ + cell+ $fffe and ;        ( pwd -- cfa )
+: cfa nfa dup c@ + cell+ $FFFE and ;        ( pwd -- cfa )
 
 \ '.id' prints out a words name field.
 
@@ -1897,62 +1897,51 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
 
 \ ## Numeric Input
 \ Numeric input is handled next, converting a string into a number, which is
-\ similar to numeric output. First we define a series of words for checking
-\ whether a character belongs to a certain character class, whether it is
-\ a decimal number, or whether it is lowercase, and a word for converting
-\ uppercase letters to lower case, as numbers above base ten use the alphabet
-\ to represent numbers and can be input in either case.
-\
+\ similar to numeric output. 
 
-h: decimal?   [char] 0 [char] : within ; ( c -- t : decimal char? )
-h: lowercase? [char] a [char] { within ; ( c -- t )
-h: uppercase? [char] A [char] [ within ; ( c -- t )
-h: >lower                                ( c -- c : convert to lower case )
-  dup uppercase? if =bl xor exit then ;
+\ 'digit?' takes a character and the current base and returns a character
+\ converted to the number it represents in the base and a boolean indicating
+\ whether or not the conversion was successful. 
 
-\ 'numeric?' determines whether a character is possibly a number character
-\ in any base, from base 2 to base 36, and converts it to a numeric value
-\ if it is, or returns -1 if it is a non-numeric character.
+: digit? ( c base -- u f )
+  >r [char] 0 - 9 over <
+  if 
+    7 - 
+    =!bl and ( handle lower case, as well as upper case )
+    dup $A < or 
+  then dup r> u< ;
 
-h: numeric? ( char -- n|-1 : convert character in 0-9 a-z range to number )
-  >lower
-  dup lowercase? if $57 - exit then ( 97 = 'a', +10 as 'a' == 10 )
-  dup decimal?   if [char] 0 - exit then
-  drop [-1] ;
-
-\ 'digit?' restricts the output of 'numeric?' to numbers within the current
-\ numeric radix, so if the current base is 16, characters '0-9', 'a-f' and
-\ 'A-F' all return the boolean value as true for when passed to 'digit?', but
-\ characters outside this range return false.
-\
-
-h: digit? >lower numeric? base @ u< ; ( c -- t : is char a digit given base )
-
-\ (number) does the work of the numeric conversion, getting a character
+\ >number does the work of the numeric conversion, getting a character
 \ from an input array, converting the character to a number, multiplying it
 \ by the current input base and adding in to the number being converted. It
 \ stops on the first non-numeric character.
 \
-\ (number) accepts a string as an address-length pair which are the first
+\ >number accepts a string as an address-length pair which are the first
 \ two arguments, and a starting number for the number conversion (which is
-\ usually zero). (number) returns a string containing the unconverted
+\ usually zero). >number returns a string containing the unconverted
 \ characters, if any, as well as the converted number.
 \
 
-\ @todo Fix (number) to work with double cell numbers
-h: (number) ( n b u -- n b u : convert string to number )
+\ : >number ( ud a u -- ud a u )
+\  begin dup
+\  while >r  dup >r c@ base-@ digit?
+\  while swap base-@ um* drop rot base-@ um* d+ r> char+ r> 1 -
+\  repeat drop r> r> then ;
+
+\ @todo Fix >number to work with double cell numbers
+: >number ( n b u -- n b u : convert string to number )
   begin
     ( get next character )
-    2dup 2>r drop c@ dup digit? ( n char bool, Rt: b u )
+    2dup 2>r drop c@ base-@ digit? 
     if   ( n char )
-      swap base @ * swap numeric? + ( accumulate number )
+      >r base-@ * r> + ( accumulate number )
     else ( n char )
       drop
       2r> ( restore string )
       nop exit
     then
     2r> ( restore string )
-    +string dup 0= ( advance string and test for end )
+    +string dup0= ( advance string and test for end )
   until ;
 
 \ 'negative?' and 'base?' should be thought of as working in conjunction
@@ -1977,40 +1966,23 @@ h: base? ( b u -- )
   then ( #decimal )
   string@ [char] # = if +string decimal exit then ;
 
-\ '>number' converts a string in its entirety, it takes all the same arguments
-\ as (number) and passes them to it to do the work, but not before doing
-\ the prefix handling. After it does the base restoration. It returns the
-\ same arguments as (number)
-
-\ @todo '>number' should accept a double cell number and return one
-
-\ : digit? ( c base -- u f )
-\  >r [char] 0 - 9 over <
-\  if 7 - dup 10 < or then dup r> u< ;
-
-\ : >number ( ud a u -- ud a u )
-\  begin dup
-\  while >r  dup >r c@ base @ digit?
-\  while swap base @ um* drop rot base @ um* d+ r> char+ r> 1 -
-\  repeat drop r> r> then ;
-
-: >number ( n b u -- n b u : convert string )
-  radix >r
-  negative? >r
-  base?
-  (number)
-  r> if rot negate -rot then
-  r> base ! ;
-
 \ '>number' is a generic word, but awkward to use, it contains information
 \ that the programmer probably does not need to know, 'number?' does some
 \ processing of the results to '>number', a string containing a number to
 \ be converted it passed in, and a boolean is returned as well as the
 \ converted number. The boolean indicates if the entire string was numeric
-\ only
+\ only.
 \
 
-h: number? 0 -rot >number nip 0= ; ( b u -- n f : is number? )
+h: number? ( b u -- n f : is number? )
+  0 -rot 
+  radix     >r
+  negative? >r
+  base?
+  >number
+  r> if rot negate -rot then
+  r> base !
+  nip 0= ; 
 
 \ ## Parsing
 \ After a line of text has been fetched the line needs to be tokenized into
@@ -2060,12 +2032,12 @@ h: ?length dup word-length u> if $13 -throw exit then ;
 
 \ ## The Interpreter
 
-h: ?dictionary dup $3f00 u> if 8 -throw exit then ;
+h: ?dictionary dup $3F00 u> if 8 -throw exit then ;
 : , here dup cell+ ?dictionary cp! ! ; ( u -- : store 'u' in dictionary )
 : c, here ?dictionary c! cp 1+! ;      ( c -- : store 'c' in the dictionary )
 h: doLit 0x8000 or , ;                 ( n+ -- : compile literal )
 : literal ( n -- : write a literal into the dictionary )
-  dup 0x8000 and ( n > $7fff ? )
+  dup 0x8000 and ( n > $7FFF ? )
   if
     invert doLit =invert , exit ( store inversion of n the invert it )
   then
@@ -2075,9 +2047,9 @@ h: doLit 0x8000 or , ;                 ( n+ -- : compile literal )
 h: make-callable chars $4000 or ; ( cfa -- instruction )
 : compile, make-callable , ; ( cfa -- : compile a code field address )
 h: $compile dup inline? if cfa @ , exit then cfa compile, ; ( pwd -- )
-h: not-found source type $d -throw ; ( -- : throw 'word not found' )
+h: not-found source type $D -throw ; ( -- : throw 'word not found' )
 
-h: ?compile dup compile-only? if source type $e -throw exit then ;
+h: ?compile dup compile-only? if source type $E -throw exit then ;
 : (literal) state@ if postpone literal exit then ; ( u -- u | )
 : interpret ( ??? a -- ??? : The command/compiler loop )
   find ?dup if
@@ -2287,7 +2259,7 @@ h: ?unique ( a -- a : print a message if a word definition is not unique )
     2drop last-def @ nfa print  ."  redefined " cr exit
   then ;
 h: ?nul ( b -- : check for zero length strings )
-   count 0= if $a -throw exit then 1- ;
+   count 0= if $A -throw exit then 1- ;
 
 h: find-token token find 0= if not-found exit then ; ( -- pwd,  <string> )
 h: find-cfa find-token cfa ;                         ( -- xt, <string> )
@@ -2464,9 +2436,9 @@ h: +block blk-@ + ;           ( -- )
 
 : block ( k -- a )
   1depth
-  dup $3f u> if $23 -throw exit then
+  dup $3F u> if $23 -throw exit then
   dup blk !
-  $a lshift ( <-- b/buf * ) ;
+  $A lshift ( <-- b/buf * ) ;
 
 \ The block word set has the following additional words, which augment the
 \ set nicely, they are 'list', 'load' and 'thru'. The 'list' word is used
@@ -2500,7 +2472,7 @@ h: +block blk-@ + ;           ( -- )
 \ 	11|        0< if     -1 exit then                                  |
 \ 	12|        0 ;                                                     |
 \ 	13|: >< dup 8 rshift swap 8 lshift or ; ( u -- u : swap bytes )    |
-\ 	14|: #digits dup 0= if 1+ exit then base @ log 1+ ;                |
+\ 	14|: #digits dup 0= if 1+ exit then base-@ log 1+ ;                |
 \ 	15|                                                                |
 \ 	   ----------------------------------------------------------------
 \
@@ -2532,9 +2504,9 @@ h: c/l/ ( c/l / ) 6 rshift ;            ( u -- u )
 h: line swap block swap c/l* + c/l ;    ( k u -- a u )
 h: loadline line evaluate ;             ( k u -- )
 : load 0 l/b 1- for 2dup 2>r loadline 2r> 1+ next 2drop ; ( k -- )
-h: pipe $7c emit ;                      ( -- )
+h: pipe $7C emit ;                      ( -- )
 \ h: .line line -trailing $type ;       ( k u -- )
-h: .border 3 spaces c/l $2d nchars cr ; ( -- )
+h: .border 3 spaces c/l $2D nchars cr ; ( -- )
 h: #line dup 2 u.r ;                    ( u -- u : print line number )
 \ : thru over- for dup load 1+ next drop ; ( k1 k2 -- )
 h: blank =bl fill ;                     ( b u -- )
@@ -2693,19 +2665,23 @@ h: name ( cwf -- a | 0 )
      swap r@ search-for-cfa ?dup if >r 1- ndrop r> rdrop exit then
    1- repeat rdrop ;
 
-h: .name name ?dup 0= if $" ???" then print ;
+h: .name name ?dup 0= if $" ?" then print ;
 h: ?instruction ( i m e -- i 0 | e -1 )
    >r over and r> tuck = if nip [-1] exit then drop-0 ;
 
+\ h: .lit $7fff and u. ;
+
 h: .instruction ( u -- u )
-   0x8000  0x8000 ?instruction if ." LIT" exit then
-   $6000   $6000  ?instruction if ." ALU" exit then
-   $6000   $4000  ?instruction if ." CAL" exit then
-   $6000   $2000  ?instruction if ." BRZ" exit then
-   drop-0 ." BRN" ;
+   ( dup )
+   0x8000  0x8000 ?instruction if ." LIT" ( swap .lit ) exit then
+   $6000   $6000  ?instruction if ( nip ) ." ALU" exit then
+   $6000   $4000  ?instruction if ( nip ) ." CAL" exit then
+   $6000   $2000  ?instruction if ( nip ) ." BRZ" exit then
+   ( drop ) drop-0 ." BRN" ;
 
 : decompile ( u -- : decompile instruction )
-   dup .instruction $4000 =
+\    dup .instruction drop space .name ;
+   dup .instruction $BFFF and 0=
    if space .name exit then drop ;
 
 h: decompiler ( previous current -- : decompile starting at address )
@@ -2731,7 +2707,7 @@ h: decompiler ( previous current -- : decompile starting at address )
   token finder 0= if not-found exit then
   swap      2dup= if drop here then >r
   cr colon space dup .id space dup cr
-  cfa r> decompiler space $3b emit
+  cfa r> decompiler space [char] ; emit
   dup compile-only? if ."  compile-only " then
   dup inline?       if ."  inline "       then
       immediate?    if ."  immediate "    then cr ;
@@ -2913,8 +2889,8 @@ there [t] cp t!
 [t] cold 2/ 0 t!                 ( set starting word )
 [t] normal-running [v] <boot> t!
 
-there    $a tcells t! \ Set Length First!
-checksum $b tcells t! \ Calculate image CRC
+there    $A tcells t! \ Set Length First!
+checksum $B tcells t! \ Calculate image CRC
 
 finished
 bye

@@ -1,4 +1,4 @@
-CFLAGS= -O2 -std=c99 -g -Wall -Wextra 
+CFLAGS= -O2 -std=c99 -g -Wall -Wextra
 CC=gcc
 EXE=
 DF=

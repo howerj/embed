@@ -569,7 +569,8 @@ a: return ( -- : Compile a return into the target )
 : dup-@   ]asm  #[t]     t->n   d+1 alu asm[ ;
 : dup>r   ]asm  #t       t->r   r+1 alu asm[ ;
 : 2dup=   ]asm  #t==n    t->n   d+1 alu asm[ ;
-: 2dupxor ]asm #t^n     t->n   d+1 alu asm[ ;
+: 2dupxor ]asm  #t^n     t->n   d+1 alu asm[ ;
+: 2dup<   ]asm  #n<t     t->n   d+1 alu asm[ ;
 : rxchg   ]asm  #r       t->r       alu asm[ ;
 
 \ 'for' needs the new definition of '>r' to work correctly.
@@ -692,7 +693,7 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ variables accessible by the metacompiler, so 'tconstant' and 'tvariable' can
 \ compile references to them in the target.
 
-[t] doVar tdoVar meta!
+[t] doVar   tdoVar   meta!
 [t] doConst tdoConst meta!
 
 \ Next some space is reserved for variables which will have no name in the
@@ -803,8 +804,6 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ is interesting to see how these words are put together. The first task it
 \ to implement an add with carry, or 'um+'. Once this is available, 'um/mod'
 \ and 'um*' are coded.
-\
-\       : s>d dup 0< ;             ( n -- d : single to double )
 \
 \       : um+ ( w w -- w carry )
 \         over over + >r
@@ -922,7 +921,6 @@ pad-area tconstant pad   ( pad variable - offset into temporary storage )
 \ 0        tvariable <number>     ( execution vector for >number )
 \ 0        tvariable hidden       ( vocabulary for hidden words )
 
-
 \ ### Basic Word Set
 \
 \ The following section of words is purely a space saving measure, or
@@ -995,14 +993,14 @@ h: over+ over + ;           ( u1 u2 -- u1 u1+2 )
 : aligned dup first-bit + ; ( b -- a )
 : bye 0 (bye) ;             ( -- : leave the interpreter )
 h: cell- cell - ;           ( a -- a : adjust address to previous cell )
-: cell+ cell + ;            ( a -- a : move address forward to next cell )
+: cell+  cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;          ( n -- n : convert cells count to address count )
 : chars 1 rshift ;          ( n -- n : convert bytes to number of cells )
 : ?dup dup if dup exit then ; ( n -- 0 | n n : duplicate non zero value )
-: >  swap < ;               ( n1 n2 -- t : signed greater than, n1 > n2 )
+: >  swap  < ;              ( n1 n2 -- t : signed greater than, n1 > n2 )
 : u> swap u< ;              ( u1 u2 -- t : unsigned greater than, u1 > u2 )
 h: u>= u< invert ;          ( u1 u2 -- t : unsigned greater/equal )
-: <> = invert ;             ( n n -- t : not equal )
+:  <>  = invert ;           ( n n -- t : not equal )
 : 0<> 0= invert ;           ( n n -- t : not equal  to zero )
 : 0> 0 > ;                  ( n -- t : greater than zero? )
 : 0< 0 < ;                  ( n -- t : less than zero? )
@@ -1010,7 +1008,7 @@ h: u>= u< invert ;          ( u1 u2 -- t : unsigned greater/equal )
 : tuck swap over ;          ( n1 n2 -- n2 n1 n2 )
 : +! tuck @ +  fallthrough; ( n a -- : increment value at 'a' by 'n' )
 h: swap! swap ! ;           ( a u -- )
-: 1+!  1 swap +! ;          ( a -- : increment value at address by 1 )
+: 1+!   1  swap +! ;        ( a -- : increment value at address by 1 )
 : 1-! [-1] swap +! ;        ( a -- : decrement value at address by 1 )
 : 2! ( d a -- ) tuck ! cell+ ! ;      ( n n a -- )
 : 2@ ( a -- d ) dup cell+ @ swap @ ;  ( a -- n n )
@@ -1018,7 +1016,8 @@ h: swap! swap ! ;           ( a u -- )
 : set-current current ! ;             ( wid -- )
 : bl =bl ;                            ( -- c )
 : within over- >r - r> u< ;           ( u lo hi -- t )
-: abs dup 0< if negate exit then ;    ( n -- u )
+h: s>d dup 0< ;                       ( n -- d )
+: abs s>d if negate exit then ;       ( n -- u )
 : tib #tib cell+ @ ;                  ( -- a )
 : source #tib 2@ ;                    ( -- a u )
 : source-id id @ ;                    ( -- 0 | -1 )
@@ -1026,7 +1025,6 @@ h: swap! swap ! ;           ( a u -- )
 : dnegate invert >r invert 1 um+ r> + ; ( d -- d )
 \ : even first-bit 0= ;               ( u -- t )
 \ : odd even 0= ;                     ( u -- t )
-
 
 \ 'execute' requires an understanding of the return stack, much like
 \ 'doConst' and 'doVar', when given an execution token of a word, a pointer
@@ -1049,15 +1047,24 @@ h: @execute @ ?dup if >r then ;  ( cfa -- )
 \ but does mean these two primitives are slower than might be first thought.
 \
 
-: c@ dup-@ swap first-bit ( b -- c : load character from address  )
-   if
-      8 rshift exit
-   then
-   $ff and ;
-: c!                      ( c b -- : store character at address )
-  swap $ff and dup 8 lshift or swap
-  swap over dup @ swap first-bit 0= $ff xor
-  >r over xor r> and xor swap ! ;
+\ : c@ ( b -- c : load character from address  )
+\   dup-@ swap first-bit 
+\   if
+\      8 rshift exit
+\   then
+\   $ff and ;
+
+: c@ dup-@ swap first-bit 3 lshift rshift $ff and ; ( b --c : char load )
+
+\ : c!                      ( c b -- : store character at address )
+\  swap $ff and dup 8 lshift or
+\  over dup @ swap first-bit 0= $ff xor
+\  >r over xor r> and xor swap ! ;
+
+: c! ( c b -- : store character at address )
+  tuck first-bit 3 lshift dup>r
+  lshift over @
+  $ff r> 8 xor lshift and or swap! ;
 
 \ 'command?' will be used later for words that are state away. State awareness
 \ and whether the interpreter is in command mode, or compile mode, as well as
@@ -1100,8 +1107,8 @@ h: cp! aligned cp ! ;                 ( n -- )
 \ find yourself using them too much it is best to refactor the code as code
 \ that uses them tends to be very confusing.
 
-: rot >r swap r> swap ;               ( n1 n2 n3 -- n2 n3 n1 )
-: -rot swap >r swap r> ;              ( n1 n2 n3 -- n3 n1 n2 )
+: rot >r swap r> swap ;  ( n1 n2 n3 -- n2 n3 n1 )
+: -rot rot rot ;         ( n1 n2 n3 -- n3 n1 n2 )
 
 \ '2>r' and '2r>' are like 'rot' and '-rot', useful but they should not
 \ be overused. The words move two values to and from the return stack. Care
@@ -1109,7 +1116,7 @@ h: cp! aligned cp ! ;                 ( n -- )
 \ leading to unpredictable behavior, much like all the return stack words.
 \ The optimizer might also change a call to one of these words into a jump,
 \ which should be avoided as it could cause problems in edge cases, so do not
-\ use this word directly before an 'exit' or ';'.
+\ use these words directly before an 'exit' or ';'.
 \
 
 h: 2>r rxchg swap >r >r ;              ( u1 u2 --, R: -- u1 u2 )
@@ -1155,10 +1162,9 @@ h: doNext 2r> ?dup if 1- >r @ >r exit then cell+ >r ;
 \ 'min' falling through into it, and 'max' calling 'mux', all to save on space.
 \
 
-: min 2dup < fallthrough;             ( n n -- n )
+: min 2dup< fallthrough;              ( n n -- n )
 h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 : max 2dup > mux ;                    ( n n -- n )
-
 
 \ 'key' retrieves a single character of input, it is a vectored word so the
 \ method used to get data can be changed.
@@ -1195,14 +1201,12 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
   swap $8 lshift xor ; ( crc )
 
 : crc ( b u -- u : calculate ccitt-ffff CRC )
-  $ffff >r
+  [-1] ( -1 = 0xffff ) >r
   begin
     dup
   while
    string@ r> swap ccitt >r 1 /string
   repeat 2drop r> ;
-
-
 
 \ : random ( -- u : pseudo random number )
 \  seed @ 0= seed toggle seed @ 0 ccitt dup seed ! ;
@@ -1344,7 +1348,7 @@ h: ndrop for aft drop then next ; ( 0u....nu n -- : drop n cells )
 \
 
 : catch ( i*x xt -- j*x 0 | i*x n )
-  sp@ >r
+  sp@       >r
   handler @ >r
   rp@ handler !
   execute
@@ -1468,10 +1472,10 @@ h: radix base @ dup 2 - $22 u> if hex $28 -throw exit then ; ( -- u )
 \ they do not propagate.
 
 \ @todo Check '?hold' works correctly
-: hold  hld @ 1- dup hld ! c! fallthrough;              ( c -- )
-h: ?hold hld @ pad $100 + u> if $11 -throw exit then ;  ( -- )
-h: extract dup >r um/mod r> swap >r um/mod r> rot ;     ( ud ud -- ud u )
-h: digit  9 over < 7 and + [char] 0 + ;                 ( u -- c )
+: hold  hld @ 1- dup hld ! c! fallthrough;             ( c -- )
+h: ?hold hld @ pad $100 + u> if $11 -throw exit then ; ( -- )
+h: extract dup>r um/mod rxchg um/mod r> rot ;         ( ud ud -- ud u )
+h: digit  9 over < 7 and + [char] 0 + ;                ( u -- c )
 
 \ The quartet formed by "<# # #s #>" look intimidating to the new comer, but
 \ are quite simple. They allow the format of numeric output to be controlled
@@ -1492,10 +1496,10 @@ h: digit  9 over < 7 and + [char] 0 + ;                 ( u -- c )
 \ like '.', or 'u.r'.
 \
 
-: #> 2drop hld @ pad over - ;                       ( w -- b u )
-: # 2depth 0 base @ extract digit hold ;            ( d -- d )
-: #s begin # 2dup d0= until ;                       ( d -- 0 )
-: <# pad hld ! ;                                    ( -- )
+: #> 2drop hld @ pad over - ;             ( w -- b u )
+: # 2depth 0 base @ extract digit hold ;  ( d -- d )
+: #s begin # 2dup d0= until ;             ( d -- 0 )
+: <# pad hld ! ;                          ( -- )
 
 \ 'sign' is used with the Pictured Numeric Output words to add a sign character
 \ if the number is negative, 'str' is then defined to convert a number in any
@@ -2033,7 +2037,7 @@ h: lookfor ( b u c -- b u : skip until <test> succeeds )
   repeat rdrop ;
 
 h: skipTest if 0> exit then 0<> ; ( n f -- t )
-h: scanTest skipTest invert ; ( n f -- t )
+h: scanTest skipTest invert ;     ( n f -- t )
 h: skipper ' skipTest <test> ! lookfor ; ( b u c -- u c )
 h: scanner ' scanTest <test> ! lookfor ; ( b u c -- u c )
 
@@ -2289,7 +2293,7 @@ h: find-token token find 0= if not-found exit then ; ( -- pwd,  <string> )
 h: find-cfa find-token cfa ;                         ( -- xt, <string> )
 : ' find-cfa state@ if postpone literal exit then ; immediate
 : [compile] find-cfa compile, ; immediate compile-only  ( --, <string> )
-: [char] char postpone literal ; immediate compile-only ( --, <string> : )
+: [char] char postpone literal ; immediate compile-only ( --, <string> )
 \ h: ?quit command? if $38 -throw exit then ;
 : ; ( ?quit ) ?check =exit , [ fallthrough; immediate compile-only
 h: get-current! ?dup if get-current ! exit then ; ( -- wid )
@@ -2345,7 +2349,7 @@ h: find-cell >r begin dup-@ r@ <> while cell+ repeat rdrop ; ( u a -- a )
   context
   find-empty-cell
   dup cell- swap
-  context - chars dup>r 1- dup 0< if $32 -throw exit then
+  context - chars dup>r 1- s>d if $32 -throw exit then
   for aft dup-@ swap cell- then next @ r> ;
 
 xchange _forth-wordlist root-voc

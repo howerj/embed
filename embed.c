@@ -39,11 +39,6 @@ forth_t *embed_new(void)
 	return h;
 }
 
-void embed_free(forth_t *h)
-{
-	free(h);
-}
-
 forth_t *embed_copy(forth_t const * const h)
 {
 	assert(h);
@@ -51,15 +46,17 @@ forth_t *embed_copy(forth_t const * const h)
 	return memcpy(r, h, sizeof(*r));
 }
 
+static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
+
 int embed_load(forth_t *h, const char *name)
 {
 	assert(h && name);
 	FILE *input = embed_fopen_or_die(name, "rb");
 	long r = 0, c1 = 0, c2 = 0;
-	for(size_t i = 0; i < MAX(64, h->m[5]); i++) {
+	for(size_t i = 0; i < MAX(64, embed_cells(h)); i++) {
 		if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0) {
 			r = i;
-			break;;
+			break;
 		}
 		h->m[i] = ((c1 & 0xffu))|((c2 & 0xffu) << 8u);
 	}
@@ -75,24 +72,24 @@ static int save(forth_t *h, const char *name, const size_t start, const size_t l
 	FILE *out = embed_fopen_or_die(name, "wb");
 	int r = 0;
 	for(size_t i = start; i < length; i++)
-		if(fputc(h->m[i] & 255, out) < 0 || fputc(h->m[i] >> 8, out) < 0)
+		if(fputc(h->m[i]&255, out) < 0 || fputc(h->m[i]>>8, out) < 0)
 			r = -1;
 	fclose(out);
 	return r;
 }
 
-int embed_save(forth_t *h, const char *name)
-{
-	return save(h, name, 0, h->m[5]);
-}
+int    embed_save(forth_t *h, const char *name) { return save(h, name, 0, embed_cells(h)); }
+size_t embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
+void   embed_free(forth_t *h)     { assert(h); memset(h, 0, sizeof(*h)); free(h); }
+char  *embed_get_core(forth_t *h) { assert(h); return (char*)h->m; }
 
 int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
 	assert(h && in && out);
 	static const uint16_t delta[] = { 0, 1, -2, -1 };
-	const uint16_t l = h->m[5]; 
+	const uint16_t l = embed_cells(h);
 	uint16_t * const m = h->m;
-	uint16_t pc = m[0], t = m[1], rp = m[2], sp = m[3];
+	register uint16_t pc = m[0], t = m[1], rp = m[2], sp = m[3];
 	for(uint32_t d;;) {
 		const uint16_t instruction = m[pc++];
 		assert(sp < l && rp < l && pc < l);

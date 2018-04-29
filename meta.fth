@@ -100,34 +100,6 @@
 \ instruction. As the CPU is designed to execute Forth, Subroutine Threaded
 \ Code (STC) is the most efficient method of running Forth upon it.
 \
-\ @todo Complete the introduction
-\ - Describe where the Forth came from (from a VHDL CPU project, eForth, ...)
-\ - Philosophy of Forth
-\   - Simplicity, Factoring, analyzing the problem from all angles, ...
-\   - What Forth is good for, and what it is not.
-\ - What a meta compiler is
-\ - Purpose of this document
-\ - A little bit about Forth, a simple introduction
-\ - How Vocabularies work
-\ - Stack comments, also standardize stack comments
-\ - Conventions within Forth, Forth blocks, naming of words (for example
-\   using '@' or '!' within word names).
-\ - Design tradeoffs and constraints
-\   - For example: having a separate string storage area
-\   - Limitations of the Virtual Machines code space
-\   - Compiler security (depth checking, compile-only words, ... )
-\   Some Forths do not bother with it
-\   - More modern Forths which optimize more but lose the simplicity
-\   of Forth
-\   - Lack of user variables, making a ROMable Forth, compression
-\   - Making the metacompiler use look like ordinary Forth, so understanding
-\   how to put together a Forth interpreter can be done by an ordinary
-\   Forth programmer (which complicates the metacompiler, but only a little).
-\ - The document should describe both how, and why, things are the
-\ way they are. The design decisions are just as important as the decision
-\ itself, more so even, as understand the why a decision was made allows
-\ you to change or challenge the implementation.
-\
 \ The project, documentation and Forth images are under an MIT license,
 \ <https://github.com/howerj/embed/blob/master/LICENSE> and the
 \ repository is available at <https://github.com/howerj/embed/>.
@@ -170,6 +142,9 @@
 \ * <http://excamera.com/sphinx/fpga-j1.html>
 \ * <https://github.com/jamesbowman/j1>
 \ * <https://github.com/samawati/j1eforth>
+\ Meta-compilation/Cross-Compilation
+\ * <http://www.ultratechnology.com/meta1.html>
+\ * <https://en.wikipedia.org/wiki/Compiler-compiler#FORTH_metacompiler>
 
 \ The Virtual Machine is specifically designed to execute Forth, it is a stack
 \ machine that allows many Forth words to be encoded in one instruction but
@@ -306,10 +281,6 @@ a: #branch  $0000 a; ( unconditional branch )
 \ is the source code for it which weighs in at under two hundred lines of
 \ C code. Unfortunately this would not include that rationale that led to
 \ the virtual machine being the way it is.
-
-\ @note if the meta-compilers assembler words were included in the default
-\ image they could be used by 'see'. It would also mean an assembler would
-\ be included in the default image.
 
 \ ALU Operations
 a: #t      $0000 a; ( T = t )
@@ -504,6 +475,7 @@ a: return ( -- : Compile a return into the target )
 \ applications in the metacompiled program, they are no immediate words
 \ and they do not need to be, 't:' and 't;' do not change the interpreter
 \ state, once the actual metacompilation begins everything is command mode.
+
 : begin  there update-fence ;                ( -- a )
 : until  [a] ?branch ;                       ( a -- )
 : if     there update-fence 0 [a] ?branch  ; ( -- a )
@@ -520,6 +492,7 @@ a: return ( -- : Compile a return into the target )
 : next tdoNext fetch-xt [a] call t, update-fence ; ( a -- )
 : exit exit, ;                               ( -- )
 : ' [t] literal ;                            ( "name", -- )
+\ @bug maximum string length is 32 bytes, not 255 as it should be.
 : ." tdoPrintString fetch-xt [a] call $literal ; ( "string", -- )
 : $" tdoStringLit   fetch-xt [a] call $literal ; ( "string", -- )
 
@@ -568,7 +541,7 @@ a: return ( -- : Compile a return into the target )
 : rdrop   ]asm  #t       r-1    alu asm[ ;
 \ Some words can be implemented in a single instruction which have no
 \ analogue within Forth.
-: dup-@   ]asm  #[t]     t->n   d+1 alu asm[ ;
+: dup@   ]asm  #[t]     t->n   d+1 alu asm[ ;
 : dup0=   ]asm  #t==0    t->n   d+1 alu asm[ ;
 : dup>r   ]asm  #t       t->r   r+1 alu asm[ ;
 : 2dup=   ]asm  #t==n    t->n   d+1 alu asm[ ;
@@ -789,9 +762,9 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ : sp!    sp!      ; ( u -- ??? : set stack depth )
 : 1-       1-       ; ( u -- u : decrement top of stack )
 : 0=       0=       ; ( u -- t : if top of stack equal to zero )
-: (bye)    (bye)    ; ( u -- !!! : exit VM with 'u' as return value )
-: rx?      rx?      ; ( -- c | -1 : fetch a single character, or EOF )
-: tx!      tx!      ; ( c -- : transmit single character )
+h: (bye)    (bye)   ; ( u -- !!! : exit VM with 'u' as return value )
+h: rx?      rx?     ; ( -- c | -1 : fetch a single character, or EOF )
+h: tx!      tx!     ; ( c -- : transmit single character )
 : (save)   (save)   ; ( u1 u2 -- u : save memory from u1 to u2 inclusive )
 : um/mod   um/mod   ; ( d  u2 -- rem div : mixed unsigned divide/modulo )
 : /mod     /mod     ; ( u1 u2 -- rem div : signed divide/modulo )
@@ -978,7 +951,8 @@ h: state@ state @ ;          ( -- u )
 h: first-bit 1 and ;         ( u -- u )
 h: in! >in ! ;               ( u -- )
 h: in@ >in @ ;               ( -- u )
-h: base-@ base @ ;           ( -- u )
+h: base@ base @ ;            ( -- u )
+h: base! base ! ;            ( u -- )
 
 \ Now the implementation of the Forth interpreter without the apologies
 \ for the words in the prior section. This group of words implement some
@@ -1023,14 +997,14 @@ h: swap! swap ! ;           ( a u -- )
 : within over- >r - r> u< ;           ( u lo hi -- t )
 h: s>d dup 0< ;                       ( n -- d )
 : abs s>d if negate exit then ;       ( n -- u )
-: tib #tib cell+ @ ;                  ( -- a )
+h: tib #tib cell+ @ ;                 ( -- a )
 : source #tib 2@ ;                    ( -- a u )
 : source-id id @ ;                    ( -- 0 | -1 )
 : rot >r swap r> swap ;               ( n1 n2 n3 -- n2 n3 n1 )
 : -rot rot rot ;                      ( n1 n2 n3 -- n3 n1 n2 )
-: d0= or 0= ;                         ( d -- t )
-: dnegate invert >r invert 1 um+ r> + ; ( d -- d )
-: d+  >r swap >r um+ r> + r> + ;      ( d d -- d )
+h: d0= or 0= ;                         ( d -- t )
+h: dnegate invert >r invert 1 um+ r> + ; ( d -- d )
+h: d+  >r swap >r um+ r> + r> + ;      ( d d -- d )
 \ : 2swap >r -rot r> -rot ; ( n1 n2 n3 n4 -- n3 n4 n1 n2 )
 \ : d< rot   
 \     2dup
@@ -1066,7 +1040,7 @@ h: @execute @ ?dup if >r then ;  ( cfa -- )
 \ but does mean these two primitives are slower than might be first thought.
 \
 
-: c@ dup-@ swap first-bit 3 lshift rshift $FF and ; ( b --c : char load )
+: c@ dup@ swap first-bit 3 lshift rshift $FF and ; ( b --c : char load )
 
 : c! ( c b -- : store character at address )
   tuck first-bit 3 lshift dup>r
@@ -1434,9 +1408,9 @@ h: 2depth 2 ?ndepth ;    ( ??? -- :  check depth is at least two )
 \ thrown.
 \
 
-: decimal  $A base ! ;                      ( -- )
-: hex     $10 base ! ;                      ( -- )
-h: radix base-@ dup 2 - $22 u> if hex $28 -throw exit then ; ( -- u )
+: decimal  $A base! ;                      ( -- )
+: hex     $10 base! ;                      ( -- )
+h: radix base@ dup 2 - $22 u> if hex $28 -throw exit then ; ( -- u )
 
 \ 'digit' converts a number to its character representation, but it only
 \ deals with numbers less than 36, it does no checking for the output base,
@@ -1502,7 +1476,7 @@ h: digit  9 over < 7 and + [char] 0 + ;                ( u -- c )
 \
 
 : #> 2drop hld @ pad over - ;             ( w -- b u )
-: # 2depth 0 base-@ extract digit hold ;  ( d -- d )
+: # 2depth 0 base@ extract digit hold ;   ( d -- d )
 : #s begin # 2dup d0= until ;             ( d -- 0 )
 : <# pad hld ! ;                          ( -- )
 
@@ -1535,13 +1509,13 @@ h: 5u.r 5 u.r ;                  ( u -- )
 \ :  .r >r str r> adjust ;       ( n n -- : print n, right justified by +n )
 : u.  (u.) space type ;          ( u -- : print unsigned number )
 :  .  radix $A xor if u. exit then str space type ; ( n -- print number )
-\ : d. base-@ >r decimal  . r> base ! ;
-\ : h. base-@ >r hex     u. r> base ! ;
+\ : d. base@ >r decimal  . r> base! ;
+\ : h. base@ >r hex     u. r> base! ;
 
 \ 'holds' and '.base' can be defined as so:
 \
 \        : holds begin dup while 1- 2dup + c@ hold repeat 2drop ;
-\        : .base base-@ dup decimal base ! ; ( -- )
+\        : .base base@ dup decimal base! ; ( -- )
 \
 \ If needed. '?' is another common utility for printing out the contents at an
 \ address:
@@ -1881,9 +1855,9 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
   >r
   context
   begin
-    dup-@
+    dup@
   while
-    dup-@ @ r@ swap searcher ?dup
+    dup@ @ r@ swap searcher ?dup
     if
       >r rot drop r> rdrop exit
     then
@@ -1932,11 +1906,10 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
 : >number ( ud b u -- ud b u : convert string to number )
   begin
     ( get next character )
-    2dup 2>r drop c@ base-@ digit? 
-    if   ( n char )
-      \ >r base-@ * r> + ( accumulate number )
-       swap base-@ um* drop rot base-@ um* d+
-    else ( n char )
+    2dup 2>r drop c@ base@ digit? 
+    if   ( d char )
+       swap base@ um* drop rot base@ um* d+
+    else ( d char )
       drop
       2r> ( restore string )
       nop exit
@@ -1967,12 +1940,15 @@ h: base? ( b u -- )
   then ( #decimal )
   string@ [char] # = if +string decimal exit then ;
 
-\ '>number' is a generic word, but awkward to use, it contains information
-\ that the programmer probably does not need to know, 'number?' does some
-\ processing of the results to '>number', a string containing a number to
-\ be converted it passed in, and a boolean is returned as well as the
-\ converted number. The boolean indicates if the entire string was numeric
-\ only.
+\ '>number' is a generic word, but awkward to use,  'number?' does some
+\ processing of the results to '>number' and handles other input processing
+\ expected for numbers. For example numbers can be prefixed by '$' to specify
+\ they are in hex, or '#' for decimal, regardless of the current base. The
+\ decimal point is handled for double cell input. The minus sign, '-', can
+\ be used as a prefix for all of these different formats to specify that
+\ the number is negative. The negative prefix must come before any base
+\ specifier. 'dpl' is used to store where the decimal place occurred in the
+\ input.
 \
 
 h: number? ( b u -- d f : is number? )
@@ -1983,10 +1959,12 @@ h: number? ( b u -- d f : is number? )
   0 -rot 0 -rot 
   >number
   string@ [char] . = if +string
-    dup>r >number nip 0= if r> dpl ! [-1] else 0 rdrop then 
-  else nip 0= then
+    dup>r >number nip if 0 rdrop else r> dpl ! [-1] then 
+  else 
+    nip 0= 
+  then
   r> if >r dnegate r> then
-  r> base !  ; 
+  r> base!  ; 
 
 \ ## Parsing
 \ After a line of text has been fetched the line needs to be tokenized into
@@ -2035,6 +2013,50 @@ h: ?length dup word-length u> if $13 -throw exit then ;
 : char token count drop c@ ;             ( -- c; <string> )
 
 \ ## The Interpreter
+\ The interpreter consists of two main words, 'literal' and 'interpret'. Other
+\ useful words are also defined, such as ',' or 'immediate', but they are
+\ relatively trivial in comparison.
+\ 
+\ 'interpret' takes a pointer to a counted string and interprets the
+\ results, with this word we have the main interpreter. It searches for
+\ words, executes them or compiles them if found, or if it is not a word
+\ it attempts to convert it to a number, if this fails an error is signaled.
+\ 
+\ 'interpret' also handles single cell and double cell conversion and
+\ compilation. It does not know what to do with numbers directly, instead
+\ it executes the execution token stored in '<literal>', which contains
+\ '(literal)'. '(literal)' has two different behaviors depending on the
+\ execution state, in compiling mode the number is compiled into the
+\ dictionary with 'literal'.
+\ 
+\ 'literal' takes a number and compiles a number literal into the dictionary
+\ which when run will push the number provided to it. Numbers below $7FFF
+\ can be compiled to a single instruction, numbers between $FFFF and $8000
+\ are compiled as the bitwise inversion of the number followed by and invert
+\ instruction. Single cell values take between 1-2 instructions to represent
+\ and double cell values between 2 and 4 instructions.
+\ 
+\ As said, the other words a pretty straight forward and behave the same
+\ as you would expect in most other Forths, ',' writes a value in the
+\ next available location in the dictionary, 'c,' does the same but for
+\ character sized values (potentially making the dictionary unaligned). They
+\ both check there is enough room left in the dictionary to proceed.
+\ 
+\ 'compile,' is needed as this is a subroutine threaded Forth, execution
+\ tokens should be handed to 'compile,' and not straight to ',' which would
+\ be ideal. This is because addresses need to be converted into a call
+\ instruction before they are written into the dictionary. On other Forths
+\ you might get away with using ','.
+\ 
+\ 'immediate', 'compile-only' and 'smudge' work by setting bits in the
+\ word header. 'immediate' and 'compile-only' should be familiar by now, they
+\ set bits in the 'PWD' field of a words header. 'smudge' works by toggling
+\ a bit in the name fields length byte, which by virtue of how searching
+\ works means that the word will not be found in the dictionary any more.
+\ 'smudge' is *not* used to hide the word being currently defined until the
+\ matching ';' is met, however that is it's most common use in other Forths
+\ if it is defined. It hides the latest define word.
+\ 
 
 h: ?dictionary dup $3F00 u> if 8 -throw exit then ;
 : , here dup cell+ ?dictionary cp! ! ; ( u -- : store 'u' in dictionary )
@@ -2059,20 +2081,26 @@ h: ?compile dup compile-only? if source type $E -throw exit then ;
   find ?dup if
     state@
     if
-      0> if cfa execute exit then ( <- immediate word )
-      $compile exit               ( <- compiling word )
+      0> if cfa execute exit then \ <- immediate word are executed
+      $compile exit               \ <- compiling word are...compiled.
     then
-    drop ?compile cfa execute exit
+    drop ?compile     \ <- check it's not a compile only word word
+    cfa execute exit  \ <- if its not, execute it, then exit 'interpreter'
   then
   \ not a word
-  dup>r count number? if rdrop
-    dpl @ 0< if drop else command? if swap then <literal> @execute then
+  dup>r count number? if rdrop \ it's a number!
+    dpl @ 0< if \ <- dpl will -1 if its a single cell number
+       drop     \ drop high cell from 'number?' for single cell output
+    else        \ <- dpl is not -1, it's a double cell number
+       command? if swap then 
+       <literal> @execute \ <literal> is executed twice if it's a double
+    then
     <literal> @execute exit
   then
-  r> not-found ;
+  r> not-found ; \ not a word or number, it's an error!
 
 \ NB. 'compile' only works for words, instructions, and numbers below $8000
-: compile  r> dup-@ , cell+ >r ; compile-only ( --:Compile next compiled word )
+: compile  r> dup@ , cell+ >r ; compile-only ( --:Compile next compiled word )
 : immediate $4000 last fallthrough; ( -- : previous word immediate )
 h: toggle tuck @ xor swap! ;        ( u a -- : xor value at addr with u )
 \ : compile-only $8000 last toggle ;
@@ -2236,7 +2264,15 @@ h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) <ok> ! ;
 \ h: pace 11 emit ;
 \ t: file ' pace ' drop ' ktap xio ;
 
-\ ## Control Structures and defining words
+\ ## Control Structures and Defining words
+\ 
+\    Companions the creator seeks, not corpses, not herds and believers. 
+\    Fellow creators the creator seeks -- those who write new values on 
+\    new tablets. 
+\    Companions the creator seeks, and fellow harvesters; for everything about 
+\    him is ripe for the harvest.
+\    - Friedrich Nietzsche 
+\ 
 \ The next set of words defines relating to control structures and defining
 \ new words, along with some basic error checking for the control structures
 \ (which is known as 'compiler security' in the Forth community). Some of the
@@ -2245,14 +2281,59 @@ h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) <ok> ! ;
 \
 \ Control structure words include 'if', 'else', 'then', 'begin', 'again',
 \ 'until', 'for', 'next', 'recurse' and 'tail'. These words are all immediate
-\ words and are also compile only.
+\ words and are also compile only, most words visible in the target dictionary
+\ in this section have these properties.
 \
 \ New control structure words can be defined by the user quite easily, for
 \ example a word called 'unless' can be made which executes a clause if the
 \ test provided is false, which is the opposite of 'if'. This is one of the
-\ many unique features of Forth, that new words can be defined.
-\
-\
+\ many unique features of Forth, that the language itself can be extended
+\ and customized. This is possible in languages like 'lisp', but not in 'C',
+\ to do the same in 'C' would require the modification of the 'C' compiler and
+\ recompilation. In 'forth' (and 'lisp') it is a natural part of the language.
+\ 
+\ Using our 'unless' example:
+\ 
+\     : unless ' 0= compile, postpone if ; immediate
+\ 
+\ We this newly defined control structure like so:
+\ 
+\     : x unless 99 . cr then ;
+\     0 x ( prints '99' )
+\     1 x ( prints nothing )
+\ 
+\ Not only are the control structures defined in this section, but so are
+\ several defining words. These Nietzschean words create new values and
+\ words in the dictionary. These words include ':', and ';', as well as
+\ the more complex 'create' and 'does>'. To define a new word they need to
+\ parse the next word in input stream, so they take over from interpreter loop
+\ from one token. They then have differing actions on what they do with this
+\ token.
+\ 
+\ ':' and ';' should need no explanation as to what they do by now, only 
+\ the 'how' needs to be elucidated. ':' parses the next word in the input 
+\ stream and puts the 'state' variable into compile mode, the 'interpret' 
+\ word will pick this state change up when the word after the one just 
+\ read in. ':' also makes sure the dictionary is aligned before compilation
+\ takes place, it prints out a warning if a word is redefined, compiles the
+\ word header for the new word and pushes a magic constant value onto the
+\ stack which ';' will pull off. Apart from the word header it does no
+\ compilation itself, this is left for the interpreter to do. ';' checks
+\ for the magic number ':' left on the stack and throws an error if this
+\ is not found. It compiles an 'exit' instruction into the dictionary as
+\ the final instruction for the word being defined and finally puts the
+\ interpreter back into command mode - to do this it needs to be an
+\ immediate word. These words also need set the last definition variable
+\ and ';' links the new word into the dictionary making it visible.
+\ 
+\ 'create' and 'does>' are often used as pairs, 'create' can be used alone,
+\ but 'does>' should only be used on words that have been make with 'create'.
+\ 'create' defines a new word with a default action of pushes the address
+\ of the next location available after the current definition, more memory
+\ can be allocated after this with 'allot', 'create' can therefore be used
+\ to make new data structures. However the default behavior is quite simple,
+\ it would be more useful if we could change it, or extend it. This is what
+\ 'does>' allows us to do. 
 
 h: ?check ( magic-number -- : check for magic number on the stack )
    magic <> if $16 -throw exit then ;
@@ -2282,6 +2363,7 @@ h: get-current! ?dup if get-current ! exit then ; ( -- wid )
 h: here-0 here 0x0000 ;
 h: >mark here-0 postpone again ;
 : if here-0 postpone until ; immediate compile-only
+\ : unless ' 0= compile, postpone if ; immediate compile-only
 : then fallthrough; immediate compile-only
 h: >resolve here chars over @ or swap! ;
 : else >mark swap >resolve ; immediate compile-only
@@ -2315,32 +2397,67 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 
 \ ## Vocabulary Words
 \ The vocabulary word set should already be well understood, if the
-\ metacompiler has been, the vocabulary word set is how Forth organizes words
+\ metacompiler has been. The vocabulary word set is how Forth organizes words
 \ and controls visibility of words.
 \
 
 h: find-empty-cell 0 fallthrough; ( a -- )
-h: find-cell >r begin dup-@ r@ <> while cell+ repeat rdrop ; ( u a -- a )
+h: find-cell >r begin dup@ r@ <> while cell+ repeat rdrop ; ( u a -- a )
+
+\ 'get-order' retrieves the current search order by pushing a list of
+\ 'wid' values onto the stack 'n' long which can be modified before being
+\ passed to 'set-order'.
 
 : get-order ( -- widn ... wid1 n : get the current search order )
   context
   find-empty-cell
   dup cell- swap
   context - chars dup>r 1- s>d if $32 -throw exit then
-  for aft dup-@ swap cell- then next @ r> ;
+  for aft dup@ swap cell- then next @ r> ;
+
+\ 'xchange' is used to place the next few words into the root vocabulary,
+\ it will be set back to the default shortly.
 
 xchange _forth-wordlist root-voc
 : forth-wordlist _forth-wordlist ;
+
+\ 'set-order' does the opposite of 'get-order', it can be used to set
+\ the current search order. It has a special case however, when the number
+\ of word lists is set to '-1' it loads the minimal word set, which consists
+\ of very few words, namely:
+\ 
+\      words forth set-order forth-wordlist
+\ 
+\ These words can in turn be used to load the default word list, and find out
+\ what words are in the current search order. This is useful to create new
+\ words which consist of the minimal set of words to do a job, and once that
+\ has been achieved go back to the normal Forth environment.
+\ 
+\ 'set-order' also checks that the number of word lists is not too high, there
+\ should not be more than '#vocs' word lists given to 'set-order', and 
+\ exception is thrown otherwise.
+\ 
+\ 'set-order' does not set the definitions word list however, that is the
+\ word list which new definitions are added to, 'definitions' and 'set-current'
+\ can be used to do this.
 
 : set-order ( widn ... wid1 n -- : set the current search order )
   dup [-1] = if drop root-voc 1 set-order exit then
   dup #vocs > if $31 -throw exit then
   context swap for aft tuck ! cell+ then next 0 swap! ;
 
+\ 'forth' loads the root vocabulary containing the minimal word set,
+\ and also loads the normal 'forth' vocabulary.
+
 : forth root-voc forth-wordlist 2 set-order ; ( -- )
 
-\ The name fields length in a counted string is used to store a bit
-\ indicating the word is hidden. This is the highest bit in the count byte.
+\ 'words' is used to display all of the words defined in the dictionary in
+\ the current search order. '.words' handles a specific word list, and
+\ 'not-hidden?' looks at an individual words header to check whether a word
+\ is to be shown or now, a bit is set in the words name fields counted
+\ string byte, in the highest bit of the count byte, if the word is to be
+\ hidden or shown.
+\ 
 h: not-hidden? nfa c@ $80 and 0= ; ( pwd -- )
 h: .words space
     begin
@@ -2349,7 +2466,47 @@ h: .words space
 : words
   get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ;
 
+\ 'xchange' is used to place words back into the forth word list again.
+
 xchange root-voc _forth-wordlist
+
+\ The 'previous'/'also'/'only' mechanism for Forth word list manipulation
+\ are quite awkward, the only one word keeping is 'only' which is just
+\ a shortcut for '-1 set-order'. The more powerful words '-order' and '+order'
+\ are much easier to use.
+\ 
+\ Of note is the idiom 'wid -order wid +order' which reorders the search order
+\ so 'wid' now has a higher priority than the other word lists. This can be
+\ done before 'definitions' is used to make 'wid' the current definitions
+\ word list as well.
+\ 
+\ Another idiom is:
+\ 
+\     only forth definitions
+\ 
+\ Which restores the search order to the default and sets the 'forth-wordlist'
+\ vocabulary as the one which new definitions are added to.
+\ 
+\ Anonymous word lists can be created with the 'anonymous' word, this is
+\ useful to make programs which only a few words exported to another word
+\ list, making things less cluttered. 
+\ 
+\ For example:
+\ 
+\     only forth 
+\     anonymous definitions
+\     : x 99 . ;
+\     : y 88 . ;
+\     : reorder dup -order +order ;
+\     forth-wordlist reorder definitions
+\     : z x y cr ;
+\     only forth definitions
+\  
+\ In this example new words 'x', 'y' and 'reorder' are created and added
+\ to an anonymous wordlist, 'z' uses words 'x' and 'y' from this word this
+\ and then the words in the anonymous word lists are hidden, but not the
+\ newly defined word 'z', that is available in the default Forth word list.
+\ 
 
 \ : previous get-order swap drop 1- set-order ; ( -- )
 \ : also get-order over swap 1+ set-order ;     ( wid -- )
@@ -2366,6 +2523,12 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
   then ;
 : -order get-order (order) nip set-order ;             ( wid -- )
 : +order dup>r -order get-order r> swap 1+ set-order ; ( wid -- )
+
+\ 'editor' is a word which loads the editor vocabulary, which will be
+\ defined later, as well as setting the input and output base to decimal
+\ (as some of the editor commands overlap with hexadecimal values). It
+\ requires the newly defined '+order' word to work.
+\ 
 
 : editor decimal editor-voc +order ;                   ( -- )
 \ : assembler root-voc assembler-voc 2 set-order ;     ( -- )
@@ -2477,7 +2640,7 @@ h: +block blk-@ + ;           ( -- )
 \ 	11|        0< if     -1 exit then                                  |
 \ 	12|        0 ;                                                     |
 \ 	13|: >< dup 8 rshift swap 8 lshift or ; ( u -- u : swap bytes )    |
-\ 	14|: #digits dup 0= if 1+ exit then base-@ log 1+ ;                |
+\ 	14|: #digits dup 0= if 1+ exit then base@ log 1+ ;                 |
 \ 	15|                                                                |
 \ 	   ----------------------------------------------------------------
 \
@@ -2620,7 +2783,7 @@ h: bist ( -- u : built in self test )
 \ vectors to sensible values, set the vocabularies to the default search
 \ order and reset the variable stack.
 
-: cold ( -- : performs a cold boot  )
+h: cold ( -- : performs a cold boot  )
    bist ?dup if negate (bye) exit then
    $10 block b/buf 0 fill
    $12 retrieve io!
@@ -2633,20 +2796,44 @@ h: hi hex cr ." eFORTH V " ver 0 u.r cr here . .free cr [ ; ( -- )
 h: normal-running hi quit ;                 ( -- : boot word )
 
 \ ## See : The Forth Disassembler
-
-\ @warning This disassembler is experimental, and not liable to work
-\ @todo improve this with better output and exit detection.
-\ 'see' could be improved with a word that detects when the end of a
-\ word actually occurs, and with a disassembler for instructions. The output
-\ could also be better formatted, or optionally made to be more or less
-\ verbose. Another improvement would be to do the word lookup for branches
-\ that occur outside of the word definition, or prior to it, as there
-\ are many words which have been turned into tail calls - or a single
-\ branch.
-
-\ @todo handle various special cases in the decompiler
-\ Such as literals spanning two instructions, merged exits, tail calls,
-\ variables, constants, created words, strings and possibly more.
+\ This section defines 'see', the Forth disassembler. This is meant only
+\ as a rough debugging tool and not meant to reproduce the exact source. The
+\ output format is not defined in any standard, it is just meant to be useful
+\ for debugging purposes and perhaps for programmers to quickly determine how
+\ a word works. 
+\ 
+\ There are many ways 'see' could be improved but each minor improvement
+\ would make the disassembler more complicated and prone to breaking, the
+\ disassembler as it stands is probably the best trade-off in terms of
+\ complexity and utility. Despite it being small it is still quite useful and
+\ does a lot, for example it attempts to look up words in the current word
+\ search orders, it prints out the type of instruction, the addresses of
+\ instructions and the raw instruction. It also gives information about if
+\ a word is compile only or immediate.
+\ 
+\ One of the most difficult thing is determining the end of a word, 
+\ the disassembler uses a crude method by disassembling everything from the
+\ start of the word definition in the dictionary to the start of the next
+\ one in the same word list - this means that ':noname' definitions (of which
+\ the metacompiler makes many in the target) and words not in the same word
+\ list that are between the word to be disassembled and the next word in the
+\ same word as the word being disassembled will be disassembled in their
+\ entirety, their headers and all. As such the output should be viewed only
+\ as an aid and as not being definitive and absolutely correct.
+\ 
+\ Three words will be defined that do most of the complex work of the
+\ disassembler, they are 'validate', 'search-for-cfa' and 'name', which
+\ should be understood together. To make a disassembler we will need a way
+\ to look up compiled calls to words and retrieve their name, this is what
+\ 'name' does.
+\ 
+\ 'search-for-cfa' searches a given word list for a CFA (or a Code Field 
+\ Address, the address of the executable section of a Forth word), it does 
+\ this by following the dictionary linked list assuming that if a CFA points 
+\ in between the current word and the previous word in the list then this is 
+\ word that we are looking for. It uses 'validate' to attempt to check this,
+\ if we have found a candidate word address by calling the word 'cfa' on it,
+\ it should move to the same address we provided.
 
 h: validate tuck cfa <> if drop-0 exit then nfa ; ( cfa pwd -- nfa | 0 )
 
@@ -2655,9 +2842,8 @@ h: search-for-cfa ( wid cfa -- nfa : search for CFA in a word list )
   begin
     dup
   while
-    address dup r@ swap dup-@ address swap within ( simplify? )
-    ( @bug does not continue with search if validate fails )
-    if @address r> swap validate exit then
+    address dup r@ swap dup@ address swap within ( simplify? )
+    if dup @address r@ swap validate ?dup if rdrop nip exit then then
     address @
   repeat rdrop ;
 
@@ -2684,8 +2870,7 @@ h: .instruction ( u -- u )
    $6000   $2000  ?instruction if ( nip ) ." BRZ" exit then
    ( drop ) drop-0 ." BRN" ;
 
-: decompile ( u -- : decompile instruction )
-\    dup .instruction drop space .name ;
+h: decompile ( u -- : decompile instruction )
    dup .instruction $BFFF and 0=
    if space .name exit then drop ;
 
@@ -2693,9 +2878,16 @@ h: decompiler ( previous current -- : decompile starting at address )
   >r
    begin dup r@ u< while
      dup 5u.r colon space
-     dup-@
+     dup@
      dup 5u.r space decompile cr cell+
    repeat rdrop drop ;
+
+\ : disassembler ( a u -- : disassemble a range of code )
+\  1 rshift for aft 
+\     dup   5u.r [char] : emit
+\     dup @ 5u.r space
+\     dup @ decompile cr cell+ 
+\  then next drop ;
 
 \ 'see' is the Forth disassembler, it takes a word and (attempts) to
 \ turn it back into readable Forth source code. The disassembler is only
@@ -2707,6 +2899,12 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ to disk, modified, then recompiled yielding a modified Forth. Although
 \ comments would not be present, meaning this would be more of an intellectual
 \ exercise than of any utility.
+\ 
+\ One way of improving the output would be to move the assembler in the
+\ metacompiler to the target image, the same assembler words like 'd-1' and
+\ '#t|n' could then be used to disassemble ALU instructions, which are
+\ currently only displayed in their raw format.
+\ 
 
 : see ( --, <string> : decompile a word )
   token finder 0= if not-found exit then
@@ -2746,8 +2944,8 @@ h: decompiler ( previous current -- : decompile starting at address )
 \
 
 : .s cr depth for aft r@ pick . then next ."  <sp" ;          ( -- )
-h: dm+ chars for aft dup-@ space 5u.r cell+ then next ;        ( a u -- a )
-\ h: dc+ chars for aft dup-@ space decompile cell+ then next ; ( a u -- a )
+h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
+\ h: dc+ chars for aft dup@ space decompile cell+ then next ; ( a u -- a )
 
 : dump ( a u -- )
   $10 + \ align up by dump-width
@@ -2916,21 +3114,43 @@ is hackable and extensible by modification of the source code.
 
 There is 64KiB of memory available to the Forth virtual machine, of which only
 the first 16KiB can contain program instructions (or more accurately branch
-locations can only be in the first 16KiB of memory). The virtual machine memory
-can divided into three regions of memory, the applications further divide the
-memory into different sections.
+and call locations can only be in the first 16KiB of memory). The virtual 
+places little restrictions on what goes where, however the eForth image maps
+things out in the following way:
 
 | Block   |  Region          |
 | ------- | ---------------- |
+| 0       | Image header     |
 | 0 - 15  | Program Storage  |
 | 16      | User Data        |
 | 17      | Variable Stack   |
 | 18 - 62 | User data        |
 | 63      | Return Stack     |
 
-Program execution begins at address zero. The variable stack starts at the
-beginning of block 17 and grows upwards, the return stack starts at the end of
-block 63 and grows downward.
+The virtual machine uses the first six cells for special purposes, apart
+from the division between program/data and data only sections this is the
+only restriction that the *virtual machine* places on memory.
+
+The first six locations are used for:
+
+| Address  |  Use                                                         |
+| -------- | ------------------------------------------------------------ |
+| $0       | Initial Program Counter (PC) value and reset vector          |
+| $2       | Initial Top of Stack Register value                          |
+| $4       | Initial Return Stack Register value (grows downwards)        |
+| $6       | Initial Variable Stack Register value (grows upwards)        |
+| $8       | Instruction exception vector (trap handler)                  |
+| $A       | Virtual Machine memory in cells, if used, else $8000 assumed |
+
+
+The eForth image maps things in the following way. The variable stack starts 
+at the beginning of block 17 and grows upwards, the return stack starts at 
+the end of block 63 and grows downward. The trap handler is set to a call
+a word called '-throw', defined as ": -throw negate throw ;". The virtual
+machine image size is assumed to be the maximum allowable value of "$8000".
+The virtual machine memory size is specified in cells, not bytes, "$8000" is
+the maximum number of cells that a 16-bit value can address if the lowest bit
+is used to specify a byte.
 
 ## Instruction Set Encoding
 
@@ -3070,17 +3290,23 @@ to the model.
 
 ## eForth Memory model
 
-The eForth model imposes extra semantics to certain areas of memory.
+The eForth model imposes extra semantics to certain areas of memory, along
+with the virtual machine.
 
 | Address       | Block  | Meaning                        |
 | ------------- | ------ | ------------------------------ |
 | $0000         |   0    | Start of execution             |
-| $0002         |   0    | Trap Handler                   |
-| $0004-EOD     |   0    | The dictionary                 |
-| EOD-PAD1      |   ?    | Compilation and Numeric Output |
-| PAD1-PAD2     |   ?    | Pad Area                       |
-| PAD2-$3FFF    |   15   | End of dictionary              |
+| $0000         |   0    | Initial Program Counter (PC)   |
+| $0002         |   0    | Initial Top of Stack Register  |
+| $0004         |   0    | Initial Return Stack Register  |
+| $0006         |   0    | Initial Var. Stack Register    |
+| $0008         |   0    | Instruction exception vector   |
+| $000A         |   0    | VM memory in cells             |
+| $000C-$001C   |   0    | eForth Header                  |
+| $001E-EOD     |  0-?   | The dictionary                 |
+| EOD-$3FFF     |  ?-15  | Compilation and Numeric Output |
 | $4000         |   16   | Interpreter variable storage   |
+| $4280         |   16   | Pad area                       |
 | $4400         |   17   | Start of variable stack        |
 | $4800-$FBFF   | 18-63  | Empty blocks for user data     |
 | $FC00-$FFFF   |   0    | Return stack block             |

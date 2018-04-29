@@ -527,8 +527,6 @@ a: return ( -- : Compile a return into the target )
 \ metacompiler, when one of these words is used in the metacompiled program
 \ it will be implemented in assembly.
 
-\ @todo implement 'd/mod', 'ud/mod', and 'ud*'?
-
 : nop     ]asm  #t       alu asm[ ;
 : dup     ]asm  #t       t->n   d+1   alu asm[ ;
 : over    ]asm  #n       t->n   d+1   alu asm[ ;
@@ -660,9 +658,6 @@ forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 \ be treated as a binary and not as text).
 \
 
-\ @todo Add the virtual machine memory size to the header, it could be changed
-\ This could be the size in cells, so $8000.
-
 0        t, \  $0: PC: program counter, jump to start / reset vector
 0        t, \  $2: T, top of stack
 (rp0)    t, \  $4: RP0, return stack pointer 
@@ -678,6 +673,8 @@ $0A1A    t, \ $12: ^Z   '\n'
 $0001    t, \ $18: Endianess check
 #version t, \ $1A: Version information
 $0001    t, \ $1C: Header options
+
+0 t, \ @bug This is a hack!
 
 \ @bug There is something very weird going on with the initial header size
 \ It should be possible to allocate memory how I want here, up to a point,
@@ -909,6 +906,7 @@ $400     tconstant b/buf ( size of a block )
 0        tvariable blk   ( current blk loaded, set in 'cold' )
 #version constant  ver   ( eForth version )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
+0        tvariable dpl   ( number of places after fraction )
 0        tvariable <literal> ( holds execution vector for literal )
 0        tvariable <boot>  ( -- : execute program at startup )
 0        tvariable <ok>
@@ -1028,9 +1026,18 @@ h: s>d dup 0< ;                       ( n -- d )
 : tib #tib cell+ @ ;                  ( -- a )
 : source #tib 2@ ;                    ( -- a u )
 : source-id id @ ;                    ( -- 0 | -1 )
-: d0= 0= swap 0= and ;                ( d -- t )
+: rot >r swap r> swap ;               ( n1 n2 n3 -- n2 n3 n1 )
+: -rot rot rot ;                      ( n1 n2 n3 -- n3 n1 n2 )
+: d0= or 0= ;                         ( d -- t )
 : dnegate invert >r invert 1 um+ r> + ; ( d -- d )
 : d+  >r swap >r um+ r> + r> + ;      ( d d -- d )
+\ : 2swap >r -rot r> -rot ; ( n1 n2 n3 n4 -- n3 n4 n1 n2 )
+\ : d< rot   
+\     2dup
+\     > if = nip nip if 0 exit then [-1] exit then 2drop u< ; ( d -- f )
+\ : d>  2swap d< ;                      ( d -- f )
+\ : du> 2swap du< ;                     ( d -- f )
+\ : d= rot xor -rot xor xor 0= ;      ( d d -- f )
 \ : d- dnegate d+ ;                   ( d d -- d )
 \ : dabs  s>d if dnegate exit then ;  ( d -- ud )
 \ : even first-bit 0= ;               ( u -- t )
@@ -1103,13 +1110,6 @@ h: cp! aligned cp ! ;                 ( n -- )
 
 : allot cp +! ;                        ( n -- )
 
-\ 'rot' and '-rot' manipulate three items on the stack, rotating them, if you
-\ find yourself using them too much it is best to refactor the code as code
-\ that uses them tends to be very confusing.
-
-: rot >r swap r> swap ;  ( n1 n2 n3 -- n2 n3 n1 )
-: -rot rot rot ;         ( n1 n2 n3 -- n3 n1 n2 )
-
 \ '2>r' and '2r>' are like 'rot' and '-rot', useful but they should not
 \ be overused. The words move two values to and from the return stack. Care
 \ should exercised when using them as the return stack can easily be corrupted,
@@ -1165,6 +1165,12 @@ h: doNext 2r> ?dup if 1- >r @ >r exit then cell+ >r ;
 : min 2dup< fallthrough;              ( n n -- n )
 h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 : max 2dup > mux ;                    ( n n -- n )
+
+\ : 2over 2>r 2dup 2r> 2swap ;
+\ : 2nip 2>r 2drop 2r> nop ;
+\ : 4dup 2over 2over ;
+\ : dmin 4dup d< if 2drop exit else 2nip ;
+\ : dmax 4dup d> if 2drop exit else 2nip ;
 
 \ 'key' retrieves a single character of input, it is a vectored word so the
 \ method used to get data can be changed.
@@ -1471,9 +1477,8 @@ h: radix base-@ dup 2 - $22 u> if hex $28 -throw exit then ; ( -- u )
 \ This combination of checking catches most errors that occur and makes sure
 \ they do not propagate.
 
-\ @todo Check '?hold' works correctly
 : hold  hld @ 1- dup hld ! c! fallthrough;             ( c -- )
-h: ?hold hld @ pad $100 + u> if $11 -throw exit then ; ( -- )
+h: ?hold pad $100 - hld @ u> if $11 -throw exit then ; ( -- )
 h: extract dup>r um/mod rxchg um/mod r> rot ;         ( ud ud -- ud u )
 h: digit  9 over < 7 and + [char] 0 + ;                ( u -- c )
 
@@ -1911,30 +1916,26 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
     dup $A < or 
   then dup r> u< ;
 
-\ >number does the work of the numeric conversion, getting a character
+\ '>number' does the work of the numeric conversion, getting a character
 \ from an input array, converting the character to a number, multiplying it
 \ by the current input base and adding in to the number being converted. It
 \ stops on the first non-numeric character.
 \
-\ >number accepts a string as an address-length pair which are the first
+\ '>number' accepts a string as an address-length pair which are the first
 \ two arguments, and a starting number for the number conversion (which is
-\ usually zero). >number returns a string containing the unconverted
+\ usually zero). '>number' returns a string containing the unconverted
 \ characters, if any, as well as the converted number.
+\ 
+\ '>number' operates on unsigned double cell values, not single cell values.
 \
 
-\ : >number ( ud a u -- ud a u )
-\  begin dup
-\  while >r  dup >r c@ base-@ digit?
-\  while swap base-@ um* drop rot base-@ um* d+ r> char+ r> 1 -
-\  repeat drop r> r> then ;
-
-\ @todo Fix >number to work with double cell numbers
-: >number ( n b u -- n b u : convert string to number )
+: >number ( ud b u -- ud b u : convert string to number )
   begin
     ( get next character )
     2dup 2>r drop c@ base-@ digit? 
     if   ( n char )
-      >r base-@ * r> + ( accumulate number )
+      \ >r base-@ * r> + ( accumulate number )
+       swap base-@ um* drop rot base-@ um* d+
     else ( n char )
       drop
       2r> ( restore string )
@@ -1974,15 +1975,18 @@ h: base? ( b u -- )
 \ only.
 \
 
-h: number? ( b u -- n f : is number? )
-  0 -rot 
+h: number? ( b u -- d f : is number? )
+  [-1] dpl !
   radix     >r
   negative? >r
   base?
+  0 -rot 0 -rot 
   >number
-  r> if rot negate -rot then
-  r> base !
-  nip 0= ; 
+  string@ [char] . = if +string
+    dup>r >number nip 0= if r> dpl ! [-1] else 0 rdrop then 
+  else nip 0= then
+  r> if >r dnegate r> then
+  r> base !  ; 
 
 \ ## Parsing
 \ After a line of text has been fetched the line needs to be tokenized into
@@ -2061,10 +2065,11 @@ h: ?compile dup compile-only? if source type $E -throw exit then ;
     drop ?compile cfa execute exit
   then
   \ not a word
-  dup count number? if
-    nip <literal> @execute exit
+  dup>r count number? if rdrop
+    dpl @ 0< if drop else command? if swap then <literal> @execute then
+    <literal> @execute exit
   then
-  not-found ;
+  r> not-found ;
 
 \ NB. 'compile' only works for words, instructions, and numbers below $8000
 : compile  r> dup-@ , cell+ >r ; compile-only ( --:Compile next compiled word )
@@ -2205,7 +2210,7 @@ h: eval ( -- )
 \ rethrown after the input is restored.
 \
 
-h: get-input source in@ id @ <ok> @ ;    ( -- n1...n5 )
+h: get-input source in@ source-id <ok> @ ;    ( -- n1...n5 )
 h: set-input <ok> ! id ! in! #tib 2! ;   ( n1...n5 -- )
 : evaluate ( a u -- )
   get-input 2>r 2>r >r

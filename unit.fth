@@ -135,13 +135,13 @@ only forth definitions
   if drop else nip then ;   ( return small or large candidate respectively )
 
 : log ( u base -- u : compute the integer logarithm of u in 'base' )
-	>r
-	dup 0= if -b throw then ( logarithm of zero is an error )
-	0 swap
-	begin
-		swap 1+ swap rdup r> / dup 0= ( keep dividing until 'u' is 0 )
-	until
-	drop 1- rdrop ;
+  >r
+  dup 0= if -b throw then ( logarithm of zero is an error )
+  0 swap
+  begin
+    swap 1+ swap rdup r> / dup 0= ( keep dividing until 'u' is 0 )
+  until
+  drop 1- rdrop ;
 
 : log2 2 log ; ( u -- u : compute the integer logarithm of u in base )
 
@@ -379,6 +379,17 @@ T{ #vocs 8 min -> 8 }T    \ minimum number of vocabularies is 8
 T{ b/buf      -> $400 }T  \ b/buf should always be 1024
 defined? sp@ ?\ T{ sp@ 2 3 4 sp@ nip nip nip - abs chars -> 4 }T
 T{ here 4 allot -4 allot here = -> -1 }T
+
+
+defined? d< ?\ T{  0  0  0  0 d< ->  0 }T
+defined? d< ?\ T{  0  0  0  1 d< -> -1 }T
+defined? d< ?\ T{  0  0  1  0 d< -> -1 }T
+defined? d< ?\ T{  0 -1  0  0 d< -> -1 }T
+defined? d< ?\ T{  0 -1  0 -1 d< ->  0 }T
+defined? d< ?\ T{  0 -1  0  1 d< -> -1 }T
+defined? d< ?\ T{ $ffff -1  0  1 d< -> -1 }T
+defined? d< ?\ T{ $ffff -1  0  -1 d< -> 0 }T
+
 
 \  T{ random random <> -> -1 }T
 

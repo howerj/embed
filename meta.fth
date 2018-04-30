@@ -1253,7 +1253,7 @@ h: nchars                              ( +n c -- : emit c n times )
 \   : pick ?dup if swap >r 1- pick r> swap exit then dup ;
 \
 
-: depth sp@ sp0 - chars ;             ( -- u : get current depth )
+: depth sp@ sp0 cells - chars ;       ( -- u : get current depth )
 : pick cells sp@ swap - @ ;           ( vn...v0 u -- vn...v0 vu )
 
 \ '>char' takes a character and converts it to an underscore if it is not
@@ -2208,7 +2208,7 @@ h: ?error ( n -- : perform actions on error )
     .             ( print error number )
     [char] ? emit ( print '?' )
     cr
-    sp0 sp!       ( empty stack )
+    sp0 cells sp!       ( empty stack )
     preset        ( reset I/O streams )
     postpone [    ( back into interpret mode )
     exit
@@ -2792,7 +2792,7 @@ h: cold ( -- : performs a cold boot  )
    bist ?dup if negate dup yield? exit then
    $10 block b/buf 0 fill
    $12 retrieve io!
-   forth sp0 sp!
+   forth sp0 cells sp!
    <boot> @execute bye ;
 
 \ 'hi' prints out the welcome message,

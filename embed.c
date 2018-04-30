@@ -88,7 +88,7 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 		const uint16_t instruction = m[pc++];
 
 		if(m[6] & 1) /* trace on */
-			fprintf(m[6] & 2 ? out : stderr, "[%04x %04x %04x %04x %04x]\n", pc-1, instruction, t, rp, sp);
+			fprintf(m[6] & 2 ? out : stderr, "[%04x %04x %04x %02x %02x]\n", pc-1, instruction, t, m[2]-rp, sp-m[3]);
 		assert(sp < l && rp < l && pc < l);
 
 		if(0x8000 & instruction) { /* literal */

@@ -530,7 +530,7 @@ a: return ( -- : Compile a return into the target )
 : rp@     ]asm  #rp@     t->n   d+1   alu asm[ ;
 : rp!     ]asm  #rp!     d-1    alu asm[ ;
 : 0=      ]asm  #t==0    alu asm[ ;
-: (bye)   ]asm  #bye     alu asm[ ;
+: yield?  ]asm  #bye     alu asm[ ;
 : rx?     ]asm  #rx      t->n   d+1   alu asm[ ;
 : tx!     ]asm  #tx      n->t   d-1   alu asm[ ;
 : (save)  ]asm  #save    d-1    alu asm[ ;
@@ -582,7 +582,7 @@ $2BAD constant magic       ( magic number for compiler security )
 $F    constant #highest    ( highest bit in cell )
 
 ( Volatile variables )
-$4000 constant <test>      ( used in skip/test )
+\ $4000 Unused
 $4002 constant last-def    ( last, possibly unlinked, word definition )
 $4006 constant id          ( used for source id )
 $4008 constant seed        ( seed used for the PRNG )
@@ -601,9 +601,10 @@ $4124 constant tib-buf     ( ... and address )
 $4126 constant tib-start   ( backup tib-buf value )
 \ $4280 == pad-area
 
-$14   constant header-length  ( location of length in header )
-$16   constant header-crc     ( location of CRC in header )
-$1C   constant header-options ( location of options bits in header )
+$C    constant vm-options     ( Virtual machine options register )
+$16   constant header-length  ( location of length in header )
+$18   constant header-crc     ( location of CRC in header )
+$1E   constant header-options ( location of options bits in header )
 
 target.1 +order         ( Add target word dictionary to search order )
 meta -order meta +order ( Reorder so 'meta' has a higher priority )
@@ -637,17 +638,16 @@ forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 (sp0)    t, \  $6: SP0, variable stack pointer
 0        t, \  $8: Instruction exception vector
 $8000    t, \  $A: VM Memory Size in cells
-$4689    t, \  $C: 0x89 'F'
-$4854    t, \  $E: 'T'  'H'
-$0A0D    t, \ $10: '\r' '\n'
-$0A1A    t, \ $12: ^Z   '\n'
-0        t, \ $14: For Length of Forth image, different from VM size
-0        t, \ $16: For CRC of Forth image, not entire VM memory
-$0001    t, \ $18: Endianess check
-#version t, \ $1A: Version information
-$0001    t, \ $1C: Header options
-
-0 t, \ @bug This is a hack!
+$0000    t, \  $C: VM Options
+$4689    t, \  $E: 0x89 'F'
+$4854    t, \ $10: 'T'  'H'
+$0A0D    t, \ $12: '\r' '\n'
+$0A1A    t, \ $14: ^Z   '\n'
+0        t, \ $16: For Length of Forth image, different from VM size
+0        t, \ $18: For CRC of Forth image, not entire VM memory
+$0001    t, \ $1A: Endianess check
+#version t, \ $1C: Version information
+$0001    t, \ $1E: Header options
 
 \ @bug There is something very weird going on with the initial header size
 \ It should be possible to allocate memory how I want here, up to a point,
@@ -762,9 +762,9 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ : sp!    sp!      ; ( u -- ??? : set stack depth )
 : 1-       1-       ; ( u -- u : decrement top of stack )
 : 0=       0=       ; ( u -- t : if top of stack equal to zero )
-h: (bye)    (bye)   ; ( u -- !!! : exit VM with 'u' as return value )
-h: rx?      rx?     ; ( -- c | -1 : fetch a single character, or EOF )
-h: tx!      tx!     ; ( c -- : transmit single character )
+h: yield?  yield?   ; ( u -- !!! : exit VM with 'u' as return value )
+h: rx?     rx?      ; ( -- c | -1 : fetch a single character, or EOF )
+h: tx!     tx!      ; ( c -- : transmit single character )
 : (save)   (save)   ; ( u1 u2 -- u : save memory from u1 to u2 inclusive )
 : um/mod   um/mod   ; ( d  u2 -- rem div : mixed unsigned divide/modulo )
 : /mod     /mod     ; ( u1 u2 -- rem div : signed divide/modulo )
@@ -813,7 +813,7 @@ h: tx!      tx!     ; ( c -- : transmit single character )
 \         0 swap ( u1 0 u2 ) #highest
 \         for dup um+ >r >r dup um+ r> + r>
 \           if >r over um+ r> + then
-\         next rot drop ;
+\         next rot-drop ;
 \
 \ The other arithmetic operations follow from the previous definitions almost
 \ trivially:
@@ -970,7 +970,7 @@ h: base! base ! ;            ( u -- )
 h: over- over - ;           ( u u -- u u )
 h: over+ over + ;           ( u1 u2 -- u1 u1+2 )
 : aligned dup first-bit + ; ( b -- a )
-: bye 0 (bye) ;             ( -- : leave the interpreter )
+: bye -1 0 yield? nop ( $38 -throw ) ; ( -- : leave the interpreter )
 h: cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+  cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;          ( n -- n : convert cells count to address count )
@@ -987,6 +987,7 @@ h: u>= u< invert ;          ( u1 u2 -- t : unsigned greater/equal )
 : tuck swap over ;          ( n1 n2 -- n2 n1 n2 )
 : +! tuck @ +  fallthrough; ( n a -- : increment value at 'a' by 'n' )
 h: swap! swap ! ;           ( a u -- )
+h: zero  0 swap! ;          ( a -- : zero value at address )
 : 1+!   1  swap +! ;        ( a -- : increment value at address by 1 )
 : 1-! [-1] swap +! ;        ( a -- : decrement value at address by 1 )
 : 2! ( d a -- ) tuck ! cell+ ! ;      ( n n a -- )
@@ -997,11 +998,12 @@ h: swap! swap ! ;           ( a u -- )
 : within over- >r - r> u< ;           ( u lo hi -- t )
 h: s>d dup 0< ;                       ( n -- d )
 : abs s>d if negate exit then ;       ( n -- u )
-h: tib #tib cell+ @ ;                 ( -- a )
 : source #tib 2@ ;                    ( -- a u )
+h: tib source drop ;
 : source-id id @ ;                    ( -- 0 | -1 )
 : rot >r swap r> swap ;               ( n1 n2 n3 -- n2 n3 n1 )
 : -rot rot rot ;                      ( n1 n2 n3 -- n3 n1 n2 )
+h: rot-drop rot drop ;                ( n1 n2 n3 -- n2 n3 )
 h: d0= or 0= ;                         ( d -- t )
 h: dnegate invert >r invert 1 um+ r> + ; ( d -- d )
 h: d+  >r swap >r um+ r> + r> + ;      ( d d -- d )
@@ -1153,7 +1155,7 @@ h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 \ outside the normal byte range).
 \
 
-: key <key> @execute dup [-1] = if bye 0x0000 exit then ; ( -- c )
+: key <key> @execute dup [-1] = if bye then ; ( -- c )
 
 \ '/string', '+string' and 'count' are for manipulating strings, 'count'
 \ words best on counted strings which have a length prefix, but can be used
@@ -1185,7 +1187,7 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
   begin
     dup
   while
-   string@ r> swap ccitt >r 1 /string
+   string@ r> swap ccitt >r +string
   repeat 2drop r> ;
 
 \ : random ( -- u : pseudo random number )
@@ -1568,7 +1570,7 @@ h: .free unused u. ;             ( -- : print unused program space )
 : pack$ ( b u a -- a ) \ null fill
   aligned dup>r over
   dup cell negate and ( align down )
-  - over+ 0 swap! 2dup c! 1+ swap cmove r> ;
+  - over+ zero 2dup c! 1+ swap cmove r> ;
 
 : =string ( a1 u2 a1 u2 -- t : string equality )
   >r swap r> ( a1 a2 u1 u2 )
@@ -1802,7 +1804,7 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ point to different sections of the word.
 
 : nfa address cell+ ; ( pwd -- nfa : move to name field address)
-: cfa nfa dup c@ + cell+ $FFFE and ;        ( pwd -- cfa )
+: cfa nfa dup c@ + cell+ $FFFE ( <- cell -1 invert ) and ; ( pwd -- cfa )
 
 \ '.id' prints out a words name field.
 
@@ -1844,8 +1846,8 @@ h: searcher ( a wid -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word in a WID )
   while
     dup nfa count r@ count =string
     if ( found! )
-      dup immediate? if 1 else [-1] then
-      rdrop exit
+      rdrop
+      dup immediate? 1 or negate exit
     then
     nip dup @address
   repeat
@@ -1859,7 +1861,7 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
   while
     dup@ @ r@ swap searcher ?dup
     if
-      >r rot drop r> rdrop exit
+      >r rot-drop r> rdrop exit
     then
     cell+
   repeat drop-0 r> 0x0000 ;
@@ -1870,9 +1872,9 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
 \ but a pointer in the word header which can be turned into an execution token
 \ with 'cfa'.
 
-: search-wordlist searcher rot drop ; ( a wid -- pwd 1 | pwd -1 | a 0 )
+: search-wordlist searcher rot-drop ; ( a wid -- pwd 1 | pwd -1 | a 0 )
 : find ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
-  finder rot drop ;
+  finder rot-drop ;
 
 \ ## Numeric Input
 \ Numeric input is handled next, converting a string into a number, which is
@@ -1880,7 +1882,8 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
 
 \ 'digit?' takes a character and the current base and returns a character
 \ converted to the number it represents in the base and a boolean indicating
-\ whether or not the conversion was successful. 
+\ whether or not the conversion was successful. An ASCII character set is
+\ assumed.
 
 : digit? ( c base -- u f )
   >r [char] 0 - 9 over <
@@ -1964,7 +1967,7 @@ h: number? ( b u -- d f : is number? )
     nip 0= 
   then
   r> if >r dnegate r> then
-  r> base!  ; 
+  r> base! ; 
 
 \ ## Parsing
 \ After a line of text has been fetched the line needs to be tokenized into
@@ -1981,19 +1984,20 @@ h: -trailing ( b u -- b u : remove trailing spaces )
     then
   next 0x0000 ;
 
-h: lookfor ( b u c -- b u : skip until <test> succeeds )
-  >r
+h: lookfor ( b u c xt -- b u : skip until 'xt' test succeeds )
+  swap >r -rot
   begin
     dup
   while
-    string@ r@ - r@ =bl = <test> @execute if rdrop exit then
+    string@ r@ - r@ =bl = 4 pick execute 
+    if rdrop rot-drop exit then
     +string
-  repeat rdrop ;
+  repeat rdrop rot-drop ;
 
 h: skipTest if 0> exit then 0<> ; ( n f -- t )
 h: scanTest skipTest invert ;     ( n f -- t )
-h: skipper ' skipTest <test> ! lookfor ; ( b u c -- u c )
-h: scanner ' scanTest <test> ! lookfor ; ( b u c -- u c )
+h: skipper ' skipTest lookfor ;   ( b u c -- u c )
+h: scanner ' scanTest lookfor ;   ( b u c -- u c )
 
 h: parser ( b u c -- b u delta )
   >r over r> swap 2>r
@@ -2002,7 +2006,7 @@ h: parser ( b u c -- b u delta )
 
 : parse ( c -- b u ; <string> )
    >r tib in@ + #tib @ in@ - r@ parser >in +!
-   r> bl = if -trailing then 0 max ;
+   r> =bl = if -trailing then 0 max ;
 : ) ; immediate ( -- : do nothing )
 :  ( [char] ) parse 2drop ; immediate \ ) ( parse until matching paren )
 : .( [char] ) parse type ; ( print out text until matching parenthesis )
@@ -2067,8 +2071,7 @@ h: doLit 0x8000 or , ;                 ( n+ -- : compile literal )
   if
     invert doLit =invert , exit ( store inversion of n the invert it )
   then
-  doLit ( turn into literal, write into dictionary )
-  ; compile-only immediate
+  doLit ; compile-only immediate ( turn into literal, write into dictionary )
 
 h: make-callable chars $4000 or ; ( cfa -- instruction )
 : compile, make-callable , ; ( cfa -- : compile a code field address )
@@ -2161,11 +2164,11 @@ h: .string do$ print ; ( -- : print string  )
 [t] .string        tdoPrintString meta!
 [t] string-literal tdoStringLit   meta!
 
-h: parse-string [char] " word count + cp! ;              ( -- )
+h: parse-string [char] " word count + cp! ; ( -- )
 ( <string>, --, Run: -- b )
 : $"  compile string-literal parse-string ; immediate compile-only
 : ."  compile .string parse-string ; immediate compile-only ( <string>, -- )
-: abort [-1] (bye) ;                                           ( -- )
+: abort [-1] [-1] yield? ;                                     ( -- )
 h: ?abort swap if print cr abort else drop then ;              ( u a -- )
 h: (abort) do$ ?abort ;                                        ( -- )
 : abort" compile (abort) parse-string ; immediate compile-only ( u -- )
@@ -2196,9 +2199,9 @@ h: (abort) do$ ?abort ;                                        ( -- )
 \ calls 'interpret' on each token until there is no more. Any errors that
 \ occur within 'interpreter' or 'eval' will be caught by 'quit'.
 
-h: preset tib-start #tib cell+ ! 0 in! 0 id ! ;
+h: preset tib-start #tib cell+ ! 0 in! id zero ;
 : ] [-1] state ! ;
-: [   0  state ! ; immediate
+: [   state zero ; immediate
 
 h: ?error ( n -- : perform actions on error )
   ?dup if
@@ -2207,11 +2210,12 @@ h: ?error ( n -- : perform actions on error )
     cr
     sp0 sp!       ( empty stack )
     preset        ( reset I/O streams )
-    [             ( back into interpret mode )
+    postpone [    ( back into interpret mode )
     exit
   then ;
 
 h: (ok) command? if ."  ok  " cr exit then ;  ( -- )
+\ : ok <ok> @execute ;
 h: ?depth sp@ sp0 u< if 4 -throw exit then ;  ( u -- : depth check )
 h: eval ( -- )
   begin
@@ -2353,7 +2357,7 @@ h: find-cfa find-token cfa ;                         ( -- xt, <string> )
 : [compile] find-cfa compile, ; immediate compile-only  ( --, <string> )
 : [char] char postpone literal ; immediate compile-only ( --, <string> )
 \ h: ?quit command? if $38 -throw exit then ;
-: ; ( ?quit ) ?check =exit , [ fallthrough; immediate compile-only
+: ; ( ?quit ) ?check =exit , postpone [ fallthrough; immediate compile-only
 h: get-current! ?dup if get-current ! exit then ; ( -- wid )
 : : align here dup last-def ! ( "name", -- colon-sys )
     last , token ?nul ?unique count + cp! magic ] ;
@@ -2372,7 +2376,7 @@ h: >resolve here chars over @ or swap! ;
 h: last-cfa last-def @ cfa ;  ( -- u )
 : recurse last-cfa compile, ; immediate compile-only
 : tail last-cfa postpone again ; immediate compile-only
-: create postpone : drop compile doVar get-current ! [ ;
+: create postpone : drop compile doVar get-current ! postpone [ ;
 : >body cell+ ; ( a -- a )
 h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 : does> compile doDoes nop ; immediate compile-only
@@ -2382,6 +2386,7 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 : for =>r , here ; immediate compile-only
 : next compile doNext , ; immediate compile-only
 : aft drop >mark postpone begin swap ; immediate compile-only
+: hide find-token (smudge) ; ( --, <string> : hide word by name )
 \ : doer create =exit last-cfa ! =exit ,  ;
 \ : make ( "name1", "name2", -- : make name1 do name2 )
 \  find-cfa find-cfa make-callable
@@ -2391,9 +2396,9 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 \  then
 \  swap! ; immediate
 
-\ @todo Use a 'SMUDGE' system to hide the current word from the search order
-\ @todo improve 'hide' so it unlinks a word from the linked list
-: hide find-token (smudge) ; ( --, <string> : hide word by name )
+h: trace-execute vm-options ! >r ; ( u xt -- )
+: trace ( "name" -- : trace a word )
+  find-cfa vm-options @ dup>r 3 or trace-execute r> vm-options ! ;
 
 \ ## Vocabulary Words
 \ The vocabulary word set should already be well understood, if the
@@ -2444,7 +2449,7 @@ xchange _forth-wordlist root-voc
 : set-order ( widn ... wid1 n -- : set the current search order )
   dup [-1] = if drop root-voc 1 set-order exit then
   dup #vocs > if $31 -throw exit then
-  context swap for aft tuck ! cell+ then next 0 swap! ;
+  context swap for aft tuck ! cell+ then next zero ;
 
 \ 'forth' loads the root vocabulary containing the minimal word set,
 \ and also loads the normal 'forth' vocabulary.
@@ -2672,9 +2677,9 @@ h: c/l/ ( c/l / ) 6 rshift ;            ( u -- u )
 h: line swap block swap c/l* + c/l ;    ( k u -- a u )
 h: loadline line evaluate ;             ( k u -- )
 : load 0 l/b 1- for 2dup 2>r loadline 2r> 1+ next 2drop ; ( k -- )
-h: pipe $7C emit ;                      ( -- )
+h: pipe [char] | emit ;                      ( -- )
 \ h: .line line -trailing $type ;       ( k u -- )
-h: .border 3 spaces c/l $2D nchars cr ; ( -- )
+h: .border 3 spaces c/l [char] - nchars cr ; ( -- )
 h: #line dup 2 u.r ;                    ( u -- u : print line number )
 \ : thru over- for dup load 1+ next drop ; ( k1 k2 -- )
 h: blank =bl fill ;                     ( b u -- )
@@ -2765,7 +2770,7 @@ h: retrieve block drop ;                ( k -- )
 \
 
 h: check-header? header-options @ first-bit 0= ; ( -- t )
-h: disable-check $1 header-options toggle ;      ( -- )
+h: disable-check 1 header-options toggle ;       ( -- )
 
 \ 'bist' checks the length field in the header matches 'here' and that the
 \ CRC in the header matches the CRC it calculates in the image, it has to
@@ -2774,7 +2779,7 @@ h: disable-check $1 header-options toggle ;      ( -- )
 h: bist ( -- u : built in self test )
   check-header? if 0x0000 exit then       ( is checking disabled? Success? )
   header-length @ here xor if 2 exit then ( length check )
-  header-crc @ 0 header-crc !             ( retrieve and zero CRC )
+  header-crc @ header-crc zero            ( retrieve and zero CRC )
   0 here crc xor if 3 exit then           ( check CRC )
   disable-check 0x0000 ;                  ( disable check, success )
 
@@ -2784,7 +2789,7 @@ h: bist ( -- u : built in self test )
 \ order and reset the variable stack.
 
 h: cold ( -- : performs a cold boot  )
-   bist ?dup if negate (bye) exit then
+   bist ?dup if negate dup yield? exit then
    $10 block b/buf 0 fill
    $12 retrieve io!
    forth sp0 sp!
@@ -2792,7 +2797,7 @@ h: cold ( -- : performs a cold boot  )
 
 \ 'hi' prints out the welcome message,
 
-h: hi hex cr ." eFORTH V " ver 0 u.r cr here . .free cr [ ; ( -- )
+h: hi hex cr ." eFORTH V " ver 0 u.r cr here . .free cr postpone [ ; ( -- )
 h: normal-running hi quit ;                 ( -- : boot word )
 
 \ ## See : The Forth Disassembler
@@ -3092,8 +3097,8 @@ there [t] cp t!
 [t] cold 2/ 0 t!                 ( set starting word )
 [t] normal-running [v] <boot> t!
 
-there    $A tcells t! \ Set Length First!
-checksum $B tcells t! \ Calculate image CRC
+there    $B tcells t! \ Set Length First!
+checksum $C tcells t! \ Calculate image CRC
 
 finished
 bye
@@ -3141,6 +3146,8 @@ The first six locations are used for:
 | $6       | Initial Variable Stack Register value (grows upwards)        |
 | $8       | Instruction exception vector (trap handler)                  |
 | $A       | Virtual Machine memory in cells, if used, else $8000 assumed |
+| $C       | Virtual Machine memory in cells, if used, else $8000 assumed |
+| $E       | Virtual Machine Options, various uses                        |
 
 
 The eForth image maps things in the following way. The variable stack starts 
@@ -3295,14 +3302,14 @@ with the virtual machine.
 
 | Address       | Block  | Meaning                        |
 | ------------- | ------ | ------------------------------ |
-| $0000         |   0    | Start of execution             |
 | $0000         |   0    | Initial Program Counter (PC)   |
 | $0002         |   0    | Initial Top of Stack Register  |
 | $0004         |   0    | Initial Return Stack Register  |
 | $0006         |   0    | Initial Var. Stack Register    |
 | $0008         |   0    | Instruction exception vector   |
-| $000A         |   0    | VM memory in cells             |
-| $000C-$001C   |   0    | eForth Header                  |
+| $000A         |   0    | VM Options bits                |
+| $000C         |   0    | VM memory in cells             |
+| $000E-$001C   |   0    | eForth Header                  |
 | $001E-EOD     |  0-?   | The dictionary                 |
 | EOD-$3FFF     |  ?-15  | Compilation and Numeric Output |
 | $4000         |   16   | Interpreter variable storage   |
@@ -3492,11 +3499,6 @@ with inlineable words.
 		return h;
 	}
 
-	void embed_free(forth_t *h)
-	{
-		free(h);
-	}
-
 	forth_t *embed_copy(forth_t const * const h)
 	{
 		assert(h);
@@ -3504,15 +3506,17 @@ with inlineable words.
 		return memcpy(r, h, sizeof(*r));
 	}
 
+	static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
+
 	int embed_load(forth_t *h, const char *name)
 	{
 		assert(h && name);
 		FILE *input = embed_fopen_or_die(name, "rb");
 		long r = 0, c1 = 0, c2 = 0;
-		for(size_t i = 0; i < MAX(64, h->m[5]); i++) {
+		for(size_t i = 0; i < MAX(64, embed_cells(h)); i++) {
 			if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0) {
 				r = i;
-				break;;
+				break;
 			}
 			h->m[i] = ((c1 & 0xffu))|((c2 & 0xffu) << 8u);
 		}
@@ -3528,26 +3532,29 @@ with inlineable words.
 		FILE *out = embed_fopen_or_die(name, "wb");
 		int r = 0;
 		for(size_t i = start; i < length; i++)
-			if(fputc(h->m[i] & 255, out) < 0 || fputc(h->m[i] >> 8, out) < 0)
+			if(fputc(h->m[i]&255, out) < 0 || fputc(h->m[i]>>8, out) < 0)
 				r = -1;
 		fclose(out);
 		return r;
 	}
 
-	int embed_save(forth_t *h, const char *name)
-	{
-		return save(h, name, 0, h->m[5]);
-	}
+	int    embed_save(forth_t *h, const char *name) { return save(h, name, 0, embed_cells(h)); }
+	size_t embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
+	void   embed_free(forth_t *h)     { assert(h); memset(h, 0, sizeof(*h)); free(h); }
+	char  *embed_get_core(forth_t *h) { assert(h); return (char*)h->m; }
 
 	int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 	{
 		assert(h && in && out);
 		static const uint16_t delta[] = { 0, 1, -2, -1 };
-		const uint16_t l = h->m[5]; 
+		const uint16_t l = embed_cells(h);
 		uint16_t * const m = h->m;
-		uint16_t pc = m[0], t = m[1], rp = m[2], sp = m[3];
+		register uint16_t pc = m[0], t = m[1], rp = m[2], sp = m[3];
 		for(uint32_t d;;) {
 			const uint16_t instruction = m[pc++];
+
+			if(m[6] & 1) /* trace on */
+				fprintf(m[6] & 2 ? out : stderr, "[%04x %04x %04x %04x %04x]\n", pc-1, instruction, t, rp, sp);
 			assert(sp < l && rp < l && pc < l);
 
 			if(0x8000 & instruction) { /* literal */
@@ -3584,7 +3591,7 @@ with inlineable words.
 				case 24: T = fgetc(in);            break;
 				case 25: if(t) { d = m[--sp]|(uint32_t)n; T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 				case 26: if(t) { T=(int16_t)n/t; t=(int16_t)n%t; n=t; } else { pc=4; T=10; } break;
-				case 27: goto finished;
+				case 27: if(n) { m[sp] = 0; goto finished; } break;
 				}
 				sp += delta[ instruction       & 0x3];
 				rp -= delta[(instruction >> 2) & 0x3];

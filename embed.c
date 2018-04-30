@@ -39,13 +39,6 @@ forth_t *embed_new(void)
 	return h;
 }
 
-forth_t *embed_copy(forth_t const * const h)
-{
-	assert(h);
-	forth_t *r = embed_new();
-	return memcpy(r, h, sizeof(*r));
-}
-
 static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
 
 int embed_load(forth_t *h, const char *name)
@@ -58,7 +51,7 @@ int embed_load(forth_t *h, const char *name)
 			r = i;
 			break;
 		}
-		h->m[i] = ((c1 & 0xffu))|((c2 & 0xffu) << 8u);
+		h->m[i] = ((c1 & 0xffu)) | ((c2 & 0xffu) << 8u);
 	}
 	fclose(input);
 	return r < 64 ? -1 : 0; /* minimum size checks, 128 bytes */
@@ -78,10 +71,11 @@ static int save(forth_t *h, const char *name, const size_t start, const size_t l
 	return r;
 }
 
-int    embed_save(forth_t *h, const char *name) { return save(h, name, 0, embed_cells(h)); }
-size_t embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
-void   embed_free(forth_t *h)     { assert(h); memset(h, 0, sizeof(*h)); free(h); }
-char  *embed_get_core(forth_t *h) { assert(h); return (char*)h->m; }
+forth_t *embed_copy(forth_t const * const h)      { assert(h); return memcpy(embed_new(), h, sizeof(*h)); }
+int      embed_save(forth_t *h, const char *name) { return save(h, name, 0, embed_cells(h)); }
+size_t   embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
+void     embed_free(forth_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
+char    *embed_get_core(forth_t *h)               { assert(h); return (char*)h->m; }
 
 int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
@@ -92,6 +86,9 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 	register uint16_t pc = m[0], t = m[1], rp = m[2], sp = m[3];
 	for(uint32_t d;;) {
 		const uint16_t instruction = m[pc++];
+
+		if(m[6] & 1) /* trace on */
+			fprintf(m[6] & 2 ? out : stderr, "[%04x %04x %04x %04x %04x]\n", pc-1, instruction, t, rp, sp);
 		assert(sp < l && rp < l && pc < l);
 
 		if(0x8000 & instruction) { /* literal */
@@ -128,7 +125,7 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 24: T = fgetc(in);            break;
 			case 25: if(t) { d = m[--sp]|(uint32_t)n; T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t) { T=(int16_t)n/t; t=(int16_t)n%t; n=t; } else { pc=4; T=10; } break;
-			case 27: goto finished;
+			case 27: if(n) { m[sp] = 0; goto finished; } break;
 			}
 			sp += delta[ instruction       & 0x3];
 			rp -= delta[(instruction >> 2) & 0x3];

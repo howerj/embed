@@ -33,13 +33,32 @@ FILE *embed_fopen_or_die(const char *file, const char *mode)
 
 forth_t *embed_new(void)
 {
-	forth_t *h = calloc(1, sizeof(*h));
-	if(!h)
+	forth_t *h = NULL;
+	if(!(h = calloc(1, sizeof(*h))))
 		embed_die("allocation (of %u) failed", (unsigned)sizeof(*h));
 	return h;
 }
 
+static int save(forth_t *h, const char *name, const size_t start, const size_t length)
+{
+	assert(h && ((length - start) <= length));
+	if(!name)
+		return -1;
+	FILE *out = embed_fopen_or_die(name, "wb");
+	int r = 0;
+	for(size_t i = start; i < length; i++)
+		if(fputc(h->m[i]&255, out) < 0 || fputc(h->m[i]>>8, out) < 0)
+			r = -1;
+	fclose(out);
+	return r;
+}
+
 static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
+forth_t *embed_copy(forth_t const * const h)      { assert(h); return memcpy(embed_new(), h, sizeof(*h)); }
+int      embed_save(forth_t *h, const char *name) { return save(h, name, 0, embed_cells(h)); }
+size_t   embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
+void     embed_free(forth_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
+char    *embed_get_core(forth_t *h)               { assert(h); return (char*)h->m; }
 
 int embed_load(forth_t *h, const char *name)
 {
@@ -57,26 +76,6 @@ int embed_load(forth_t *h, const char *name)
 	return r < 64 ? -1 : 0; /* minimum size checks, 128 bytes */
 }
 
-static int save(forth_t *h, const char *name, const size_t start, const size_t length)
-{
-	assert(h && ((length - start) <= length));
-	if(!name)
-		return -1;
-	FILE *out = embed_fopen_or_die(name, "wb");
-	int r = 0;
-	for(size_t i = start; i < length; i++)
-		if(fputc(h->m[i]&255, out) < 0 || fputc(h->m[i]>>8, out) < 0)
-			r = -1;
-	fclose(out);
-	return r;
-}
-
-forth_t *embed_copy(forth_t const * const h)      { assert(h); return memcpy(embed_new(), h, sizeof(*h)); }
-int      embed_save(forth_t *h, const char *name) { return save(h, name, 0, embed_cells(h)); }
-size_t   embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
-void     embed_free(forth_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
-char    *embed_get_core(forth_t *h)               { assert(h); return (char*)h->m; }
-
 int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 {
 	assert(h && in && out);
@@ -88,7 +87,7 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 		const uint16_t instruction = m[pc++];
 
 		if(m[6] & 1) /* trace on */
-			fprintf(m[6] & 2 ? out : stderr, "[%04x %04x %04x %02x %02x]\n", pc-1, instruction, t, m[2]-rp, sp-m[3]);
+			fprintf(m[6] & 2 ? out : stderr, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, m[2]-rp, sp-m[3]);
 		assert(sp < l && rp < l && pc < l);
 
 		if(0x8000 & instruction) { /* literal */
@@ -157,7 +156,7 @@ int main(int argc, char **argv)
 	if(argc != 3 && argc != 4)
 		embed_die("usage: %s in.blk out.blk [file.fth]", argv[0]);
 	if(embed_load(h, argv[1]) < 0)
-		embed_die("embed: load failed");;
+		embed_die("embed: load failed");
 	FILE *in = argc == 3 ? stdin : embed_fopen_or_die(argv[3], "rb");
 	if(embed_forth(h, in, stdout, argv[2]))
 		embed_die("embed: run failed");

@@ -52,6 +52,9 @@ cross-tests: cross unit.fth
 tests: ${FORTH} ${META1} unit.fth
 	${DF}${FORTH} ${META1} ${TEMP} unit.fth
 
+libembed.a: embed.o
+	ar rcs $@ $<
+
 clean:
-	${RM} ${FORTH} ${META1} ${META2} ${TEMP} *.o 
+	${RM} ${FORTH} ${META1} ${META2} ${TEMP} *.o *.a
 

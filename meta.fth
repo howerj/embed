@@ -317,10 +317,10 @@ a: #bye    $1B00 a; ( Exit Interpreter )
 \ without one of these operations (generally) do not affect the stacks.
 a: d+1     $0001 or a; ( increment variable stack by one )
 a: d-1     $0003 or a; ( decrement variable stack by one )
-a: d-2     $0002 or a; ( decrement variable stack by two )
+\ a: d-2     $0002 or a; ( decrement variable stack by two )
 a: r+1     $0004 or a; ( increment variable stack by one )
 a: r-1     $000C or a; ( decrement variable stack by one )
-a: r-2     $0008 or a; ( decrement variable stack by two )
+\ a: r-2     $0008 or a; ( decrement variable stack by two )
 
 \ All of these instructions execute after the ALU and stack delta operations
 \ have been performed except r->pc, which occurs before. They form part of
@@ -541,13 +541,15 @@ a: return ( -- : Compile a return into the target )
 : rdrop   ]asm  #t       r-1    alu asm[ ;
 \ Some words can be implemented in a single instruction which have no
 \ analogue within Forth.
-: dup@   ]asm  #[t]     t->n   d+1 alu asm[ ;
+: dup@    ]asm  #[t]     t->n   d+1 alu asm[ ;
 : dup0=   ]asm  #t==0    t->n   d+1 alu asm[ ;
 : dup>r   ]asm  #t       t->r   r+1 alu asm[ ;
 : 2dup=   ]asm  #t==n    t->n   d+1 alu asm[ ;
 : 2dupxor ]asm  #t^n     t->n   d+1 alu asm[ ;
 : 2dup<   ]asm  #n<t     t->n   d+1 alu asm[ ;
 : rxchg   ]asm  #r       t->r       alu asm[ ;
+: over-and  ]asm  #t&n      alu asm[ ;
+: over-xor  ]asm  #t^n      alu asm[ ;
 
 \ 'for' needs the new definition of '>r' to work correctly.
 : for >r begin ;
@@ -609,6 +611,7 @@ $1E   constant header-options ( location of options bits in header )
 target.1 +order         ( Add target word dictionary to search order )
 meta -order meta +order ( Reorder so 'meta' has a higher priority )
 forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
+
 
 \ # The Target Forth
 \ With the assembler and meta compiler complete, we can now make our target
@@ -999,7 +1002,7 @@ h: zero  0 swap! ;          ( a -- : zero value at address )
 h: s>d dup 0< ;                       ( n -- d )
 : abs s>d if negate exit then ;       ( n -- u )
 : source #tib 2@ ;                    ( -- a u )
-h: tib source drop ;
+h: tib source drop ;                  ( -- a )
 : source-id id @ ;                    ( -- 0 | -1 )
 : rot >r swap r> swap ;               ( n1 n2 n3 -- n2 n3 n1 )
 : -rot rot rot ;                      ( n1 n2 n3 -- n3 n1 n2 )
@@ -1231,7 +1234,8 @@ h: colon [char] : emit ;               ( -- )
 : space =bl emit ;                     ( -- : emit a space )
 h: spaces =bl fallthrough;             ( +n -- )
 h: nchars                              ( +n c -- : emit c n times )
-  swap 0 max for aft dup emit then next drop ;
+   swap 0 max for aft dup emit then next drop ;
+\  swap 0 max begin ?dup while over emit 1- repeat drop ;
 
 \ 'depth' and 'pick' require knowledge of how this Forth implements its
 \ stacks. 'sp0' contains the location of the stack pointer when there is
@@ -1253,8 +1257,15 @@ h: nchars                              ( +n c -- : emit c n times )
 \   : pick ?dup if swap >r 1- pick r> swap exit then dup ;
 \
 
-: depth sp@ sp0 cells - chars ;       ( -- u : get current depth )
-: pick cells sp@ swap - @ ;           ( vn...v0 u -- vn...v0 vu )
+h: vrelative cells sp@ swap - ;  ( u -- u : position relative to sp )
+: depth sp0 vrelative chars 1- ; ( -- u : get current depth )
+: pick vrelative @ ;             ( vn...v0 u -- vn...v0 vu )
+
+\ 'ndrop' removes a variable number of items off the variable stack, which
+\ is sometimes needed for cleaning things up before exiting a word.
+\
+
+h: ndrop vrelative sp! drop ; ( 0u...nu n -- : drop n cells )
 
 \ '>char' takes a character and converts it to an underscore if it is not
 \ printable, which is useful for printing out arbitrary sections of memory
@@ -1263,7 +1274,7 @@ h: nchars                              ( +n c -- : emit c n times )
 \ or it can print out the value regardless if it is printable.
 \
 
-h: >char $7F and dup $7F =bl within if drop [char] _ then ; ( c -- c )
+h: >char dup $7F =bl within if drop [char] _ then ; ( c -- c )
 : type 0 fallthrough;                  ( b u -- )
 h: typist                              ( b u f -- : print a string )
   >r begin dup while
@@ -1284,12 +1295,6 @@ h: $type [-1] typist ;                   ( b u --  )
 
 : cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop ; ( b b u -- )
 : fill swap for swap aft 2dup c! 1+ then next 2drop ; ( b u c -- )
-
-\ 'ndrop' removes a variable number of items off the variable stack, which
-\ is sometimes needed for cleaning things up before exiting a word.
-\
-
-h: ndrop for aft drop then next ; ( 0u....nu n -- : drop n cells )
 
 \ ### Exception Handling
 \
@@ -1477,7 +1482,7 @@ h: digit  9 over < 7 and + [char] 0 + ;                ( u -- c )
 \ like '.', or 'u.r'.
 \
 
-: #> 2drop hld @ pad over - ;             ( w -- b u )
+: #> 2drop hld @ pad over- ;              ( w -- b u )
 : # 2depth 0 base@ extract digit hold ;   ( d -- d )
 : #s begin # 2dup d0= until ;             ( d -- 0 )
 : <# pad hld ! ;                          ( -- )
@@ -1511,8 +1516,9 @@ h: 5u.r 5 u.r ;                  ( u -- )
 \ :  .r >r str r> adjust ;       ( n n -- : print n, right justified by +n )
 : u.  (u.) space type ;          ( u -- : print unsigned number )
 :  .  radix $A xor if u. exit then str space type ; ( n -- print number )
-\ : d. base@ >r decimal  . r> base! ;
-\ : h. base@ >r hex     u. r> base! ;
+\ : >base swap base @ >r base ! execute r> base ! ;
+\ : d. $a  '  . >base ;
+\ : h. $10 ' u. >base ;
 
 \ 'holds' and '.base' can be defined as so:
 \
@@ -1566,15 +1572,20 @@ h: .free unused u. ;             ( -- : print unused program space )
 \ this saves a little time. Only a yes/no to the comparison is returned as
 \ a boolean answer, unlike 'strcmp' in C
 \ (See: <http://www.cplusplus.com/reference/cstring/strcmp/>)
+\ 
+\ 'down' aligns a cell down to the next aligned address.
+\
+
+h: down cell negate and ; ( a -- a : align down )
 
 : pack$ ( b u a -- a ) \ null fill
   aligned dup>r over
-  dup cell negate and ( align down )
+  dup down 
   - over+ zero 2dup c! 1+ swap cmove r> ;
 
 : =string ( a1 u2 a1 u2 -- t : string equality )
   >r swap r> ( a1 a2 u1 u2 )
-  over xor if drop 2drop-0 exit then
+  over-xor if drop 2drop-0 exit then
   for ( a1 a2 )
     aft
       count >r swap count r> xor
@@ -1804,7 +1815,7 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ point to different sections of the word.
 
 : nfa address cell+ ; ( pwd -- nfa : move to name field address)
-: cfa nfa dup c@ + cell+ $FFFE ( <- cell -1 invert ) and ; ( pwd -- cfa )
+: cfa nfa dup c@ + cell+ down ; ( pwd -- cfa )
 
 \ '.id' prints out a words name field.
 
@@ -1994,15 +2005,13 @@ h: lookfor ( b u c xt -- b u : skip until 'xt' test succeeds )
     +string
   repeat rdrop rot-drop ;
 
-h: skipTest if 0> exit then 0<> ; ( n f -- t )
-h: scanTest skipTest invert ;     ( n f -- t )
-h: skipper ' skipTest lookfor ;   ( b u c -- u c )
-h: scanner ' scanTest lookfor ;   ( b u c -- u c )
+h: no-match if 0> exit then 0<> ; ( n f -- t )
+h: match no-match invert ;        ( n f -- t )
 
 h: parser ( b u c -- b u delta )
   >r over r> swap 2>r
-  r@ skipper 2dup
-  r> scanner swap r> - >r - r> 1+ ;
+  r@ ' no-match lookfor 2dup
+  r> ' match    lookfor swap r> - >r - r> 1+ ;
 
 : parse ( c -- b u ; <string> )
    >r tib in@ + #tib @ in@ - r@ parser >in +!
@@ -2106,9 +2115,9 @@ h: ?compile dup compile-only? if source type $E -throw exit then ;
 : compile  r> dup@ , cell+ >r ; compile-only ( --:Compile next compiled word )
 : immediate $4000 last fallthrough; ( -- : previous word immediate )
 h: toggle tuck @ xor swap! ;        ( u a -- : xor value at addr with u )
-\ : compile-only $8000 last toggle ;
+\ : compile-only 0x8000 last toggle ;
 
-: smudge last fallthrough;
+\ : smudge last fallthrough;
 h: (smudge) nfa $80 swap toggle ; ( pwd -- )
 
 \ ## Strings
@@ -2155,7 +2164,8 @@ h: (smudge) nfa $80 swap toggle ; ( pwd -- )
 \ is jumped over.
 \
 
-h: do$ r> r@ r> count + aligned >r swap >r ; ( -- a )
+h: count+ count + ;
+h: do$ r> r@ r> count+ aligned >r swap >r ; ( -- a )
 h: string-literal do$ nop ; ( -- a : do string NB. nop to fool optimizer )
 h: .string do$ print ; ( -- : print string  )
 
@@ -2164,12 +2174,12 @@ h: .string do$ print ; ( -- : print string  )
 [t] .string        tdoPrintString meta!
 [t] string-literal tdoStringLit   meta!
 
-h: parse-string [char] " word count + cp! ; ( -- )
+h: parse-string [char] " word count+ cp! ; ( -- )
 ( <string>, --, Run: -- b )
 : $"  compile string-literal parse-string ; immediate compile-only
 : ."  compile .string parse-string ; immediate compile-only ( <string>, -- )
 : abort [-1] [-1] yield? ;                                     ( -- )
-h: ?abort swap if print cr abort else drop then ;              ( u a -- )
+h: ?abort swap if print cr abort then drop ;                   ( u a -- )
 h: (abort) do$ ?abort ;                                        ( -- )
 : abort" compile (abort) parse-string ; immediate compile-only ( u -- )
 
@@ -2351,7 +2361,8 @@ h: ?unique ( a -- a : print a message if a word definition is not unique )
 h: ?nul ( b -- : check for zero length strings )
    count 0= if $A -throw exit then 1- ;
 
-h: find-token token find 0= if not-found exit then ; ( -- pwd,  <string> )
+h: find-token token find fallthrough; ( -- pwd,  <string> )
+h: ?not-found 0= if not-found exit then ; ( t -- )
 h: find-cfa find-token cfa ;                         ( -- xt, <string> )
 : ' find-cfa state@ if postpone literal exit then ; immediate
 : [compile] find-cfa compile, ; immediate compile-only  ( --, <string> )
@@ -2360,7 +2371,7 @@ h: find-cfa find-token cfa ;                         ( -- xt, <string> )
 : ; ( ?quit ) ?check =exit , postpone [ fallthrough; immediate compile-only
 h: get-current! ?dup if get-current ! exit then ; ( -- wid )
 : : align here dup last-def ! ( "name", -- colon-sys )
-    last , token ?nul ?unique count + cp! magic ] ;
+    last , token ?nul ?unique count+ cp! magic ] ;
 : begin here  ; immediate compile-only      ( -- a )
 : until chars $2000 or , ; immediate compile-only  ( a -- )
 : again chars , ; immediate compile-only ( a -- )
@@ -2382,11 +2393,14 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 : does> compile doDoes nop ; immediate compile-only
 : variable create 0 , ;
 : constant create ' doConst make-callable here cell- ! , ;
-: :noname here-0 magic ]  ;
+: :noname here-0 magic ] ;
 : for =>r , here ; immediate compile-only
 : next compile doNext , ; immediate compile-only
 : aft drop >mark postpone begin swap ; immediate compile-only
 : hide find-token (smudge) ; ( --, <string> : hide word by name )
+\ : name? find-token nfa ;
+
+
 \ : doer create =exit last-cfa ! =exit ,  ;
 \ : make ( "name1", "name2", -- : make name1 do name2 )
 \  find-cfa find-cfa make-callable
@@ -2396,6 +2410,31 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 \  then
 \  swap! ; immediate
 
+\ h: (do) r@ swap rot >r >r cell+ >r ; compile-only    ( limit index -- index )
+\ : do  compile (do) 0 , here ; compile-only immediate ( limit index -- )
+\ h: (leave) rdrop rdrop rdrop ; compile-only
+\ : leave compile (leave) nop ; compile-only immediate
+\ h: (loop)
+\    r> r> 1+ r> 2dupxor if
+\     >r >r @ >r exit
+\    then >r 1- >r cell+ >r ; compile-only
+\ h: (unloop) r> rdrop rdrop rdrop >r ; compile-only
+\ : unloop compile (unloop) nop ; compile-only immediate
+\ h: (?do) 2dupxor if r@ swap rot >r >r cell+ >r exit then 2drop ; compile-only
+\ : ?do   compile (?do) 0 , here ; compile-only immediate ( limit index -- )
+\ : loop  compile (loop) dup , compile (unloop) cell- here chars ( -- )
+\     swap! ; compile-only immediate
+\ h: (+loop)
+\    r> swap r> r> 2dup - >r
+\    2 pick r@ + r@ xor 0< 0=
+\    3 pick r> xor 0< 0= or if
+\     >r + >r @ >r exit
+\    then >r >r drop cell+ >r ; compile-only
+\ : +loop ( n -- ) compile (+loop) dup , compile (unloop) cell- here chars
+\    swap! ; compile-only immediate
+\ h: (i)  2r> tuck 2>r nop ; compile-only ( -- index )
+\ : i  compile (i) nop ; compile-only immediate ( -- index )
+ 
 h: trace-execute vm-options ! >r ; ( u xt -- )
 : trace ( "name" -- : trace a word )
   find-cfa vm-options @ dup>r 3 or trace-execute r> vm-options ! ;
@@ -2790,6 +2829,7 @@ h: bist ( -- u : built in self test )
 
 h: cold ( -- : performs a cold boot  )
    bist ?dup if negate dup yield? exit then
+\  $10 retrieve x 
    $10 block b/buf 0 fill
    $12 retrieve io!
    forth sp0 cells sp!
@@ -2863,21 +2903,17 @@ h: name ( cwf -- a | 0 )
 
 h: .name name ?dup 0= if $" ?" then print ;
 h: ?instruction ( i m e -- i 0 | e -1 )
-   >r over and r> tuck = if nip [-1] exit then drop-0 ;
-
-\ h: .lit $7fff and u. ;
+   >r over-and r> tuck = if nip [-1] exit then drop-0 ;
 
 h: .instruction ( u -- u )
-   ( dup )
-   0x8000  0x8000 ?instruction if ." LIT" ( swap .lit ) exit then
-   $6000   $6000  ?instruction if ( nip ) ." ALU" exit then
-   $6000   $4000  ?instruction if ( nip ) ." CAL" exit then
-   $6000   $2000  ?instruction if ( nip ) ." BRZ" exit then
-   ( drop ) drop-0 ." BRN" ;
+   0x8000  0x8000 ?instruction if [char] L emit exit then
+   $6000   $6000  ?instruction if [char] A emit exit then
+   $6000   $4000  ?instruction if [char] C emit exit then
+   $6000   $2000  ?instruction if [char] Z emit exit then
+   drop-0 [char] B emit ;
 
 h: decompile ( u -- : decompile instruction )
-   dup .instruction $BFFF and 0=
-   if space .name exit then drop ;
+   dup .instruction $BFFF and if drop exit then space .name ;
 
 h: decompiler ( previous current -- : decompile starting at address )
   >r
@@ -2912,7 +2948,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ 
 
 : see ( --, <string> : decompile a word )
-  token finder 0= if not-found exit then
+  token finder ?not-found
   swap      2dup= if drop here then >r
   cr colon space dup .id space dup cr
   cfa r> decompiler space [char] ; emit
@@ -3070,7 +3106,7 @@ h: [check] dup b/buf c/l/ u>= if $18 -throw exit then ;
 h: [line] [check] c/l* [block] + ; ( u -- a )
 : b retrieve ;                 ( k -- : load a block )
 : l blk-@ list ;               ( -- : list current block )
-: n  1 +block b l ;            ( -- : load and list next block )
+: n   1  +block b l ;          ( -- : load and list next block )
 : p [-1] +block b l ;          ( -- : load and list previous block )
 : d [line] c/l blank ;         ( u -- : delete line )
 : x [block] b/buf blank ;      ( -- : erase loaded block )
@@ -3413,48 +3449,14 @@ with checks to make sure indices never go out of bounds.
 * Documentation could be extracted from the [meta.fth][] file, which should
 describe the entire system: The metacompiler, the target virtual machine,
 and how Forth works.
-* Add more references, and turn this program into a literate file.
-   - Compression routines would be a nice to have feature for reducing
-   the saved image size. LZSS could be used, see:
-   <https://oku.edu.mie-u.ac.jp/~okumura/compression/lzss.c>
-   Adaptive Huffman encoding performs even better.
-   - Talk about and write about:
-     - Potential additions
-     - The philosophy of Forth
-     - How the meta compiler words
-     - Implementing allocation routines, and floating point routines
-     - Compression and the similarity of Forth Factoring and LZW compression
 * This Forth needs a series of unit tests to make sure the basic functionality
 of all the words is correct
 * This Forth lacks a version of 'FORGET', as well as 'MARKER', which is
 unfortunate, as they are useful. This is due to how word lists are
 implemented.
-* One possible exercise would be to reduce the image size to its absoluate
-minimum, by removing unneeded functionality for the metacompilation process,
-such as the block editor, and 'see', as well as any words not actually used
-in the metacompilation process.
-* An image could be prepared with the smallest possible Forth interpreter,
-it would not necessarily have to be able to meta-compile.
 * A more generic virtual machine would allow functions for fgetc, fputc,
 and for saving to block storage, to be passed in via the C interface
 somehow, as well as for arbitrary C callbacks.
-* A more traditional block storage method would be more useful, instead of
-saving sections of the virtual machine image a 'block transfer' instruction
-could be made, which would index into a file and retrieve/create blocks, which
-would allow much more memory to be used as mass storage (65536*1024 Bytes). The
-way the block storage mechanism works really needs improvment, not just the
-workings from Forth, but also how it works on the command line as well.
-* Some more words need adding in, like "postpone", "[']", "[if]", "[else]",
-"[then]", "T{", "}T", ... Of note is that "postpone" would have to deal
-with inlineable words.
-: [[ ;     \ Stop postponing
-: ]]
-  begin
-    >in @ ' ['] [[ <>
-  while
-    >in ! postpone postpone
-  repeat
-  drop ; immediate
 
 ## Virtual Machine Implementation in C
 

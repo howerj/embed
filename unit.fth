@@ -116,7 +116,7 @@ only forth definitions
 : factorial dup 2 u< if drop 1 exit then dup 1- recurse * ;  ( u -- u )
 : permutations over swap - factorial swap factorial swap / ; ( u1 u2 -- u )
 : combinations dup dup permutations >r permutations r> / ;   ( u1 u2 -- u )
-: gcd dup if tuck mod tail then drop ;                       ( u1 u2 -- u )
+: gcd dup if tuck mod recurse exit then drop ;               ( u1 u2 -- u )
 : lcm 2dup gcd / * ;                                         ( u1 u2 -- u )
 : square dup * ;                                             ( u -- u )
 : limit rot min max ;                                        ( u hi lo -- u )
@@ -145,7 +145,82 @@ only forth definitions
 
 : log2 2 log ; ( u -- u : compute the integer logarithm of u in base )
 
+\ http://forth.sourceforge.net/algorithm/bit-counting/index.html
+: count-bits ( number -- bits )
+  dup  $5555 and  swap  1 rshift  $5555 and  +
+  dup  $3333 and  swap  2 rshift  $3333 and  +
+  dup  $0f0f and  swap  4 rshift  $0f0f and  +
+  $ff mod ;
+
+\ http://forth.sourceforge.net/algorithm/firstbit/index.html
+: first-bit ( number -- first-bit )
+  dup   1 rshift or
+  dup   2 rshift or
+  dup   4 rshift or
+  dup   8 rshift or
+  dup $10 rshift or
+  dup   1 rshift xor ;
+
+: gray-encode dup 1 rshift xor ; ( gray -- u )
+: gray-decode ( u -- gray )
+\ dup $10 rshift xor ( <- 32 bit )
+  dup   8 rshift xor 
+  dup   4 rshift xor
+  dup   2 rshift xor 
+  dup   1 rshift xor ;
+
+: binary $2 base ! ;
+
+\ : + begin dup while 2dup and 1 lshift >r xor r> repeat drop ;
+
+\ \ http://forth.sourceforge.net/word/n-to-r/index.html
+\ \ Push n+1 elements on the return stack.
+\ : n>r ( xn..x1 n -- , R: -- x1..xn n )
+\   dup
+\   begin dup
+\   while rot r> swap >r >r 1-
+\   repeat
+\   drop r> swap >r >r ; \ compile-only
+\ 
+\ \ http://forth.sourceforge.net/word/n-r-from/index.html
+\ \ pop n+1 elements from the return stack.
+\ : nr> ( -- xn..x1 n, R: x1..xn n -- )
+\     r> r> swap >r dup
+\     begin dup
+\     while r> r> swap >r -rot 1-
+\     repeat
+\     drop ; \ compile-only
+
+\ : ?exit if rdrop exit then ;
+
+
+\ http://forth.sourceforge.net/word/string-plus/index.html
+\ ( addr1 len1 addr2 len2 -- addr1 len3 )
+\ append the text specified by addr2 and len2 to the text of length len2
+\ in the buffer at addr1. return address and length of the resulting text.
+\ an ambiguous condition exists if the resulting text is larger
+\ than the size of buffer at addr1.
+\ : string+ ( bufaddr buftextlen addr len -- bufaddr buftextlen+len )
+\        2over +         ( ba btl a l bta+btl )
+\        swap dup >r     ( ba btl a bta+btl l ) ( r: l )
+\        move
+\        r> + ;
+
+
+\ ( addr1 len1 c -- addr1 len2 )
+\ append c to the text of length len2 in the buffer at addr1.
+\ Return address and length of the resulting text.
+\ An ambiguous condition exists if the resulting text is larger
+\ than the size of buffer at addr1.
+\ : string+c ( addr len c -- addr len+1 )
+\   dup 2over + c! drop 1+ ;
+
+\ http://forth.sourceforge.net/algorithm/unprocessed/valuable-algorithms.txt
+\ : -m/mod over 0< if dup    >r +       r> then u/mod ;         ( d +n - r q )
+\ :  m/     dup 0< if negate >r dnegate r> then -m/mod swap drop ; ( d n - q )
+
 .( BEGIN FORTH TEST SUITE ) cr
+
 
 hex
 T{               ->  }T
@@ -187,6 +262,58 @@ T{ 8 log2 -> 3 }T
 T{ 4 log2 -> 2 }T
 T{ 2 log2 -> 1 }T
 T{ 1 log2 -> 0 }T
+T{ $ffff count-bits -> $10 }T
+T{ $ff0f count-bits -> $C }T
+T{ $f0ff count-bits -> $C }T
+T{ $0001 count-bits -> $1 }T
+T{ $0000 count-bits -> $0 }T
+T{ $0002 count-bits -> $1 }T
+T{ $0032 count-bits -> $3 }T
+T{ $0000 first-bit  -> $0 }T
+T{ $0001 first-bit  -> $1 }T
+T{ $0040 first-bit  -> $40 }T
+T{ $8040 first-bit  -> $8000 }T
+T{ $0005 first-bit  -> $0004 }T
+
+binary
+
+T{ 0    gray-encode ->    0 }T
+T{ 1    gray-encode ->    1 }T
+T{ 10   gray-encode ->   11 }T
+T{ 11   gray-encode ->   10 }T
+T{ 100  gray-encode ->  110 }T
+T{ 101  gray-encode ->  111 }T
+T{ 110  gray-encode ->  101 }T
+T{ 111  gray-encode ->  100 }T
+T{ 1000 gray-encode -> 1100 }T
+T{ 1001 gray-encode -> 1101 }T
+T{ 1010 gray-encode -> 1111 }T
+T{ 1011 gray-encode -> 1110 }T
+T{ 1100 gray-encode -> 1010 }T
+T{ 1101 gray-encode -> 1011 }T
+T{ 1110 gray-encode -> 1001 }T
+T{ 1111 gray-encode -> 1000 }T
+
+T{ 0    gray-decode ->    0 }T
+T{ 1    gray-decode ->    1 }T
+T{ 11   gray-decode ->   10 }T
+T{ 10   gray-decode ->   11 }T
+T{ 110  gray-decode ->  100 }T
+T{ 111  gray-decode ->  101 }T
+T{ 101  gray-decode ->  110 }T
+T{ 100  gray-decode ->  111 }T
+T{ 1100 gray-decode -> 1000 }T
+T{ 1101 gray-decode -> 1001 }T
+T{ 1111 gray-decode -> 1010 }T
+T{ 1110 gray-decode -> 1011 }T
+T{ 1010 gray-decode -> 1100 }T
+T{ 1011 gray-decode -> 1101 }T
+T{ 1001 gray-decode -> 1110 }T
+T{ 1000 gray-decode -> 1111 }T
+
+hex
+
+
 
 decimal
 .( decimal mode ) cr
@@ -381,6 +508,7 @@ defined? sp@ ?\ T{ sp@ 2 3 4 sp@ nip nip nip - abs chars -> 4 }T
 T{ here 4 allot -4 allot here = -> -1 }T
 
 
+
 defined? d< ?\ T{  0  0  0  0 d< ->  0 }T
 defined? d< ?\ T{  0  0  0  1 d< -> -1 }T
 defined? d< ?\ T{  0  0  1  0 d< -> -1 }T
@@ -398,5 +526,5 @@ decimal
 .( passed: ) statistics u. .( / ) 0 u.r cr
 .( here:   ) here . cr
 statistics  = ?\ .( [ALL PASSED] ) cr     bye
-statistics <> ?\ .( [FAILED]     ) cr -4 (bye)
+statistics <> ?\ .( [FAILED]     ) cr   abort
 

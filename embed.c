@@ -82,13 +82,14 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 	static const uint16_t delta[] = { 0, 1, -2, -1 };
 	const uint16_t l = embed_cells(h);
 	uint16_t * const m = h->m;
-	register uint16_t pc = m[0], t = m[1], rp = m[2], sp = m[3];
+	uint16_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0;
 	for(uint32_t d;;) {
 		const uint16_t instruction = m[pc++];
 
 		if(m[6] & 1) /* trace on */
 			fprintf(m[6] & 2 ? out : stderr, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, m[2]-rp, sp-m[3]);
-		assert(sp < l && rp < l && pc < l);
+		if((r = -!(sp < l && rp < l && pc < l)))
+			goto finished;
 
 		if(0x8000 & instruction) { /* literal */
 			m[++sp] = t;
@@ -124,7 +125,7 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 24: T = fgetc(in);            break;
 			case 25: if(t) { d = m[--sp]|(uint32_t)n; T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t) { T=(int16_t)n/t; t=(int16_t)n%t; n=t; } else { pc=4; T=10; } break;
-			case 27: if(n) { m[sp] = 0; goto finished; } break;
+			case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;
 			}
 			sp += delta[ instruction       & 0x3];
 			rp -= delta[(instruction >> 2) & 0x3];
@@ -146,7 +147,7 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 		}
 	}
 finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp;
-	return (int16_t)t;
+	return (int16_t)r;
 }
 
 #ifdef USE_EMBED_MAIN

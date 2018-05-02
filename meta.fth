@@ -882,7 +882,7 @@ $400     tconstant b/buf ( size of a block )
 0        tvariable blk   ( current blk loaded, set in 'cold' )
 #version constant  ver   ( eForth version )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
-0        tvariable dpl   ( number of places after fraction )
+$ffff    tvariable dpl   ( number of places after fraction )
 0        tvariable <literal> ( holds execution vector for literal )
 0        tvariable <boot>  ( -- : execute program at startup )
 0        tvariable <ok>
@@ -1014,9 +1014,9 @@ h: d+  >r swap >r um+ r> + r> + ;      ( d d -- d )
 \ : d< rot   
 \     2dup
 \     > if = nip nip if 0 exit then [-1] exit then 2drop u< ; ( d -- f )
-\ : d>  2swap d< ;                      ( d -- f )
-\ : du> 2swap du< ;                     ( d -- f )
-\ : d= rot xor -rot xor xor 0= ;      ( d d -- f )
+\ : d>  2swap d< ;                      ( d -- t )
+\ : du> 2swap du< ;                     ( d -- t )
+\ : d= rot xor -rot xor xor 0= ;      ( d d -- t )
 \ : d- dnegate d+ ;                   ( d d -- d )
 \ : dabs  s>d if dnegate exit then ;  ( d -- ud )
 \ : even first-bit 0= ;               ( u -- t )
@@ -1052,7 +1052,7 @@ h: @execute @ ?dup if >r then ;  ( cfa -- )
   lshift over @
   $FF r> 8 xor lshift and or swap! ;
 
-\ 'command?' will be used later for words that are state away. State awareness
+\ 'command?' will be used later for words that are state aware. State awareness
 \ and whether the interpreter is in command mode, or compile mode, as well as
 \ immediate words, will require a lot of explanation for the beginner until
 \ they are understood. This is best done elsewhere. 'command?' is used to
@@ -1460,8 +1460,8 @@ h: radix base@ dup 2 - $22 u> if hex $28 -throw exit then ; ( -- u )
 
 : hold  hld @ 1- dup hld ! c! fallthrough;             ( c -- )
 h: ?hold pad $100 - hld @ u> if $11 -throw exit then ; ( -- )
-h: extract dup>r um/mod rxchg um/mod r> rot ;         ( ud ud -- ud u )
-h: digit  9 over < 7 and + [char] 0 + ;                ( u -- c )
+h: extract dup>r um/mod rxchg um/mod r> rot ;          ( ud ud -- ud u )
+h: digit 9 over < 7 and + [char] 0 + ;                 ( u -- c )
 
 \ The quartet formed by "<# # #s #>" look intimidating to the new comer, but
 \ are quite simple. They allow the format of numeric output to be controlled
@@ -2104,7 +2104,7 @@ h: ?compile dup compile-only? if source type $E -throw exit then ;
     dpl @ 0< if \ <- dpl will -1 if its a single cell number
        drop     \ drop high cell from 'number?' for single cell output
     else        \ <- dpl is not -1, it's a double cell number
-       command? if swap then 
+       state@ if swap then 
        <literal> @execute \ <literal> is executed twice if it's a double
     then
     <literal> @execute exit
@@ -2386,7 +2386,7 @@ h: >resolve here chars over @ or swap! ;
 : repeat swap postpone again postpone then ; immediate compile-only
 h: last-cfa last-def @ cfa ;  ( -- u )
 : recurse last-cfa compile, ; immediate compile-only
-: tail last-cfa postpone again ; immediate compile-only
+\ : tail last-cfa postpone again ; immediate compile-only
 : create postpone : drop compile doVar get-current ! postpone [ ;
 : >body cell+ ; ( a -- a )
 h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
@@ -2569,12 +2569,10 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 : +order dup>r -order get-order r> swap 1+ set-order ; ( wid -- )
 
 \ 'editor' is a word which loads the editor vocabulary, which will be
-\ defined later, as well as setting the input and output base to decimal
-\ (as some of the editor commands overlap with hexadecimal values). It
-\ requires the newly defined '+order' word to work.
+\ defined later, it requires '+order' to work.
 \ 
 
-: editor decimal editor-voc +order ;                   ( -- )
+: editor editor-voc +order ;                   ( -- )
 \ : assembler root-voc assembler-voc 2 set-order ;     ( -- )
 \ : ;code assembler ; immediate                        ( -- )
 \ : code postpone : assembler ;                        ( -- )
@@ -3073,27 +3071,27 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
 \ | -- | -- | ------- | ------------------------------------------ |
 \ | #2 | #1 |  ia     | insert text into column #1 on line #2      |
 \ |    | #1 |  i      | insert text into column  0 on line #1      |
-\ |    | #1 |  b      | load block number #1                       |
-\ |    | #1 |  d      | blank line number #1                       |
-\ |    |    |  x      | blank currently loaded block               |
-\ |    |    |  l      | redisplay currently loaded block           |
+\ |    | #1 |  l      | load block number #1                       |
+\ |    | #1 |  k      | blank line number #1                       |
+\ |    |    |  z      | blank currently loaded block               |
+\ |    |    |  v      | redisplay currently loaded block           |
 \ |    |    |  q      | remove editor word set from search order   |
 \ |    |    |  n      | load next block                            |
 \ |    |    |  p      | load previous block                        |
 \ |    |    |  s      | save changes to disk                       |
-\ |    |    |  e      | evaluate block                             |
+\ |    |    |  x      | evaluate block                             |
 \
 \ An example command session might be:
 \
 \ | Command Sequence         | Description                             |
 \ | ------------------------ | --------------------------------------- |
 \ | editor                   | add the editor word set to search order |
-\ | $20 b l                  | load block $20 (hex) and display it     |
+\ | $20 l v                  | load block $20 (hex) and display it     |
 \ | x                        | blank block $20                         |
 \ | 0 i .( Hello, World ) cr | Put ".( Hello, World ) cr" on line 0    |
 \ | 1 i 2 2 + . cr           | Put "2 2 + . cr" on line 1              |
-\ | l                        | list block $20 again                    |
-\ | e                        | evaluate block $20                      |
+\ | v                        | list block $20 again                    |
+\ | x                        | evaluate block $20                      |
 \ | s                        | save contents                           |
 \ | q                        | unload block word set                   |
 \
@@ -3104,25 +3102,25 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
 h: [block] blk-@ block ;       ( k -- a : loaded block address )
 h: [check] dup b/buf c/l/ u>= if $18 -throw exit then ;
 h: [line] [check] c/l* [block] + ; ( u -- a )
-: b retrieve ;                 ( k -- : load a block )
-: l blk-@ list ;               ( -- : list current block )
-: n   1  +block b l ;          ( -- : load and list next block )
-: p [-1] +block b l ;          ( -- : load and list previous block )
-: d [line] c/l blank ;         ( u -- : delete line )
-: x [block] b/buf blank ;      ( -- : erase loaded block )
-: s update flush ;             ( -- : flush changes to disk )
-: q editor-voc -order ;        ( -- : quit editor )
-: e q blk-@ load editor ;      ( -- : evaluate block )
-: ia c/l* + [block] + source drop in@ + ( u u -- )
+: l retrieve ;                 ( k -- : Load a block )
+: v blk-@ list ;               ( -- : View current block )
+: n   1  +block l v ;          ( -- : load and list Next block )
+: p [-1] +block l v ;          ( -- : load and list Previous block )
+: k [line] c/l blank ;         ( u -- : delete/Kill line )
+: z [block] b/buf blank ;      ( -- : Zero/blank loaded block )
+: s update flush ;             ( -- : Save changes to disk )
+: q editor-voc -order ;        ( -- : Quit editor )
+: x q blk-@ load editor ;      ( -- : eXecute/evaluate block )
+: ia c/l* + [block] + source drop in@ + ( u u -- Insert At )
    swap source nip in@ - cmove postpone \ ;
-: i 0 swap ia ;                ( u -- )
+: i 0 swap ia ;                ( u -- : Insert line )
 \ : u update ;                 ( -- : set block set as dirty )
 \ : w words ;
 \ : yank pad c/l ;
 \ : c [line] yank >r swap r> cmove ;
 \ : y [line] yank cmove ;
 \ : ct swap y c ;
-\ : ea [line] c/l evaluate ;
+\ : xa [line] c/l evaluate ;
 \ : sw 2dup y [line] swap [line] swap c/l cmove c ;
 [last] [t] editor-voc t! 0 tlast meta!
 
@@ -3495,35 +3493,10 @@ somehow, as well as for arbitrary C callbacks.
 
 	forth_t *embed_new(void)
 	{
-		forth_t *h = calloc(1, sizeof(*h));
-		if(!h)
+		forth_t *h = NULL;
+		if(!(h = calloc(1, sizeof(*h))))
 			embed_die("allocation (of %u) failed", (unsigned)sizeof(*h));
 		return h;
-	}
-
-	forth_t *embed_copy(forth_t const * const h)
-	{
-		assert(h);
-		forth_t *r = embed_new();
-		return memcpy(r, h, sizeof(*r));
-	}
-
-	static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
-
-	int embed_load(forth_t *h, const char *name)
-	{
-		assert(h && name);
-		FILE *input = embed_fopen_or_die(name, "rb");
-		long r = 0, c1 = 0, c2 = 0;
-		for(size_t i = 0; i < MAX(64, embed_cells(h)); i++) {
-			if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0) {
-				r = i;
-				break;
-			}
-			h->m[i] = ((c1 & 0xffu))|((c2 & 0xffu) << 8u);
-		}
-		fclose(input);
-		return r < 64 ? -1 : 0; /* minimum size checks, 128 bytes */
 	}
 
 	static int save(forth_t *h, const char *name, const size_t start, const size_t length)
@@ -3540,10 +3513,28 @@ somehow, as well as for arbitrary C callbacks.
 		return r;
 	}
 
-	int    embed_save(forth_t *h, const char *name) { return save(h, name, 0, embed_cells(h)); }
-	size_t embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
-	void   embed_free(forth_t *h)     { assert(h); memset(h, 0, sizeof(*h)); free(h); }
-	char  *embed_get_core(forth_t *h) { assert(h); return (char*)h->m; }
+	static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
+	forth_t *embed_copy(forth_t const * const h)      { assert(h); return memcpy(embed_new(), h, sizeof(*h)); }
+	int      embed_save(forth_t *h, const char *name) { return save(h, name, 0, embed_cells(h)); }
+	size_t   embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
+	void     embed_free(forth_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
+	char    *embed_get_core(forth_t *h)               { assert(h); return (char*)h->m; }
+
+	int embed_load(forth_t *h, const char *name)
+	{
+		assert(h && name);
+		FILE *input = embed_fopen_or_die(name, "rb");
+		long r = 0, c1 = 0, c2 = 0;
+		for(size_t i = 0; i < MAX(64, embed_cells(h)); i++) {
+			if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0) {
+				r = i;
+				break;
+			}
+			h->m[i] = ((c1 & 0xffu)) | ((c2 & 0xffu) << 8u);
+		}
+		fclose(input);
+		return r < 64 ? -1 : 0; /* minimum size checks, 128 bytes */
+	}
 
 	int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 	{
@@ -3551,13 +3542,14 @@ somehow, as well as for arbitrary C callbacks.
 		static const uint16_t delta[] = { 0, 1, -2, -1 };
 		const uint16_t l = embed_cells(h);
 		uint16_t * const m = h->m;
-		register uint16_t pc = m[0], t = m[1], rp = m[2], sp = m[3];
+		uint16_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0;
 		for(uint32_t d;;) {
 			const uint16_t instruction = m[pc++];
 
 			if(m[6] & 1) /* trace on */
-				fprintf(m[6] & 2 ? out : stderr, "[%04x %04x %04x %04x %04x]\n", pc-1, instruction, t, rp, sp);
-			assert(sp < l && rp < l && pc < l);
+				fprintf(m[6] & 2 ? out : stderr, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, m[2]-rp, sp-m[3]);
+			if((r = -!(sp < l && rp < l && pc < l)))
+				goto finished;
 
 			if(0x8000 & instruction) { /* literal */
 				m[++sp] = t;
@@ -3593,7 +3585,7 @@ somehow, as well as for arbitrary C callbacks.
 				case 24: T = fgetc(in);            break;
 				case 25: if(t) { d = m[--sp]|(uint32_t)n; T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 				case 26: if(t) { T=(int16_t)n/t; t=(int16_t)n%t; n=t; } else { pc=4; T=10; } break;
-				case 27: if(n) { m[sp] = 0; goto finished; } break;
+				case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;
 				}
 				sp += delta[ instruction       & 0x3];
 				rp -= delta[(instruction >> 2) & 0x3];
@@ -3615,7 +3607,7 @@ somehow, as well as for arbitrary C callbacks.
 			}
 		}
 	finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp;
-		return (int16_t)t;
+		return (int16_t)r;
 	}
 
 	#ifdef USE_EMBED_MAIN
@@ -3625,7 +3617,7 @@ somehow, as well as for arbitrary C callbacks.
 		if(argc != 3 && argc != 4)
 			embed_die("usage: %s in.blk out.blk [file.fth]", argv[0]);
 		if(embed_load(h, argv[1]) < 0)
-			embed_die("embed: load failed");;
+			embed_die("embed: load failed");
 		FILE *in = argc == 3 ? stdin : embed_fopen_or_die(argv[3], "rb");
 		if(embed_forth(h, in, stdout, argv[2]))
 			embed_die("embed: run failed");

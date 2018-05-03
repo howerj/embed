@@ -507,8 +507,6 @@ T{ b/buf      -> $400 }T  \ b/buf should always be 1024
 defined? sp@ ?\ T{ sp@ 2 3 4 sp@ nip nip nip - abs chars -> 4 }T
 T{ here 4 allot -4 allot here = -> -1 }T
 
-
-
 defined? d< ?\ T{  0  0  0  0 d< ->  0 }T
 defined? d< ?\ T{  0  0  0  1 d< -> -1 }T
 defined? d< ?\ T{  0  0  1  0 d< -> -1 }T
@@ -518,6 +516,188 @@ defined? d< ?\ T{  0 -1  0  1 d< -> -1 }T
 defined? d< ?\ T{ $ffff -1  0  1 d< -> -1 }T
 defined? d< ?\ T{ $ffff -1  0  -1 d< -> 0 }T
 
+: dnegate invert >r invert 1 um+ r> + ; ( d -- d )
+\ : 2* 1 lshift  ;
+\ : 2/ 1 rshift ;
+: arshift ( n u -- n : arithmetic right shift )
+  2dup rshift >r swap $8000 and
+  if $10 swap - -1 swap lshift else drop 0 then r> or ;
+: 2/ 1 rshift ;
+: d2* over $8000 and >r 2* swap 2* swap r> if 1 or then ;
+: d2/ dup      1 and >r 2/ swap 2/ r> if $8000 or then swap ;
+: d+  >r swap >r um+ r> + r> + ; 
+\ : d+ rot + -rot um+ rot + ;
+: d- dnegate d+ ;
+: d= rot = -rot = and ;
+: 2swap >r -rot r> -rot ;
+: s>d  dup 0< ; 
+: dabs s>d if dnegate then ;
+: 2over ( n1 n2 n3 n4 -- n1 n2 n3 n4 n1 n2 )
+  >r >r 2dup r> swap >r swap r> r> -rot ;
+: 2, , , ;
+: 2constant create 2, does> 2@ ;
+\ : point dpl @ dup 0< if drop 0 then ;
+
+variable dl
+variable dh
+variable dhp
+variable dlp
+variable nn
+variable nnp
+variable rem
+variable quo
+
+: sm/rem ( dl dh nn | dlp dhp nnp rem quo -- rem quo , symmetric )
+    nn ! dh ! dl !
+
+    dl @ dh @ dabs dhp ! dlp !
+    nn @ abs  nnp !
+    dlp @ dhp @ nnp @ um/mod quo ! rem !
+    dh 0<
+    if  \ negative dividend
+        rem @ negate rem !
+        nn @ 0>
+        if   \ positive divisor
+            quo @ negate quo !
+        then
+    else  \ positive dividend
+        nn @ 0<
+        if  \ negative divisor
+            quo @ negate quo !
+        then
+    then
+    rem @ quo @ ;
+
+: m* 2dup xor 0< >r abs swap abs um* r> if dnegate then ;
+
+: */mod ( a b c -- rem a*b/c , use double precision intermediate value )
+    >r m*
+    r> sm/rem ;
+
+
+\ forth-83 floating point.
+\  ----------------------------------
+\  copyright 1985 by robert f. illyes
+\
+\        po box 2516, sta. a
+\        champaign, il 61820
+\        phone: 217/826-2734  )     
+hex
+
+
+: not invert ;
+: zero  over 0= if drop 0 then ;
+: fnegate $8000 xor zero ;
+: fabs  $7fff and ;
+: norm  >r 2dup or
+        if begin dup 0< not
+           while d2* r> 1- >r
+           repeat swap 0< - ?dup
+           if r> else $8000 r> 1+ then
+        else r> drop then ;
+
+: f2*   1+ zero ;
+: f*    rot + $4000 - >r um* r> norm ;
+: fsq   2dup f* ;
+
+: f2/   1- zero ;
+: um/   dup >r um/mod swap r> over 2* 1+ u< swap 0< or - ;
+: f/    rot swap - $4000 + >r
+        0 -rot 2dup u<
+        if   um/ r> zero
+        else >r d2/ fabs r> um/ r> 1+
+        then ;
+
+: lalign $20 min for aft d2/ then next ;
+: ralign 1- ?dup if lalign then
+        1 0 d+ d2/ ;
+: fsign fabs over 0< if >r dnegate r>
+        $8000 or then ;
+
+: f+    rot 2dup >r >r fabs swap fabs -
+        dup if dup 0<
+                if   rot swap  negate
+                     r> r> swap >r >r
+                then 0 swap ralign
+        then swap 0 r> r@ xor 0<
+        if   r@ 0< if 2swap then d-
+             r> fsign rot swap norm
+        else d+ if 1+ 2/ $8000 or r> 1+
+                else r> then then ;
+
+: f-    fnegate f+ ;
+: f<    f- 0< swap drop ;
+
+( floating point input/output ) 
+decimal
+
+create pl 3 , 
+            1. , ,              10. , ,
+          100. , ,            1000. , ,
+        10000. , ,          100000. , ,
+      1000000. , ,        10000000. , ,
+    100000000. , ,      1000000000. , ,
+
+: tens 2* cells  [ pl cell+ ] literal + 2@ ;     
+hex
+: places pl ! ;
+: shifts fabs 4010 - dup 0< not
+        abort" too big" negate ;
+: f#    base @ >r decimal >r pl @ tens drop um* r> shifts
+        ralign pl @ ?dup if for aft # then next
+        [char] . hold then #s rot sign r> base ! ;
+: f.    tuck <# f# #> type space ;
+: dfloat 4020 fsign norm ;
+: point dpl @ ;
+: f     dfloat point tens dfloat f/ ;
+: fconstant f 2constant ;
+
+: float dup 0< dfloat ;
+: -+    drop swap 0< if negate then ;
+: fix   tuck 0 swap shifts ralign -+ ;
+: int   tuck 0 swap shifts lalign -+ ;
+
+
+1.      fconstant one decimal
+34.6680 fconstant x1
+-57828. fconstant x2
+2001.18 fconstant x3
+1.4427  fconstant x4
+
+: exp   2dup int dup >r float f-
+        f2* x2 2over fsq x3 f+ f/
+        2over f2/ f-     x1 f+ f/
+        one f+ fsq r> + ;
+: fexp  x4 f* exp ;
+: get   bl word dup 1+ c@ [char] - = tuck -
+        0 0 rot ( convert drop ) >number 2drop -+ ;
+: e     f get >r r@ abs 13301 4004 */mod
+        >r float 4004 float f/ exp r> +
+        r> 0< if f/ else f* then ;
+
+: e.    tuck fabs 16384 tuck -
+        4004 13301 */mod >r
+        float 4004 float f/ exp f*
+        2dup one f<
+        if 10 float f* r> 1- >r then
+        <# r@ abs 0 #s r> sign 2drop
+        [char] e hold f# #>     type space ;
+
+decimal
+
+3 places
+20 float f. cr
+20 float 3 float f- f. cr
+25 float f2/ f2/ f. cr
+\ 12 float fsq f. cr
+2 float 3 float f+ f. cr
+2 float 4 float f* f. cr
+400.0 f 2 float f/ f. cr
+10.3 f f. cr
+6 float f. cr
+-12.34 f f. cr
+2 float 4 float exp f. cr
+save
 
 \  T{ random random <> -> -1 }T
 

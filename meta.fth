@@ -1,16 +1,16 @@
 0 <ok> ! ( Turn off 'ok' prompt )
 \ # meta.fth
 \
-\ | Project    | A Small Forth VM/Implementation   |
-\ | ---------- | --------------------------------- |
-\ | Author     | Richard James Howe                |
-\ | Copyright  | 2017 Richard James Howe           |
-\ | License    | MIT                               |
-\ | Email      | howe.r.j.89@gmail.com             |
-\ | Repository | <https://github.com/howerj/embed> |
+\	| Project    | A Small Forth VM/Implementation   |
+\	| ---------- | --------------------------------- |
+\	| Author     | Richard James Howe                |
+\	| Copyright  | 2017 Richard James Howe           |
+\	| License    | MIT                               |
+\	| Email      | howe.r.j.89@gmail.com             |
+\	| Repository | <https://github.com/howerj/embed> |
 
 \ ## A Meta-compiler, an implementation of eForth, and a tutorial on both.
-
+\ 
 \ ## Introduction
 \ In this file a meta-compiler (or a cross compiler written in Forth) is
 \ described and implemented, and after that a working Forth interpreter
@@ -65,14 +65,12 @@
 \
 \ ### Project Origins
 \
-\ This project derives from a simulator for a CPU written in VHDL, designed
-\ to execute Forth primitives directly, available on GitHub at,
-\ <https://github.com/howerj/forth-cpu>. The CPU and Forth interpreter
+\ This project derives from a simulator for a [CPU written in VHDL][], designed
+\ to execute Forth primitives directly. The CPU and Forth interpreter
 \ themselves have their own sources, which all makes for a confusing pedigree.
 \ The CPU, called the H2, was derived from a well known Forth CPU written
-\ in Verilog, called the J1 <http://excamera.com/sphinx/fpga-j1.html>, and
-\ the Forth running on the H2 comes from an adaption of eForth written
-\ for the J1 <https://github.com/samawati/j1eforth> which itself was derived
+\ in Verilog, called the [J1 CPU][], and the Forth running on the H2 comes 
+\ from an adaption of [eForth written for the J1][]  and 
 \ from 'The Zen of eForth' by C. H. Ting.
 \
 \ Instead of a metacompiler written in Forth a cross compiler for a Forth like
@@ -87,6 +85,8 @@
 \ compiler written in C can be seen in the Git repository this project comes
 \ in (<https://github.com/howerj/embed>).
 \
+\ The project, documentation and Forth images are under an [MIT license][].
+\
 \ ### The Virtual Machine
 \
 \ The virtual machine is incredibly simple and cut down at around 200 lines of
@@ -100,58 +100,45 @@
 \ instruction. As the CPU is designed to execute Forth, Subroutine Threaded
 \ Code (STC) is the most efficient method of running Forth upon it.
 \
-\ The project, documentation and Forth images are under an MIT license,
-\ <https://github.com/howerj/embed/blob/master/LICENSE> and the
-\ repository is available at <https://github.com/howerj/embed/>.
-
-\ The document is structured in roughly the following order:
-\ 1.  The metacompiler
-\ 2.  The assembler
-\ 3.  Image header generation
-\ 4.  Basic Setup, Variables and Special cases
-\ 5.  Simple Forth Words, Numeric I/O
-\ 6.  Interpreter
-\ 7.  Control Words
-\ 8.  I/O Control, Boot Words
-\ 9. 'See', the Disassembler
-\ 10. Block Editor
-\ 11. Finishing
-\ 12. APPENDIX
-
 \ What you are reading is itself a Forth program, all the explanatory text is
-\ are Forth comments. The file should eventually be fed through a preprocessor
-\ to turn it into a Markdown file for further processing.
-\ See <https://daringfireball.net/projects/markdown/> for more information
-\ about Markdown.
-
+\ are Forth comments. The file is fed through a preprocessor to turn it into 
+\ a [Markdown][] file for further processing.
+\ 
 \ Many Forths are written in an assembly language, especially the ones geared
 \ towards microcontrollers, although it is more common for new Forth
-\ interpreters to be written in C. A metacompiler is a Cross Compiler
-\ <https://en.wikipedia.org/wiki/Cross_compiler> written in Forth.
-
-\ References
+\ interpreters to be written in C. A metacompiler is a [Cross Compiler][]
+\  written in Forth.
+\ 
+\ ### References
+\ 
 \ * 'The Zen of eForth' by C. H. Ting
 \ * <https://github.com/howerj/embed> (This project)
 \ * <https://github.com/howerj/libforth>
 \ * <https://github.com/howerj/forth-cpu>
-\ Jones Forth:
+\
+\ #### Jones Forth:
+\
 \ * <https://rwmj.wordpress.com/2010/08/07/jonesforth-git-repository/>
 \ * <https://github.com/AlexandreAbreu/jonesforth>
-\ J1 CPU
-\ * <excamera.com/files/j1.pdf>
+\ 
+\ #### J1 CPU:
+\
+\ * <http://excamera.com/files/j1.pdf>
 \ * <http://excamera.com/sphinx/fpga-j1.html>
 \ * <https://github.com/jamesbowman/j1>
 \ * <https://github.com/samawati/j1eforth>
-\ Meta-compilation/Cross-Compilation
+\
+\ #### Meta-compilation/Cross-Compilation:
+\
 \ * <http://www.ultratechnology.com/meta1.html>
 \ * <https://en.wikipedia.org/wiki/Compiler-compiler#FORTH_metacompiler>
-
+\ 
 \ The Virtual Machine is specifically designed to execute Forth, it is a stack
 \ machine that allows many Forth words to be encoded in one instruction but
 \ does not contain any high level Forth words, just words like '@', 'r>' and
 \ a few basic words for I/O. A full description of the virtual machine is
 \ in the appendix.
-
+\ 
 \ ## Metacompilation wordset
 \ This section defines the metacompilation wordset as well as the
 \ assembler. The metacompiler, or cross compiler, requires some assembly
@@ -618,8 +605,9 @@ forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 \ application, a Forth interpreter which will be able to read in this file
 \ and create new, possibly modified, images for the Forth virtual machine
 \ to run.
-
+\ 
 \ ## The Image Header
+\ 
 \ The following 't,' sequence reserves space and partially populates the
 \ image header with file format information, based upon the PNG specification.
 \ See <http://www.fadden.com/tech/file-formats.html> and
@@ -709,8 +697,9 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 0 tlocation _forth-wordlist   ( set at the end near the end of the file )
 0 tlocation current           ( WID to add definitions to )
 
+\ 
 \ ## Target Assembly Words
-
+\ 
 \ The first words added to the target Forths dictionary are all based on
 \ assembly instructions. The definitions may seem like nonsense, how does the
 \ definition of '+' work? It appears that the definition calls itself, which
@@ -774,6 +763,7 @@ h: tx!     tx!      ; ( c -- : transmit single character )
 : /        /        ; ( u1 u2 -- u : u1 divided by u2 )
 : mod      mod      ; ( u1 u2 -- u : remainder of u1 divided by u2 )
 
+\ 
 \ ### Forth Implementation of Arithmetic Functions
 \
 \ As an aside, the basic arithmetic functions of Forth can be implemented
@@ -829,8 +819,9 @@ h: tx!     tx!      ; ( c -- : transmit single character )
 \       : */mod  >r m* r> m/mod ;    ( n n n -- r q )
 \       : */  */mod nip ;            ( n n n -- q )
 \
-
+\ 
 \ ### Inline Words
+\ 
 \ These words can also be implemented in a single instruction, yet their
 \ definition is different for multiple reasons. These words should only be
 \ use within a word definition begin defined within the running target Forth,
@@ -901,6 +892,7 @@ $ffff    tvariable dpl   ( number of places after fraction )
 \ 0        tvariable <number>     ( execution vector for >number )
 \ 0        tvariable hidden       ( vocabulary for hidden words )
 
+\ 
 \ ### Basic Word Set
 \
 \ The following section of words is purely a space saving measure, or
@@ -919,11 +911,11 @@ $ffff    tvariable dpl   ( number of places after fraction )
 \
 \ The following example illustrates this:
 \
-\  | FORTH CODE                   | PSEUDO ASSEMBLER         |
-\  | ---------------------------- | ------------------------ |
-\  | : push-zero 0 literal ;      | LITERAL(0) EXIT          |
-\  | : example-1 drop 0 literal ; | DROP LITERAL(0) EXIT     |
-\  | : example-2 drop 0 literal ; | DROP BRANCH(push-zero)   |
+\	| FORTH CODE                   | PSEUDO ASSEMBLER         |
+\	| ---------------------------- | ------------------------ |
+\	| : push-zero 0 literal ;      | LITERAL(0) EXIT          |
+\	| : example-1 drop 0 literal ; | DROP LITERAL(0) EXIT     |
+\	| : example-2 drop 0 literal ; | DROP BRANCH(push-zero)   |
 \
 \ Where "example-1" being unoptimized requires three instructions, whereas
 \ "example-2" requires only two, with the two instruction overhead of
@@ -1083,8 +1075,8 @@ h: cp! aligned cp ! ;                 ( n -- )
 \
 \ Typical usage:
 \
-\   create x $20 allot ( Create an array of 32 values )
-\   $cafe  x $10 !     ( Store '$cafe' at element 16 in array )
+\	create x $20 allot ( Create an array of 32 values )
+\	$cafe  x $10 !     ( Store '$cafe' at element 16 in array )
 \
 
 : allot cp +! ;                        ( n -- )
@@ -1227,7 +1219,7 @@ h: last get-current @address ;         ( -- pwd )
 \ when we see '^h' and 'ktap'.
 \
 
-\ h: echo <echo> @execute ;            ( c -- )
+( h: echo <echo> @execute ; )          ( c -- )
 : emit <emit> @execute ;               ( c -- : write out a char )
 : cr =cr emit =lf emit ;               ( -- : emit a newline )
 h: colon [char] : emit ;               ( -- )
@@ -1296,6 +1288,7 @@ h: $type [-1] typist ;                   ( b u --  )
 : cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop ; ( b b u -- )
 : fill swap for swap aft 2dup c! 1+ then next 2drop ; ( b u c -- )
 
+\ 
 \ ### Exception Handling
 \
 \ 'catch' and 'throw' are complex and very useful words, these words are
@@ -1305,8 +1298,8 @@ h: $type [-1] typist ;                   ( b u --  )
 \
 \ The standard describes the stack effects of 'catch' and 'throw' as so:
 \
-\   catch ( i*x xt -- j*x 0 | i*x n )
-\   throw ( k*x n -- k*x | i*x n )
+\	catch ( i*x xt -- j*x 0 | i*x n )
+\	throw ( k*x n -- k*x | i*x n )
 \
 \ Which is apparently meant to mean something, to someone. Either way, these
 \ words are how Forth implements exception handling, as many modern languages
@@ -1327,11 +1320,11 @@ h: $type [-1] typist ;                   ( b u --  )
 \
 \ Example usage:
 \
-\ : word-the-might-fail 2 2 + 5 = if -9001 throw then ;
-\ : foo
-\    ' word-the-might-fail catch
-\    ?dup if abort" Something has gone terribly wrong..." then
-\    ." Everything went peachy" cr ;
+\	: word-the-might-fail 2 2 + 5 = if -9001 throw then ;
+\	: foo
+\	   ' word-the-might-fail catch
+\	   ?dup if abort" Something has gone terribly wrong..." then
+\	   ." Everything went peachy" cr ;
 \
 
 : catch ( i*x xt -- j*x 0 | i*x n )
@@ -1380,7 +1373,9 @@ h: 1depth 1 fallthrough; ( ??? -- : check depth is at least one )
 h: ?ndepth depth 1- u> if 4 -throw exit then ; ( ??? n -- check depth )
 h: 2depth 2 ?ndepth ;    ( ??? -- :  check depth is at least two )
 
+\ 
 \ ## Numeric Output
+\ 
 \ With the basic word set in place and exception handling, as well as some
 \ variables being defined, it is possible to define the numeric output wordset,
 \ this word set will allow numbers to be printed or strings to the numeric
@@ -1538,7 +1533,9 @@ h: 5u.r 5 u.r ;                  ( u -- )
 h: unused $4000 here - ;         ( -- u : unused program space )
 h: .free unused u. ;             ( -- : print unused program space )
 
+\ 
 \ ### String Handling and Input
+\ 
 \ 'pack$' and '=string' are more advanced string handling words for copying
 \ strings to a new location, turning it into a counted string, which 'pack$'
 \ does, or for comparing two string, which '=string' does.
@@ -1682,11 +1679,12 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ the word 'tib' gets its name. The TIB is a simple data structure which
 \ contains a pointer to the buffer itself and the length of the most current
 \ input line.
-
+\ 
 \ Now we have a line based input system, and from the previous chapters we
 \ also have numeric output, the Forth interpreter is starting to take shape.
-
+\ 
 \ ## Dictionary Words
+\ 
 \ These words either navigate around the word header, or search through the
 \ dictionary to find a word, both word sets are related. This section now
 \ requires an understanding on how this Forth lays out its word headers, each
@@ -1887,10 +1885,12 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
 : find ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
   finder rot-drop ;
 
+\ 
 \ ## Numeric Input
+\ 
 \ Numeric input is handled next, converting a string into a number, which is
 \ similar to numeric output. 
-
+\ 
 \ 'digit?' takes a character and the current base and returns a character
 \ converted to the number it represents in the base and a boolean indicating
 \ whether or not the conversion was successful. An ASCII character set is
@@ -1980,7 +1980,9 @@ h: number? ( b u -- d f : is number? )
   r> if >r dnegate r> then
   r> base! ; 
 
+\ 
 \ ## Parsing
+\ 
 \ After a line of text has been fetched the line needs to be tokenized into
 \ space delimited words, which is as complex as parsing gets in Forth.
 \ Technically Forth has no fixed grammar as any Forth word is free to parse
@@ -2025,7 +2027,9 @@ h: ?length dup word-length u> if $13 -throw exit then ;
 : token =bl word ;                       ( -- a )
 : char token count drop c@ ;             ( -- c; <string> )
 
+\
 \ ## The Interpreter
+\ 
 \ The interpreter consists of two main words, 'literal' and 'interpret'. Other
 \ useful words are also defined, such as ',' or 'immediate', but they are
 \ relatively trivial in comparison.
@@ -2120,7 +2124,9 @@ h: toggle tuck @ xor swap! ;        ( u a -- : xor value at addr with u )
 \ : smudge last fallthrough;
 h: (smudge) nfa $80 swap toggle ; ( pwd -- )
 
+\ 
 \ ## Strings
+\ 
 \ The string word set is quite small, there are words already defined for
 \ manipulating strings such 'c@', and 'count', but they are not exclusively
 \ used for strings. These woulds will allow string literals to be embedded
@@ -2183,7 +2189,9 @@ h: ?abort swap if print cr abort then drop ;                   ( u a -- )
 h: (abort) do$ ?abort ;                                        ( -- )
 : abort" compile (abort) parse-string ; immediate compile-only ( u -- )
 
+\ 
 \ ## Evaluator
+\ 
 \ With the following few words extra words we will have a working Forth
 \ interpreter, capable of reading in a line of text and executing it. More
 \ words will need to be defined to make the system usable, as well as some
@@ -2261,7 +2269,9 @@ h: set-input <ok> ! id ! in! #tib 2! ;   ( n1...n5 -- )
   r> 2r> 2r> set-input
   throw ;
 
+\ 
 \ ## I/O Control
+\ 
 \ The I/O control section is a relic from eForth that is not really needed
 \ in a hosted Forth, at least one where the terminal emulator used handles
 \ things like line editing. It is left in here so it can be quickly be added
@@ -2278,7 +2288,9 @@ h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) <ok> ! ;
 \ h: pace 11 emit ;
 \ t: file ' pace ' drop ' ktap xio ;
 
+\ 
 \ ## Control Structures and Defining words
+\ 
 \ 
 \    Companions the creator seeks, not corpses, not herds and believers. 
 \    Fellow creators the creator seeks -- those who write new values on 
@@ -2439,7 +2451,9 @@ h: trace-execute vm-options ! >r ; ( u xt -- )
 : trace ( "name" -- : trace a word )
   find-cfa vm-options @ dup>r 3 or trace-execute r> vm-options ! ;
 
+\ 
 \ ## Vocabulary Words
+\ 
 \ The vocabulary word set should already be well understood, if the
 \ metacompiler has been. The vocabulary word set is how Forth organizes words
 \ and controls visibility of words.
@@ -2526,7 +2540,7 @@ xchange root-voc _forth-wordlist
 \ 
 \ Another idiom is:
 \ 
-\     only forth definitions
+\	only forth definitions
 \ 
 \ Which restores the search order to the default and sets the 'forth-wordlist'
 \ vocabulary as the one which new definitions are added to.
@@ -2537,14 +2551,14 @@ xchange root-voc _forth-wordlist
 \ 
 \ For example:
 \ 
-\     only forth 
-\     anonymous definitions
-\     : x 99 . ;
-\     : y 88 . ;
-\     : reorder dup -order +order ;
-\     forth-wordlist reorder definitions
-\     : z x y cr ;
-\     only forth definitions
+\	only forth 
+\	anonymous definitions
+\	: x 99 . ;
+\	: y 88 . ;
+\	: reorder dup -order +order ;
+\	forth-wordlist reorder definitions
+\	: z x y cr ;
+\	only forth definitions
 \  
 \ In this example new words 'x', 'y' and 'reorder' are created and added
 \ to an anonymous wordlist, 'z' uses words 'x' and 'y' from this word this
@@ -2581,7 +2595,9 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 \ : end-code forth postpone ; ; immediate ( -- )
 \ xchange assembler-voc _forth-wordlist
 
+\ 
 \ ## Block Word Set
+\ 
 \ The block word set abstracts out how access to mass storage works in just
 \ a handful of words. The main word is 'block', with the words 'update',
 \ 'flush' and the variable 'blk' also integral to the working of the block
@@ -2738,7 +2754,9 @@ h: retrieve block drop ;                ( k -- )
 \    dup 5u.r space pipe space dup 0 .line cr 1+
 \  next drop ;
 
+\ 
 \ ## Booting
+\ 
 \ We are now nearing the end of this tutorial, after the boot sequence
 \ word set has been completed we will have a working Forth system. The
 \ boot sequence consists of getting the Forth system into a known working
@@ -2786,12 +2804,10 @@ h: retrieve block drop ;                ( k -- )
 \ the image could be compressed by the metacompiler and the boot sequence
 \ could decompress it (which would require the decompressor to be one of the
 \ first things to run). Experimenting with various schemes it appears
-\ Adaptive Huffman Coding
-\ (see <https://en.wikipedia.org/wiki/Adaptive_Huffman_coding>) produces
-\ the best results, followed by LZSS (see
-\ <https://oku.edu.mie-u.ac.jp/~okumura/compression/lzss.c>). The schemes
-\ are also simple and small enough (both in size and memory requirements)
-\ that they could be implemented in Forth.
+\ [Adaptive Huffman][] Coding produces the best results, followed by 
+\ [lzss.c][]). The schemes are also simple and small enough 
+\ (both in size and memory requirements) that they could be implemented 
+\ in Forth.
 \
 \ Another possibility is to obfuscate the image by exclusive or'ing it with
 \ a value to frustrate the reserve engineering of binaries, or even to
@@ -2838,7 +2854,9 @@ h: cold ( -- : performs a cold boot  )
 h: hi hex cr ." eFORTH V " ver 0 u.r cr here . .free cr postpone [ ; ( -- )
 h: normal-running hi quit ;                 ( -- : boot word )
 
+\ 
 \ ## See : The Forth Disassembler
+\ 
 \ This section defines 'see', the Forth disassembler. This is meant only
 \ as a rough debugging tool and not meant to reproduce the exact source. The
 \ output format is not defined in any standard, it is just meant to be useful
@@ -3007,10 +3025,13 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
 \ word list is the one new definitions (defined by ':', or 'create') are
 \ added to. It will be set to '_forth-wordlist' so new definitions are added
 \ to the default vocabulary.
+
 [last]              [t] _forth-wordlist t!
 [t] _forth-wordlist [t] current         t!
 
+\ 
 \ ## Block Editor
+\ 
 \ This block editor is an excellent example of a Forth application; it is
 \ small, terse, and uses the facilities already built into Forth to do all
 \ of the heavy lifting, specifically vocabularies, the block word set and
@@ -3067,33 +3088,33 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
 \ of how this editor works. Try to use the word set interactively to get
 \ a feel for it:
 \
-\ | A1 | A2 | Command |                Description                 |
-\ | -- | -- | ------- | ------------------------------------------ |
-\ | #2 | #1 |  ia     | insert text into column #1 on line #2      |
-\ |    | #1 |  i      | insert text into column  0 on line #1      |
-\ |    | #1 |  l      | load block number #1                       |
-\ |    | #1 |  k      | blank line number #1                       |
-\ |    |    |  z      | blank currently loaded block               |
-\ |    |    |  v      | redisplay currently loaded block           |
-\ |    |    |  q      | remove editor word set from search order   |
-\ |    |    |  n      | load next block                            |
-\ |    |    |  p      | load previous block                        |
-\ |    |    |  s      | save changes to disk                       |
-\ |    |    |  x      | evaluate block                             |
+\	| A1 | A2 | Command |                Description                 |
+\	| -- | -- | ------- | ------------------------------------------ |
+\	| #2 | #1 |  ia     | insert text into column #1 on line #2      |
+\	|    | #1 |  i      | insert text into column  0 on line #1      |
+\	|    | #1 |  l      | load block number #1                       |
+\	|    | #1 |  k      | blank line number #1                       |
+\	|    |    |  z      | blank currently loaded block               |
+\	|    |    |  v      | redisplay currently loaded block           |
+\	|    |    |  q      | remove editor word set from search order   |
+\	|    |    |  n      | load next block                            |
+\	|    |    |  p      | load previous block                        |
+\	|    |    |  s      | save changes to disk                       |
+\	|    |    |  x      | evaluate block                             |
 \
 \ An example command session might be:
 \
-\ | Command Sequence         | Description                             |
-\ | ------------------------ | --------------------------------------- |
-\ | editor                   | add the editor word set to search order |
-\ | $20 l v                  | load block $20 (hex) and display it     |
-\ | x                        | blank block $20                         |
-\ | 0 i .( Hello, World ) cr | Put ".( Hello, World ) cr" on line 0    |
-\ | 1 i 2 2 + . cr           | Put "2 2 + . cr" on line 1              |
-\ | v                        | list block $20 again                    |
-\ | x                        | evaluate block $20                      |
-\ | s                        | save contents                           |
-\ | q                        | unload block word set                   |
+\	| Command Sequence         | Description                             |
+\	| ------------------------ | --------------------------------------- |
+\	| editor                   | add the editor word set to search order |
+\	| $20 l v                  | load block $20 (hex) and display it     |
+\	| x                        | blank block $20                         |
+\	| 0 i .( Hello, World ) cr | Put ".( Hello, World ) cr" on line 0    |
+\	| 1 i 2 2 + . cr           | Put "2 2 + . cr" on line 1              |
+\	| v                        | list block $20 again                    |
+\	| x                        | evaluate block $20                      |
+\	| s                        | save contents                           |
+\	| q                        | unload block word set                   |
 \
 \ See: <http://retroforth.org/pages/?PortsOfRetroEditor> for the origin of
 \ this block editor, and for different implementations.
@@ -3124,7 +3145,9 @@ h: [line] [check] c/l* [block] + ; ( u -- a )
 \ : sw 2dup y [line] swap [line] swap c/l cmove c ;
 [last] [t] editor-voc t! 0 tlast meta!
 
+\ 
 \ ## Final Touches
+\ 
 
 there [t] cp t!
 [t] (literal) [v] <literal> t!   ( set literal execution vector )
@@ -3141,8 +3164,8 @@ bye
 
 ## The Virtual Machine
 
-The Virtual Machine is a 16-bit stack machine based on the [H2 CPU][], a
-derivative of the [J1 CPU][], but adapted for use on a computer.
+The Virtual Machine is a 16-bit stack machine based on the [H2 CPU][], itself
+a derivative of the [J1 CPU][], but adapted for use on a computer.
 
 Its instruction set allows for a fairly dense encoding, and the project
 goal is to be fairly small whilst still being useful.  It is small enough
@@ -3157,14 +3180,14 @@ and call locations can only be in the first 16KiB of memory). The virtual
 places little restrictions on what goes where, however the eForth image maps
 things out in the following way:
 
-| Block   |  Region          |
-| ------- | ---------------- |
-| 0       | Image header     |
-| 0 - 15  | Program Storage  |
-| 16      | User Data        |
-| 17      | Variable Stack   |
-| 18 - 62 | User data        |
-| 63      | Return Stack     |
+	| Block   |  Region          |
+	| ------- | ---------------- |
+	| 0       | Image header     |
+	| 0 - 15  | Program Storage  |
+	| 16      | User Data        |
+	| 17      | Variable Stack   |
+	| 18 - 62 | User data        |
+	| 63      | Return Stack     |
 
 The virtual machine uses the first six cells for special purposes, apart
 from the division between program/data and data only sections this is the
@@ -3172,16 +3195,16 @@ only restriction that the *virtual machine* places on memory.
 
 The first six locations are used for:
 
-| Address  |  Use                                                         |
-| -------- | ------------------------------------------------------------ |
-| $0       | Initial Program Counter (PC) value and reset vector          |
-| $2       | Initial Top of Stack Register value                          |
-| $4       | Initial Return Stack Register value (grows downwards)        |
-| $6       | Initial Variable Stack Register value (grows upwards)        |
-| $8       | Instruction exception vector (trap handler)                  |
-| $A       | Virtual Machine memory in cells, if used, else $8000 assumed |
-| $C       | Virtual Machine memory in cells, if used, else $8000 assumed |
-| $E       | Virtual Machine Options, various uses                        |
+	| Address  |  Use                                                         |
+	| -------- | ------------------------------------------------------------ |
+	| $0       | Initial Program Counter (PC) value and reset vector          |
+	| $2       | Initial Top of Stack Register value                          |
+	| $4       | Initial Return Stack Register value (grows downwards)        |
+	| $6       | Initial Variable Stack Register value (grows upwards)        |
+	| $8       | Instruction exception vector (trap handler)                  |
+	| $A       | Virtual Machine memory in cells, if used, else $8000 assumed |
+	| $C       | Virtual Machine memory in cells, if used, else $8000 assumed |
+	| $E       | Virtual Machine Options, various uses                        |
 
 
 The eForth image maps things in the following way. The variable stack starts 
@@ -3238,36 +3261,36 @@ A quick overview:
 The ALU can be programmed to do the following operations on an ALU instruction,
 some operations trap on error (U/MOD, /MOD).
 
-|  #  | Mnemonic | Description          |
-| --- | -------- | -------------------- |
-|  0  | T        | Top of Stack         |
-|  1  | N        | Copy T to N          |
-|  2  | R        | Top of return stack  |
-|  3  | T@       | Load from address    |
-|  4  | NtoT     | Store to address     |
-|  5  | T+N      | Double cell addition |
-|  6  | T\*N     | Double cell multiply |
-|  7  | T&N      | Bitwise AND          |
-|  8  | TorN     | Bitwise OR           |
-|  9  | T^N      | Bitwise XOR          |
-| 10  | ~T       | Bitwise Inversion    |
-| 11  | T--      | Decrement            |
-| 12  | T=0      | Equal to zero        |
-| 13  | T=N      | Equality test        |
-| 14  | Nu&lt;T  | Unsigned comparison  |
-| 15  | N&lt;T   | Signed comparison    |
-| 16  | NrshiftT | Logical Right Shift  |
-| 17  | NlshiftT | Logical Left Shift   |
-| 18  | SP@      | Depth of stack       |
-| 19  | RP@      | R Stack Depth        |
-| 20  | SP!      | Set Stack Depth      |
-| 21  | RP!      | Set R Stack Depth    |
-| 22  | SAVE     | Save Image           |
-| 23  | TX       | Get byte             |
-| 24  | RX       | Send byte            |
-| 25  | UM/MOD   | um/mod               |
-| 26  | /MOD     | /mod                 |
-| 27  | BYE      | Return               |
+	|  #  | Mnemonic | Description          |
+	| --- | -------- | -------------------- |
+	|  0  | T        | Top of Stack         |
+	|  1  | N        | Copy T to N          |
+	|  2  | R        | Top of return stack  |
+	|  3  | T@       | Load from address    |
+	|  4  | NtoT     | Store to address     |
+	|  5  | T+N      | Double cell addition |
+	|  6  | T\*N     | Double cell multiply |
+	|  7  | T&N      | Bitwise AND          |
+	|  8  | TorN     | Bitwise OR           |
+	|  9  | T^N      | Bitwise XOR          |
+	| 10  | ~T       | Bitwise Inversion    |
+	| 11  | T--      | Decrement            |
+	| 12  | T=0      | Equal to zero        |
+	| 13  | T=N      | Equality test        |
+	| 14  | Nu&lt;T  | Unsigned comparison  |
+	| 15  | N&lt;T   | Signed comparison    |
+	| 16  | NrshiftT | Logical Right Shift  |
+	| 17  | NlshiftT | Logical Left Shift   |
+	| 18  | SP@      | Depth of stack       |
+	| 19  | RP@      | R Stack Depth        |
+	| 20  | SP!      | Set Stack Depth      |
+	| 21  | RP!      | Set R Stack Depth    |
+	| 22  | SAVE     | Save Image           |
+	| 23  | TX       | Get byte             |
+	| 24  | RX       | Send byte            |
+	| 25  | UM/MOD   | um/mod               |
+	| 26  | /MOD     | /mod                 |
+	| 27  | BYE      | Return               |
 
 ### Encoding of Forth Words
 
@@ -3275,48 +3298,48 @@ Many Forth words can be encoded directly in the instruction set, some of the
 ALU operations have extra stack and register effects as well, which although
 would be difficult to achieve in hardware is easy enough to do in software.
 
-| Word   | Mnemonic | T2N | T2R | N2T | R2P |  RP |  SP |
-| ------ | -------- | --- | --- | --- | --- | --- | --- |
-| dup    | T        | T2N |     |     |     |     | +1  |
-| over   | N        | T2N |     |     |     |     | +1  |
-| invert | ~T       |     |     |     |     |     |     |
-| um+    | T+N      |     |     |     |     |     |     |
-| \+     | T+N      |     |     | N2T |     |     | -1  |
-| um\*   | T\*N     |     |     |     |     |     |     |
-| \*     | T\*N     |     |     | N2T |     |     | -1  |
-| swap   | N        | T2N |     |     |     |     |     |
-| nip    | T        |     |     |     |     |     | -1  |
-| drop   | N        |     |     |     |     |     | -1  |
-| exit   | T        |     |     |     | R2P |  -1 |     |
-| &gt;r  | N        |     | T2R |     |     |   1 | -1  |
-| r&gt;  | R        | T2N |     |     |     |  -1 |  1  |
-| r@     | R        | T2N |     |     |     |     |  1  |
-| @      | T@       |     |     |     |     |     |     |
-| !      | NtoT     |     |     |     |     |     | -1  |
-| rshift | NrshiftT |     |     |     |     |     | -1  |
-| lshift | NlshiftT |     |     |     |     |     | -1  |
-| =      | T=N      |     |     |     |     |     | -1  |
-| u&lt;  | Nu&lt;T  |     |     |     |     |     | -1  |
-| &lt;   | N&lt;T   |     |     |     |     |     | -1  |
-| and    | T&N      |     |     |     |     |     | -1  |
-| xor    | T^N      |     |     |     |     |     | -1  |
-| or     | T|N      |     |     |     |     |     | -1  |
-| sp@    | SP@      | T2N |     |     |     |     |  1  |
-| sp!    | SP!      |     |     |     |     |     |     |
-| 1-     | T--      |     |     |     |     |     |     |
-| rp@    | RP@      | T2N |     |     |     |     |  1  |
-| rp!    | RP!      |     |     |     |     |     | -1  |
-| 0=     | T=0      |     |     |     |     |     |     |
-| nop    | T        |     |     |     |     |     |     |
-| (bye)  | BYE      |     |     |     |     |     |     |
-| rx?    | RX       | T2N |     |     |     |     |  1  |
-| tx!    | TX       |     |     | N2T |     |     | -1  |
-| (save) | SAVE     |     |     |     |     |     | -1  |
-| um/mod | UM/MOD   | T2N |     |     |     |     |     |
-| /mod   | /MOD     | T2N |     |     |     |     |     |
-| /      | /MOD     |     |     |     |     |     | -1  |
-| mod    | /MOD     |     |     | N2T |     |     | -1  |
-| rdrop  | T        |     |     |     |     |  -1 |     |
+	| Word   | Mnemonic | T2N | T2R | N2T | R2P |  RP |  SP |
+	| ------ | -------- | --- | --- | --- | --- | --- | --- |
+	| dup    | T        | T2N |     |     |     |     | +1  |
+	| over   | N        | T2N |     |     |     |     | +1  |
+	| invert | ~T       |     |     |     |     |     |     |
+	| um+    | T+N      |     |     |     |     |     |     |
+	| \+     | T+N      |     |     | N2T |     |     | -1  |
+	| um\*   | T\*N     |     |     |     |     |     |     |
+	| \*     | T\*N     |     |     | N2T |     |     | -1  |
+	| swap   | N        | T2N |     |     |     |     |     |
+	| nip    | T        |     |     |     |     |     | -1  |
+	| drop   | N        |     |     |     |     |     | -1  |
+	| exit   | T        |     |     |     | R2P |  -1 |     |
+	| &gt;r  | N        |     | T2R |     |     |   1 | -1  |
+	| r&gt;  | R        | T2N |     |     |     |  -1 |  1  |
+	| r@     | R        | T2N |     |     |     |     |  1  |
+	| @      | T@       |     |     |     |     |     |     |
+	| !      | NtoT     |     |     |     |     |     | -1  |
+	| rshift | NrshiftT |     |     |     |     |     | -1  |
+	| lshift | NlshiftT |     |     |     |     |     | -1  |
+	| =      | T=N      |     |     |     |     |     | -1  |
+	| u&lt;  | Nu&lt;T  |     |     |     |     |     | -1  |
+	| &lt;   | N&lt;T   |     |     |     |     |     | -1  |
+	| and    | T&N      |     |     |     |     |     | -1  |
+	| xor    | T^N      |     |     |     |     |     | -1  |
+	| or     | T|N      |     |     |     |     |     | -1  |
+	| sp@    | SP@      | T2N |     |     |     |     |  1  |
+	| sp!    | SP!      |     |     |     |     |     |     |
+	| 1-     | T--      |     |     |     |     |     |     |
+	| rp@    | RP@      | T2N |     |     |     |     |  1  |
+	| rp!    | RP!      |     |     |     |     |     | -1  |
+	| 0=     | T=0      |     |     |     |     |     |     |
+	| nop    | T        |     |     |     |     |     |     |
+	| (bye)  | BYE      |     |     |     |     |     |     |
+	| rx?    | RX       | T2N |     |     |     |     |  1  |
+	| tx!    | TX       |     |     | N2T |     |     | -1  |
+	| (save) | SAVE     |     |     |     |     |     | -1  |
+	| um/mod | UM/MOD   | T2N |     |     |     |     |     |
+	| /mod   | /MOD     | T2N |     |     |     |     |     |
+	| /      | /MOD     |     |     |     |     |     | -1  |
+	| mod    | /MOD     |     |     | N2T |     |     | -1  |
+	| rdrop  | T        |     |     |     |     |  -1 |     |
 
 ## Interaction
 
@@ -3334,127 +3357,111 @@ to the model.
 The eForth model imposes extra semantics to certain areas of memory, along
 with the virtual machine.
 
-| Address       | Block  | Meaning                        |
-| ------------- | ------ | ------------------------------ |
-| $0000         |   0    | Initial Program Counter (PC)   |
-| $0002         |   0    | Initial Top of Stack Register  |
-| $0004         |   0    | Initial Return Stack Register  |
-| $0006         |   0    | Initial Var. Stack Register    |
-| $0008         |   0    | Instruction exception vector   |
-| $000A         |   0    | VM Options bits                |
-| $000C         |   0    | VM memory in cells             |
-| $000E-$001C   |   0    | eForth Header                  |
-| $001E-EOD     |  0-?   | The dictionary                 |
-| EOD-$3FFF     |  ?-15  | Compilation and Numeric Output |
-| $4000         |   16   | Interpreter variable storage   |
-| $4280         |   16   | Pad area                       |
-| $4400         |   17   | Start of variable stack        |
-| $4800-$FBFF   | 18-63  | Empty blocks for user data     |
-| $FC00-$FFFF   |   0    | Return stack block             |
+	| Address       | Block  | Meaning                        |
+	| ------------- | ------ | ------------------------------ |
+	| $0000         |   0    | Initial Program Counter (PC)   |
+	| $0002         |   0    | Initial Top of Stack Register  |
+	| $0004         |   0    | Initial Return Stack Register  |
+	| $0006         |   0    | Initial Var. Stack Register    |
+	| $0008         |   0    | Instruction exception vector   |
+	| $000A         |   0    | VM Options bits                |
+	| $000C         |   0    | VM memory in cells             |
+	| $000E-$001C   |   0    | eForth Header                  |
+	| $001E-EOD     |  0-?   | The dictionary                 |
+	| EOD-$3FFF     |  ?-15  | Compilation and Numeric Output |
+	| $4000         |   16   | Interpreter variable storage   |
+	| $4280         |   16   | Pad area                       |
+	| $4400         |   17   | Start of variable stack        |
+	| $4800-$FBFF   | 18-63  | Empty blocks for user data     |
+	| $FC00-$FFFF   |   0    | Return stack block             |
 
 ## Error Codes
 
 This is a list of Error codes, not all of which are used by the application.
 
-| Hex  | Dec  | Message                                       |
-| ---- | ---- | --------------------------------------------- |
-| FFFF |  -1  | ABORT                                         |
-| FFFE |  -2  | ABORT"                                        |
-| FFFD |  -3  | stack overflow                                |
-| FFFC |  -4  | stack underflow                               |
-| FFFB |  -5  | return stack overflow                         |
-| FFFA |  -6  | return stack underflow                        |
-| FFF9 |  -7  | do-loops nested too deeply during execution   |
-| FFF8 |  -8  | dictionary overflow                           |
-| FFF7 |  -9  | invalid memory address                        |
-| FFF6 | -10  | division by zero                              |
-| FFF5 | -11  | result out of range                           |
-| FFF4 | -12  | argument type mismatch                        |
-| FFF3 | -13  | undefined word                                |
-| FFF2 | -14  | interpreting a compile-only word              |
-| FFF1 | -15  | invalid FORGET                                |
-| FFF0 | -16  | attempt to use zero-length string as a name   |
-| FFEF | -17  | pictured numeric output string overflow       |
-| FFEE | -18  | parsed string overflow                        |
-| FFED | -19  | definition name too long                      |
-| FFEC | -20  | write to a read-only location                 |
-| FFEB | -21  | unsupported operation                         |
-| FFEA | -22  | control structure mismatch                    |
-| FFE9 | -23  | address alignment exception                   |
-| FFE8 | -24  | invalid numeric argument                      |
-| FFE7 | -25  | return stack imbalance                        |
-| FFE6 | -26  | loop parameters unavailable                   |
-| FFE5 | -27  | invalid recursion                             |
-| FFE4 | -28  | user interrupt                                |
-| FFE3 | -29  | compiler nesting                              |
-| FFE2 | -30  | obsolescent feature                           |
-| FFE1 | -31  | &gt;BODY used on non-CREATEd definition       |
-| FFE0 | -32  | invalid name argument (e.g., TO xxx)          |
-| FFDF | -33  | block read exception                          |
-| FFDE | -34  | block write exception                         |
-| FFDD | -35  | invalid block number                          |
-| FFDC | -36  | invalid file position                         |
-| FFDB | -37  | file I/O exception                            |
-| FFDA | -38  | non-existent file                             |
-| FFD9 | -39  | unexpected end of file                        |
-| FFD8 | -40  | invalid BASE for floating point conversion    |
-| FFD7 | -41  | loss of precision                             |
-| FFD6 | -42  | floating-point divide by zero                 |
-| FFD5 | -43  | floating-point result out of range            |
-| FFD4 | -44  | floating-point stack overflow                 |
-| FFD3 | -45  | floating-point stack underflow                |
-| FFD2 | -46  | floating-point invalid argument               |
-| FFD1 | -47  | compilation word list deleted                 |
-| FFD0 | -48  | invalid POSTPONE                              |
-| FFCF | -49  | search-order overflow                         |
-| FFCE | -50  | search-order underflow                        |
-| FFCD | -51  | compilation word list changed                 |
-| FFCC | -52  | control-flow stack overflow                   |
-| FFCB | -53  | exception stack overflow                      |
-| FFCA | -54  | floating-point underflow                      |
-| FFC9 | -55  | floating-point unidentified fault             |
-| FFC8 | -56  | QUIT                                          |
-| FFC7 | -57  | exception in sending or receiving a character |
-| FFC6 | -58  | [IF], [ELSE], or [THEN] exception             |
+	| Hex  | Dec  | Message                                       |
+	| ---- | ---- | --------------------------------------------- |
+	| FFFF |  -1  | ABORT                                         |
+	| FFFE |  -2  | ABORT"                                        |
+	| FFFD |  -3  | stack overflow                                |
+	| FFFC |  -4  | stack underflow                               |
+	| FFFB |  -5  | return stack overflow                         |
+	| FFFA |  -6  | return stack underflow                        |
+	| FFF9 |  -7  | do-loops nested too deeply during execution   |
+	| FFF8 |  -8  | dictionary overflow                           |
+	| FFF7 |  -9  | invalid memory address                        |
+	| FFF6 | -10  | division by zero                              |
+	| FFF5 | -11  | result out of range                           |
+	| FFF4 | -12  | argument type mismatch                        |
+	| FFF3 | -13  | undefined word                                |
+	| FFF2 | -14  | interpreting a compile-only word              |
+	| FFF1 | -15  | invalid FORGET                                |
+	| FFF0 | -16  | attempt to use zero-length string as a name   |
+	| FFEF | -17  | pictured numeric output string overflow       |
+	| FFEE | -18  | parsed string overflow                        |
+	| FFED | -19  | definition name too long                      |
+	| FFEC | -20  | write to a read-only location                 |
+	| FFEB | -21  | unsupported operation                         |
+	| FFEA | -22  | control structure mismatch                    |
+	| FFE9 | -23  | address alignment exception                   |
+	| FFE8 | -24  | invalid numeric argument                      |
+	| FFE7 | -25  | return stack imbalance                        |
+	| FFE6 | -26  | loop parameters unavailable                   |
+	| FFE5 | -27  | invalid recursion                             |
+	| FFE4 | -28  | user interrupt                                |
+	| FFE3 | -29  | compiler nesting                              |
+	| FFE2 | -30  | obsolescent feature                           |
+	| FFE1 | -31  | &gt;BODY used on non-CREATEd definition       |
+	| FFE0 | -32  | invalid name argument (e.g., TO xxx)          |
+	| FFDF | -33  | block read exception                          |
+	| FFDE | -34  | block write exception                         |
+	| FFDD | -35  | invalid block number                          |
+	| FFDC | -36  | invalid file position                         |
+	| FFDB | -37  | file I/O exception                            |
+	| FFDA | -38  | non-existent file                             |
+	| FFD9 | -39  | unexpected end of file                        |
+	| FFD8 | -40  | invalid BASE for floating point conversion    |
+	| FFD7 | -41  | loss of precision                             |
+	| FFD6 | -42  | floating-point divide by zero                 |
+	| FFD5 | -43  | floating-point result out of range            |
+	| FFD4 | -44  | floating-point stack overflow                 |
+	| FFD3 | -45  | floating-point stack underflow                |
+	| FFD2 | -46  | floating-point invalid argument               |
+	| FFD1 | -47  | compilation word list deleted                 |
+	| FFD0 | -48  | invalid POSTPONE                              |
+	| FFCF | -49  | search-order overflow                         |
+	| FFCE | -50  | search-order underflow                        |
+	| FFCD | -51  | compilation word list changed                 |
+	| FFCC | -52  | control-flow stack overflow                   |
+	| FFCB | -53  | exception stack overflow                      |
+	| FFCA | -54  | floating-point underflow                      |
+	| FFC9 | -55  | floating-point unidentified fault             |
+	| FFC8 | -56  | QUIT                                          |
+	| FFC7 | -57  | exception in sending or receiving a character |
+	| FFC6 | -58  | [IF], [ELSE], or [THEN] exception             |
 
 <http://www.forth200x.org/throw-iors.html>
 
-| Hex  | Dec  | Message                                       |
-| ---- | ---- | --------------------------------------------- |
-| FFC5 | -59  | ALLOCATE                                      |
-| FFC4 | -60  | FREE                                          |
-| FFC3 | -61  | RESIZE                                        |
-| FFC2 | -62  | CLOSE-FILE                                    |
-| FFC1 | -63  | CREATE-FILE                                   |
-| FFC0 | -64  | DELETE-FILE                                   |
-| FFBF | -65  | FILE-POSITION                                 |
-| FFBE | -66  | FILE-SIZE                                     |
-| FFBD | -67  | FILE-STATUS                                   |
-| FFBC | -68  | FLUSH-FILE                                    |
-| FFBB | -69  | OPEN-FILE                                     |
-| FFBA | -70  | READ-FILE                                     |
-| FFB9 | -71  | READ-LINE                                     |
-| FFB8 | -72  | RENAME-FILE                                   |
-| FFB7 | -73  | REPOSITION-FILE                               |
-| FFB6 | -74  | RESIZE-FILE                                   |
-| FFB5 | -75  | WRITE-FILE                                    |
-| FFB4 | -76  | WRITE-LINE                                    |
-
-## To Do / Wish List
-
-* The forth virtual machine in [embed.c][] should be made to be crash proof,
-with checks to make sure indices never go out of bounds.
-* Documentation could be extracted from the [meta.fth][] file, which should
-describe the entire system: The metacompiler, the target virtual machine,
-and how Forth works.
-* This Forth needs a series of unit tests to make sure the basic functionality
-of all the words is correct
-* This Forth lacks a version of 'FORGET', as well as 'MARKER', which is
-unfortunate, as they are useful. This is due to how word lists are
-implemented.
-* A more generic virtual machine would allow functions for fgetc, fputc,
-and for saving to block storage, to be passed in via the C interface
-somehow, as well as for arbitrary C callbacks.
+	| Hex  | Dec  | Message                                       |
+	| ---- | ---- | --------------------------------------------- |
+	| FFC5 | -59  | ALLOCATE                                      |
+	| FFC4 | -60  | FREE                                          |
+	| FFC3 | -61  | RESIZE                                        |
+	| FFC2 | -62  | CLOSE-FILE                                    |
+	| FFC1 | -63  | CREATE-FILE                                   |
+	| FFC0 | -64  | DELETE-FILE                                   |
+	| FFBF | -65  | FILE-POSITION                                 |
+	| FFBE | -66  | FILE-SIZE                                     |
+	| FFBD | -67  | FILE-STATUS                                   |
+	| FFBC | -68  | FLUSH-FILE                                    |
+	| FFBB | -69  | OPEN-FILE                                     |
+	| FFBA | -70  | READ-FILE                                     |
+	| FFB9 | -71  | READ-LINE                                     |
+	| FFB8 | -72  | RENAME-FILE                                   |
+	| FFB7 | -73  | REPOSITION-FILE                               |
+	| FFB6 | -74  | RESIZE-FILE                                   |
+	| FFB5 | -75  | WRITE-FILE                                    |
+	| FFB4 | -76  | WRITE-LINE                                    |
 
 ## Virtual Machine Implementation in C
 
@@ -3625,7 +3632,6 @@ somehow, as well as for arbitrary C callbacks.
 	}
 	#endif
 
-### References
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html
@@ -3641,6 +3647,14 @@ somehow, as well as for arbitrary C callbacks.
 [DOS]: https://en.wikipedia.org/wiki/DOS
 [8086]: https://en.wikipedia.org/wiki/Intel_8086
 [LZSS]: https://en.wikipedia.org/wiki/Lempel%E2%80%93Ziv%E2%80%93Storer%E2%80%93Szymanski
+[lzss.c]: https://oku.edu.mie-u.ac.jp/~okumura/compression/lzss.c
 [Run Length Encoding]: https://en.wikipedia.org/wiki/Run-length_encoding
 [Huffman]: https://en.wikipedia.org/wiki/Huffman_coding
 [Adaptive Huffman]: https://en.wikipedia.org/wiki/Adaptive_Huffman_coding
+[MIT License]: https://github.com/howerj/embed/blob/master/LICENSE
+[Markdown]: https://daringfireball.net/projects/markdown/
+[Cross Compiler]: https://en.wikipedia.org/wiki/Cross_compiler
+[eForth written for the J1]: https://github.com/samawati/j1eforth
+[CPU written in VHDL]: https://github.com/howerj/forth-cpu
+
+<style type="text/css">body{margin:40px auto;max-width:850px;line-height:1.6;font-size:16px;color:#444;padding:0 10px}h1,h2,h3{line-height:1.2}table {width: 100%; border-collapse: collapse;}table, th, td{border: 1px solid black;}code { color: #091992; } </style>

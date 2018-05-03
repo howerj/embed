@@ -10,7 +10,7 @@ TARGET=embed
 CMP=cmp
 RM=rm -fv
 
-.PHONY: all clean run cross cross-run double-cross default tests 
+.PHONY: all clean run cross cross-run double-cross default tests docs
 
 default: all
 
@@ -55,6 +55,20 @@ tests: ${FORTH} ${META1} unit.fth
 libembed.a: embed.o
 	ar rcs $@ $<
 
+%.pdf: %.md
+	pandoc -V geometry:margin=0.5in --toc $< -o $@
+
+%.md: %.fth convert
+	./convert $< > $@
+
+%.htm: %.md convert
+	markdown $< > $@
+
+view: meta.pdf
+	mupdf $< &>/dev/null&
+
+docs: meta.pdf meta.htm
+
 clean:
-	${RM} ${FORTH} ${META1} ${META2} ${TEMP} *.o *.a
+	${RM} ${FORTH} ${META1} ${META2} ${TEMP} *.o *.a *.pdf *.htm
 

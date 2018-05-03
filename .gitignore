@@ -5,3 +5,6 @@ embed
 *.o
 *.a
 vgcore.*
+*.htm
+*.pdf
+*.md

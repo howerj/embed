@@ -13,6 +13,7 @@ typedef struct forth_t { uint16_t m[32768]; } forth_t;
 
 void embed_die(const char *fmt, ...)
 {
+	assert(fmt);
 	va_list arg;
 	va_start(arg, fmt);
 	vfprintf(stderr, fmt, arg);
@@ -23,9 +24,9 @@ void embed_die(const char *fmt, ...)
 
 FILE *embed_fopen_or_die(const char *file, const char *mode)
 {
+	assert(file && mode);
 	FILE *h = NULL;
 	errno = 0;
-	assert(file && mode);
 	if(!(h = fopen(file, mode)))
 		embed_die("file open %s (mode %s) failed: %s", file, mode, strerror(errno));
 	return h;
@@ -39,9 +40,11 @@ forth_t *embed_new(void)
 	return h;
 }
 
+static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
+
 static int save(forth_t *h, const char *name, const size_t start, const size_t length)
 {
-	assert(h && ((length - start) <= length));
+	assert(h && ((length - start) <= length) && ((start + length) <= embed_cells(h)));
 	if(!name)
 		return -1;
 	FILE *out = embed_fopen_or_die(name, "wb");
@@ -53,7 +56,6 @@ static int save(forth_t *h, const char *name, const size_t start, const size_t l
 	return r;
 }
 
-static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
 forth_t *embed_copy(forth_t const * const h)      { assert(h); return memcpy(embed_new(), h, sizeof(*h)); }
 int      embed_save(forth_t *h, const char *name) { return save(h, name, 0, embed_cells(h)); }
 size_t   embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
@@ -65,11 +67,10 @@ int embed_load(forth_t *h, const char *name)
 	assert(h && name);
 	FILE *input = embed_fopen_or_die(name, "rb");
 	long r = 0, c1 = 0, c2 = 0;
-	for(size_t i = 0; i < MAX(64, embed_cells(h)); i++) {
-		if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0) {
-			r = i;
+	for(size_t i = 0; i < MAX(64, embed_cells(h)); i++, r = i) {
+		assert(embed_cells(h) <= 0x8000);
+		if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0)
 			break;
-		}
 		h->m[i] = ((c1 & 0xffu)) | ((c2 & 0xffu) << 8u);
 	}
 	fclose(input);
@@ -129,13 +130,11 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			}
 			sp += delta[ instruction       & 0x3];
 			rp -= delta[(instruction >> 2) & 0x3];
-			if(instruction & 0x20)
-				T = n;
-			if(instruction & 0x40)
-				m[rp] = t;
 			if(instruction & 0x80)
 				m[sp] = t;
-			t = T;
+			if(instruction & 0x40)
+				m[rp] = t;
+			t = instruction & 0x20 ? n : T;
 		} else if (0x4000 & instruction) { /* call */
 			m[--rp] = pc << 1;
 			pc      = instruction & 0x1FFF;

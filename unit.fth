@@ -566,38 +566,24 @@ defined? d< ?\ T{  0 -1  0  1 d< -> -1 }T
 defined? d< ?\ T{ $ffff -1  0  1 d< -> -1 }T
 defined? d< ?\ T{ $ffff -1  0  -1 d< -> 0 }T
 
-variable dl
-variable dh
-variable dhp
-variable dlp
-variable nn
-variable nnp
-variable rem
-variable quo
+: +- 0< if negate then ; ( n n -- n : copy sign )
 
-: sm/rem ( dl dh nn -- rem quo, symmetric )
-    nn ! dh ! dl !
-    dl @ dh @ dabs dhp ! dlp !
-    nn @ abs  nnp !
-    dlp @ dhp @ nnp @ um/mod quo ! rem !
-    dh @ 0<
-    if  \ negative dividend
-        rem @ negate rem !
-        nn @ 0>
-        if   \ positive divisor
-            quo @ negate quo !
-        then
-    else  \ positive dividend
-        nn @ 0<
-        if  \ negative divisor
-            quo @ negate quo !
-        then
-    then
-    rem @ quo @ ;
+: sm/rem ( dl dh nn -- rem quo: symmetric division )
+  over >r >r          ( dl dh nn -- dl dh,      R: -- dh nn )
+  dabs r@ abs um/mod  ( dl dh    -- rem quo,    R: dh nn -- dh nn )
+  r> r> swap >r       ( rem quo  -- rem quo dh, R: dh nn -- nn )
+  0< if  ( negative dividend )
+      swap negate ( <- rem ) 
+      swap
+      r> 0> if negate then ( positive divisor )
+      exit
+  then
+  ( positive dividend )
+  r> 0< if negate then ; ( negative divisor )
 
-: m* 2dup xor 0< >r abs swap abs um* r> if dnegate then ;
+: m* 2dup xor 0< >r abs swap abs um* r> if dnegate then ; ( n n -- d )
 
-: */mod ( a b c -- rem a*b/c , use double precision intermediate value )
+: */mod ( a b c -- rem a*b/c : use double precision intermediate value )
     >r m* r> sm/rem ;
 
 $FFFF constant min-int 
@@ -722,7 +708,7 @@ hex
 : s>f   s>d d>f ;                  ( n -- f )
 : -+    drop swap 0< if negate then ;
 : fix   tuck 0 swap shifts ralign -+ ;
-: int   tuck 0 swap shifts lalign -+ ;
+: f>s   tuck 0 swap shifts lalign -+ ; ( f -- n )
 
 
 1.      fconstant one decimal
@@ -731,7 +717,7 @@ hex
 2001.18 fconstant x3
 1.4427  fconstant x4
 
-: exp   2dup int dup >r s>f f-
+: exp   2dup f>s dup >r s>f f-
         f2* x2 2over fsq x3 f+ f/
         2over f2/ f-     x1 f+ f/
         one f+ fsq r> + ;
@@ -775,7 +761,7 @@ save
 
 .( TESTS COMPLETE ) cr
 decimal
-.( passed: ) statistics u. .( / ) 0 u.r cr
+.( passed: ) statistics u. space .( / ) 0 u.r cr
 .( here:   ) here . cr
 statistics  = ?\ .( [ALL PASSED] ) cr     bye
 statistics <> ?\ .( [FAILED]     ) cr   abort

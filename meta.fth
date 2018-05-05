@@ -8,17 +8,28 @@
 \	| License    | MIT                               |
 \	| Email      | howe.r.j.89@gmail.com             |
 \	| Repository | <https://github.com/howerj/embed> |
-
+\ 
 \ ## A Meta-compiler, an implementation of eForth, and a tutorial on both.
 \ 
 \ ## Introduction
 \
-\ In this file a meta-compiler (or a cross compiler written in Forth) is
+\ In this file a meta-compiler (or a cross compiler written in [Forth][]) is
 \ described and implemented, and after that a working Forth interpreter
 \ is both described and implemented. This new interpreter can be used in turn
 \ to meta-compile the original program, ad infinitum. The design decisions
 \ and the philosophy behind Forth and the system will also be elucidated.
 \ 
+\ This files source is a Forth program which the meta-compiler can read, it
+\ is also used as source for a simple document generation system using [AWK][]
+\ which feeds into either [Pandoc][] for [PDF][] or the original [Markdown][]
+\ script for [HTML][] output. The AWK script is crude and requires that the
+\ Forth source file, [meta.fth][] be formatted in a specific way. 
+\
+\ Lines beginning with a back-slash are turned into normal Markdown text, with
+\ some characters needed to be escaped. Other lines are assumed to be Forth
+\ source code and are turned into Markdown code/literal-text blocks with
+\ a number and '|' symbol preceding them, numbering starts from line '0001'.
+\
 \ ### What is Forth?
 \
 \ Forth is a stack based procedural language, which uses Reverse Polish
@@ -52,7 +63,7 @@
 \ implementation can be minimal and terse.
 \
 \ The saying "Once you have seen one Forth implementation, you have seen
-\ one Forth implementation." comes about because of how easy it is to implement
+\ one Forth implementation" comes about because of how easy it is to implement
 \ a Forth, which is a double edged sword. It is possible to completely
 \ understand a Forth system, the software, the hardware and the problems you
 \ are trying to solve and optimize everything towards this goal. This is oft
@@ -179,9 +190,9 @@ $4400 constant (sp0)   ( start of variable stack )
 1   constant verbose   ( verbosity level, higher is more verbose )
 #target #max 0 fill    ( Erase the target memory location )
 
-: ]asm assembler.1 +order ; immediate ( -- )
+: ]asm assembler.1 +order ; immediate        ( -- )
 : a: get-current assembler.1 set-current : ; ( "name" -- wid link )
-: a; [compile] ; set-current ; immediate ( wid link -- )
+: a; [compile] ; set-current ; immediate     ( wid link -- )
 
 : ( [char] ) parse 2drop ; immediate ( "comment" -- discard until parenthesis )
 : \ source drop @ >in ! ; immediate  ( "comment" -- discard until end of line )
@@ -208,13 +219,13 @@ $4400 constant (sp0)   ( start of variable stack )
 : locations ( -- : list all words and locations in target dictionary )
   target.1 @
   begin
-    dup
+    ?dup
   while
     dup
-    nfa count type space dup
-    cfa >body @ u. cr
+    nfa count type space dup ( <- @warning should use target nfa! )
+    cfa tbody @ u. cr        ( <- @warning should use target cfa! )
     $3FFF and @
-  repeat drop ;
+  repeat ;
 : display ( -- : display metacompilation and target information )
   verbose 0= if exit then
   hex
@@ -226,7 +237,7 @@ $4400 constant (sp0)   ( start of variable stack )
   then
   ." HOST: "       here        . cr
   ." TARGET: "     there       . cr
-  ." HEADER: "     #target 20 dump cr ;
+  ." HEADER: "     #target $30 dump cr ;
 
 : checksum #target there crc ; ( -- u : calculate CRC of target image )
 
@@ -639,7 +650,6 @@ hide t;
 ]asm #t  r->pc    r-1 ALU asm[ constant =exit   ( return/exit instruction )
 ]asm #n  t->r d-1 r+1 ALU asm[ constant =>r     ( to r. stk. instruction )
 $20   constant =bl         ( blank, or space )
-$FFDF constant =!bl        ( inverse of =bl )
 $D    constant =cr         ( carriage return )
 $A    constant =lf         ( line feed )
 $8    constant =bs         ( back space )
@@ -647,10 +657,11 @@ $1B   constant =escape     ( escape character )
 
 $10   constant dump-width  ( number of columns for *dump* )
 $50   constant tib-length  ( size of terminal input buffer )
-$1F   constant word-length ( maximum length of a word )
+$40   constant word-length ( maximum length of a word )
 
 $40   constant c/l         ( characters per line in a block )
 $10   constant l/b         ( lines in a block )
+$F    constant l/b-1       ( lines in a block, less one )
 (rp0) constant rp0         ( start of return stack )
 (sp0) constant sp0         ( start of variable stack )
 $2BAD constant magic       ( magic number for compiler security )
@@ -666,10 +677,10 @@ $400C constant block-dirty ( -1 if loaded block buffer is modified )
 $4010 constant <key>       ( -- c : new character, blocking input )
 $4012 constant <emit>      ( c -- : emit character )
 $4014 constant <expect>    ( "accept" vector )
-\ $4016 constant <tap>     ( "tap" vector, for terminal handling )
-\ $4018 constant <echo>    ( c -- : emit character )
-\ $4020 constant <ok>      ( -- : display prompt )
-\ $4022 constant _literal  ( u -- u | : handles literals )
+( $4016 constant <tap>     ( "tap" vector, for terminal handling )
+( $4018 constant <echo>    ( c -- : emit character )
+( $4020 constant <ok>      ( -- : display prompt )
+( $4022 constant _literal  ( u -- u | : handles literals )
 $4110 constant context     ( holds current context for search order )
 $4122 constant #tib        ( Current count of terminal input buffer )
 $4124 constant tib-buf     ( ... and address )
@@ -677,9 +688,9 @@ $4126 constant tib-start   ( backup tib-buf value )
 \ $4280 == pad-area
 
 $C    constant vm-options     ( Virtual machine options register )
-$16   constant header-length  ( location of length in header )
-$18   constant header-crc     ( location of CRC in header )
-$1E   constant header-options ( location of options bits in header )
+$1A   constant header-length  ( location of length in header )
+$1C   constant header-crc     ( location of CRC in header )
+$22   constant header-options ( location of options bits in header )
 
 target.1 +order         ( Add target word dictionary to search order )
 meta -order meta +order ( Reorder so *meta* has a higher priority )
@@ -716,15 +727,17 @@ forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 0        t, \  $8: Instruction exception vector
 $8000    t, \  $A: VM Memory Size in cells
 $0000    t, \  $C: VM Options
-$4689    t, \  $E: 0x89 'F'
-$4854    t, \ $10: 'T'  'H'
-$0A0D    t, \ $12: '\r' '\n'
-$0A1A    t, \ $14: ^Z   '\n'
-0        t, \ $16: For Length of Forth image, different from VM size
-0        t, \ $18: For CRC of Forth image, not entire VM memory
-$0001    t, \ $1A: Endianess check
-#version t, \ $1C: Version information
-$0001    t, \ $1E: Header options
+$0000    t, \  $E: VM Reserved
+$0000    t, \ $10: VM Reserved
+$4689    t, \ $12: 0x89 'F'
+$4854    t, \ $14: 'T'  'H'
+$0A0D    t, \ $16: '\r' '\n'
+$0A1A    t, \ $18: ^Z   '\n'
+0        t, \ $1A: For Length of Forth image, different from VM size
+0        t, \ $1C: For CRC of Forth image, not entire VM memory
+$0001    t, \ $1E: Endianess check
+#version t, \ $20: Version information
+$0001    t, \ $22: Header options
 
 \ @bug There is something very weird going on with the initial header size
 \ It should be possible to allocate memory how I want here, up to a point,
@@ -970,13 +983,13 @@ $ffff    tvariable dpl   ( number of places after fraction )
 \ interpreter handles number parsing allows the processing of double or
 \ floating point numbers in a system that could otherwise not handle them.
 
-\ 0        tvariable <error>      ( execution vector for interpreter error )
-\ 0        tvariable <interpret>  ( execution vector for interpreter )
-\ 0        tvariable <abort>      ( execution vector for abort handler )
-\ 0        tvariable <at-xy>      ( execution vector for at-xy )
-\ 0        tvariable <page>       ( execution vector for page )
-\ 0        tvariable <number>     ( execution vector for >number )
-\ 0        tvariable hidden       ( vocabulary for hidden words )
+( 0        tvariable <error>      ( execution vector for interpreter error )
+( 0        tvariable <interpret>  ( execution vector for interpreter )
+( 0        tvariable <abort>      ( execution vector for abort handler )
+( 0        tvariable <at-xy>      ( execution vector for at-xy )
+( 0        tvariable <page>       ( execution vector for page )
+( 0        tvariable <number>     ( execution vector for >number )
+( 0        tvariable hidden       ( vocabulary for hidden words )
 
 \ 
 \ ### Basic Word Set
@@ -1306,12 +1319,11 @@ h: last get-current @address ;         ( -- pwd )
 ( h: echo <echo> @execute ; )          ( c -- )
 : emit <emit> @execute ;               ( c -- : write out a char )
 : cr =cr emit =lf emit ;               ( -- : emit a newline )
-h: colon [char] : emit ;               ( -- )
-: space =bl emit ;                     ( -- : emit a space )
+: space     1 fallthrough;             ( -- : emit a space )
 h: spaces =bl fallthrough;             ( +n -- )
 h: nchars                              ( +n c -- : emit c n times )
    swap 0 max for aft dup emit then next drop ;
-(  swap 0 max begin ?dup while over emit 1- repeat drop ; )
+h: colon-space [char] : emit space ;               ( -- )
 
 \ *depth* and *pick* require knowledge of how this Forth implements its
 \ stacks. *sp0* contains the location of the stack pointer when there is
@@ -1893,14 +1905,15 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 
 \ *.id* prints out a words name field.
 
-h: .id nfa print ;                          ( pwd -- : print out a word )
+h: .id dup nfa print space ;          ( pwd -- pwd : print out a word )
 
 \ *immediate?*, *compile-only?* and *inline?* are the tests words that
 \ all take a pointer to the *PWD* field.
 
-h: immediate? @ $4000 and fallthrough;      ( pwd -- t : immediate word? )
-h: logical 0= 0= ;                          ( n -- t )
-h: compile-only? @ 0x8000 and logical ;     ( pwd -- t : is compile only? )
+h: immediate? $4000 fallthrough;  ( pwd -- t : is word immediate? )
+h: set? swap @ and 0<> ;          ( a u -- t : it any of 'u' set? )
+h: compile-only? 0x8000 set? ;    ( pwd -- t : is word compile only? )
+
 h: inline? inline-start inline-end within ; ( pwd -- t : is word inline? )
 
 \ Now we know the structure of the dictionary we can define some words that
@@ -1976,7 +1989,7 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
   >r [char] 0 - 9 over <
   if 
     7 - 
-    =!bl and ( handle lower case, as well as upper case )
+    =bl invert and ( handle lower case, as well as upper case )
     dup $A < or 
   then dup r> u< ;
 
@@ -1997,15 +2010,14 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
   begin
     ( get next character )
     2dup 2>r drop c@ base@ digit? 
-    if   ( d char )
-       swap base@ um* drop rot base@ um* d+
-    else ( d char )
-      drop
-      2r> ( restore string )
-      nop exit
-    then
-    2r> ( restore string )
-    +string dup0= ( advance string and test for end )
+    0= if                                 ( d char )
+      drop                                ( d char -- d )
+      2r>                                 ( restore string )
+      nop exit                            ( ..exit )
+    then                                  ( d char )
+    swap base@ um* drop rot base@ um* d+  ( accumulate digit )
+    2r>                                   ( restore string )
+    +string dup0=                         ( advance string and test for end )
   until ;
 
 \ *negative?* and *base?* should be thought of as working in conjunction
@@ -2020,15 +2032,23 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
 \ was when it uses *base?*.
 \
 
-h: negative? ( b u -- t : is >number negative? )
-  string@ [char] - = if +string [-1] exit then 0x0000 ;
+\	h: ?exit if rdrop then ;
+\	
+\	h: negative? ( b u -- b u t : is >number negative? )
+\	  [char] - ' nop fallthrough;
+\	h: base-match ( b u c xt -- b u t )
+\	   2>r string@ r> = if +string r> execute [-1] exit then rdrop 0x0000 ;
+\	
+\	h: base? ( b u -- b u  ) 
+\	  [char] $ ' hex     base-match ?exit
+\	  [char] # ' decimal base-match drop ;
+
+h: negative? ( b u -- b u t : is >number negative? )
+   string@ [char] - = if +string [-1] exit then 0x0000 ;
 
 h: base? ( b u -- )
-  string@ [char] $ = ( $hex )
-  if
-    +string hex exit
-  then ( #decimal )
-  string@ [char] # = if +string decimal exit then ;
+  string@ [char] $ = if +string hex     exit then ( $hex )  
+  string@ [char] # = if +string decimal exit then ; ( #decimal )
 
 \ *>number* is a generic word, but awkward to use,  *number?* does some
 \ processing of the results to *>number* and handles other input processing
@@ -2327,7 +2347,8 @@ h: eval ( -- )
 \ from, and within that loop it reads in a line of input, evaluates it and
 \ processes any errors that occur, if any.
 
-: quit preset [ begin query ' eval catch ?error again ; ( -- )
+( : @echo source type cr ; ( -- : can be used to monitor input )
+: quit preset [ begin query ( @echo ) ' eval catch ?error again ; ( -- )
 
 \ *evaluate* is used to evaluate a string of text as if it were typed in by
 \ the programmer. It takes an address and its length, this is used in the
@@ -2624,8 +2645,9 @@ xchange _forth-wordlist root-voc
 \ word list which new definitions are added to, *definitions* and *set-current*
 \ can be used to do this.
 
+( @warning recursion without using recurse is used )
 : set-order ( widn ... wid1 n -- : set the current search order )
-  dup [-1] = if drop root-voc 1 set-order exit then
+  dup [-1] = if drop root-voc 1 set-order exit then 
   dup #vocs > if $31 -throw exit then
   context swap for aft tuck ! cell+ then next zero ;
 
@@ -2642,12 +2664,12 @@ xchange _forth-wordlist root-voc
 \ hidden or shown.
 \ 
 h: not-hidden? nfa c@ $80 and 0= ; ( pwd -- )
-h: .words space
+h: .words
     begin
-      dup
-    while dup not-hidden? if dup .id space then @address repeat drop cr ;
+      ?dup
+    while dup not-hidden? if .id then @address repeat cr ;
 : words
-  get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ;
+  get-order begin ?dup while swap dup cr u. colon-space @ .words 1- repeat ;
 
 \ *xchange* is used to place words back into the forth word list again.
 
@@ -2852,9 +2874,9 @@ h: +block blk-@ + ;           ( -- )
 
 h: c/l* ( c/l * ) 6 lshift ;            ( u -- u )
 h: c/l/ ( c/l / ) 6 rshift ;            ( u -- u )
-h: line swap block swap c/l* + c/l ;    ( k u -- a u )
+h: line c/l* swap block + c/l ;         ( k u -- a u )
 h: loadline line evaluate ;             ( k u -- )
-: load 0 l/b 1- for 2dup 2>r loadline 2r> 1+ next 2drop ; ( k -- )
+: load 0 l/b-1 for 2dup 2>r loadline 2r> 1+ next 2drop ; ( k -- )
 h: pipe [char] | emit ;                      ( -- )
 ( h: .line line -trailing $type ;       ( k u -- )
 h: .border 3 spaces c/l [char] - nchars cr ; ( -- )
@@ -3026,15 +3048,15 @@ h: normal-running hi quit ;                                ( -- : boot word )
 \ if we have found a candidate word address by calling the word *cfa* on it,
 \ it should move to the same address we provided.
 
-h: validate tuck cfa <> if drop-0 exit then nfa ; ( cfa pwd -- nfa | 0 )
+h: validate over cfa <> if drop-0 exit then nfa ; ( pwd cfa -- nfa | 0 )
 
 h: search-for-cfa ( wid cfa -- nfa : search for CFA in a word list )
   address cells >r
   begin
     dup
   while
-    address dup r@ swap dup@ address swap within ( simplify? )
-    if dup @address r@ swap validate ?dup if rdrop nip exit then then
+    address dup @address over r@ -rot within
+    if dup @address r@ validate ?dup if rdrop nip exit then then
     address @
   repeat rdrop ;
 
@@ -3049,7 +3071,7 @@ h: name ( cwf -- a | 0 )
 
 h: .name name ?dup 0= if $" ?" then print ;
 h: ?instruction ( i m e -- i 0 | e -1 )
-   >r over-and r> tuck = if nip [-1] exit then drop-0 ;
+  >r over-and r> tuck = if nip [-1] exit then drop-0 ;
 
 h: .instruction ( u -- u )
    0x8000  0x8000 ?instruction if [char] L emit exit then
@@ -3063,11 +3085,11 @@ h: decompile ( u -- : decompile instruction )
 
 h: decompiler ( previous current -- : decompile starting at address )
   >r
-   begin dup r@ u< while
-     dup 5u.r colon space
-     dup@
-     dup 5u.r space decompile cr cell+
-   repeat rdrop drop ;
+  begin dup r@ u< while
+    dup 5u.r colon-space
+    dup@
+    dup 5u.r space decompile cr cell+
+  repeat rdrop drop ;
 
 \	: disassembler ( a u -- : disassemble a range of code )
 \	 1 rshift for aft 
@@ -3096,7 +3118,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 : see ( --, <string> : decompile a word )
   token finder ?not-found
   swap      2dup= if drop here then >r
-  cr colon space dup .id space dup cr
+  cr colon-space .id dup cr
   cfa r> decompiler space [char] ; emit
   dup compile-only? if ."  compile-only " then
   dup inline?       if ."  inline "       then
@@ -3131,7 +3153,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 \
 
 : .s cr depth for aft r@ pick . then next ."  <sp" ;          ( -- )
-h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
+h: dm+ chars for aft dup@ space 5u.r cell+ then next ;   ( a u -- a )
 ( h: dc+ chars for aft dup@ space decompile cell+ then next ; ( a u -- a )
 
 : dump ( a u -- )
@@ -3140,7 +3162,7 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
   for
     aft
       cr dump-width 2dup
-      over 5u.r colon space
+      over 5u.r colon-space
       dm+ ( dump-width dc+ ) \ <-- dc+ is optional
       -rot
       2 spaces $type
@@ -3283,8 +3305,8 @@ there [t] cp t!
 [t] cold 2/ 0 t!                 ( set starting word )
 [t] normal-running [v] <boot> t!
 
-there    $B tcells t! \ Set Length First!
-checksum $C tcells t! \ Calculate image CRC
+there    $D tcells t! \ Set Length First!
+checksum $E tcells t! \ Calculate image CRC
 
 finished
 bye
@@ -3334,6 +3356,8 @@ The first six locations are used for:
 	| $A       | Virtual Machine memory in cells, if used, else $8000 assumed |
 	| $C       | Virtual Machine memory in cells, if used, else $8000 assumed |
 	| $E       | Virtual Machine Options, various uses                        |
+	| $10      | Virtual Machine Reserved For Future Use                      |
+	| $12      | Virtual Machine Reserved For Future Use                      |
 
 
 The eForth image maps things in the following way. The variable stack starts 
@@ -3348,7 +3372,8 @@ is used to specify a byte.
 ## Instruction Set Encoding
 
 For a detailed look at how the instructions are encoded the source code is the
-definitive guide, available in the file [forth.c][].
+definitive guide, available in the file [forth.c][], or consult the reference
+implementation in the Appendix.
 
 A quick overview:
 
@@ -3495,7 +3520,9 @@ with the virtual machine.
 	| $0008         |   0    | Instruction exception vector   |
 	| $000A         |   0    | VM Options bits                |
 	| $000C         |   0    | VM memory in cells             |
-	| $000E-$001C   |   0    | eForth Header                  |
+	| $000E         |   0    | VM memory Reserved             |
+	| $0010         |   0    | VM memory Reserved             |
+	| $0012-$001C   |   0    | eForth Header                  |
 	| $001E-EOD     |  0-?   | The dictionary                 |
 	| EOD-$3FFF     |  ?-15  | Compilation and Numeric Output |
 	| $4000         |   16   | Interpreter variable storage   |
@@ -3718,7 +3745,7 @@ This is a list of Error codes, not all of which are used by the application.
 				case 21: rp = t >> 1; T = n;       break;
 				case 22: T = save(h, block, n>>1, ((uint32_t)T+1)>>1); break;
 				case 23: T = fputc(t, out);        break;
-				case 24: T = fgetc(in);            break;
+				case 24: T = fgetc(in); n = -1;    break; /* n = blocking status */
 				case 25: if(t) { d = m[--sp]|((uint32_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 				case 26: if(t) { T=(int16_t)n/t; t=(int16_t)n%t; n=t; } else { pc=4; T=10; } break;
 				case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;
@@ -4584,14 +4611,11 @@ This code was found at: <ftp://ftp.taygeta.com/pub/Forth/>.
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html
 [forth.c]: forth.c
-[compiler.c]: compiler.c
-[eforth.fth]: eforth.fth
 [C compiler]: https://gcc.gnu.org/
 [make]: https://www.gnu.org/software/make/
 [Windows]: https://en.wikipedia.org/wiki/Microsoft_Windows
 [Linux]: https://en.wikipedia.org/wiki/Linux
 [C99]: https://en.wikipedia.org/wiki/C99
-[meta.fth]: meta.fth
 [DOS]: https://en.wikipedia.org/wiki/DOS
 [8086]: https://en.wikipedia.org/wiki/Intel_8086
 [LZW]: https://www.cs.duke.edu/csed/curious/compression/lzw.html
@@ -4620,5 +4644,11 @@ This code was found at: <ftp://ftp.taygeta.com/pub/Forth/>.
 [Sokoban]: https://en.wikipedia.org/wiki/Sokoban
 [Conways Games Of Life]: https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life
 [Thinking Forth]: http://thinking-forth.sourceforge.net/
+[AWK]: https://en.wikipedia.org/wiki/AWK
+[Pandoc]: http://pandoc.org/
+[PDF]: https://acrobat.adobe.com/us/en/acrobat/about-adobe-pdf.html
+[HTML]: https://en.wikipedia.org/wiki/HTML
+[meta.fth]: https://github.com/howerj/embed/blob/master/meta.fth
+[Forth]: https://en.wikipedia.org/wiki/Forth_(programming_language)
 
 <style type="text/css">body{margin:40px auto;max-width:850px;line-height:1.6;font-size:16px;color:#444;padding:0 10px}h1,h2,h3{line-height:1.2}table {width: 100%; border-collapse: collapse;}table, th, td{border: 1px solid black;}code { color: #091992; } </style>

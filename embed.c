@@ -89,7 +89,7 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 
 		if(m[6] & 1) /* trace on */
 			fprintf(m[6] & 2 ? out : stderr, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, m[2]-rp, sp-m[3]);
-		if((r = -!(sp < l && rp < l && pc < l)))
+		if((r = -!(sp < l && rp < l && pc < l))) /* critical error */
 			goto finished;
 
 		if(0x8000 & instruction) { /* literal */
@@ -122,8 +122,8 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 20: sp = t >> 1;              break;
 			case 21: rp = t >> 1; T = n;       break;
 			case 22: T = save(h, block, n>>1, ((uint32_t)T+1)>>1); break;
-			case 23: T = fputc(t, out);        break;
-			case 24: T = fgetc(in);            break;
+			case 23: T = fputc(t, out);        break; 
+			case 24: T = fgetc(in); n = -1;    break; /* n = blocking status */
 			case 25: if(t) { d = m[--sp]|((uint32_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t) { T=(int16_t)n/t; t=(int16_t)n%t; n=t; } else { pc=4; T=10; } break;
 			case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;

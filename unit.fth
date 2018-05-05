@@ -28,7 +28,8 @@
 \ It might be worth setting up another interpreter loop until the corresponding
 \ '}T' is reached so any exceptions can be caught and dealt with.
 \
-
+\ The organization of this file needs to be improved, it also contains
+\ some useful extensions to the language not present in the 'meta.fth' file.
 
 \ A few generic helper words will be built, to check if a word is defined, or
 \ not, and to conditionally execute a line.
@@ -43,6 +44,25 @@ undefined? 1-   ?\ : 1- 1 - ;
 undefined? 2*   ?\ : 2* 1 lshift ;
 undefined? rdup ?\ : rdup r> r> dup >r >r >r ;
 undefined? 1+!  ?\ : 1+! 1 swap +! ;
+
+: dnegate invert >r invert 1 um+ r> + ; ( d -- d )
+: arshift ( n u -- n : arithmetic right shift )
+  2dup rshift >r swap $8000 and
+  if $10 swap - -1 swap lshift else drop 0 then r> or ;
+: 2/  1 rshift ; ( u -- u : non compliant version of '2/' )
+: d2* over $8000 and >r 2* swap 2* swap r> if 1 or then ;
+: d2/ dup      1 and >r 2/ swap 2/ r> if $8000 or then swap ;
+: d+  >r swap >r um+ r> + r> + ; 
+\ : d+ rot + -rot um+ rot + ;
+: d- dnegate d+ ;
+: d= rot = -rot = and ;
+: 2swap >r -rot r> -rot ;
+: s>d  dup 0< ;                ( n -- d )
+: dabs s>d if dnegate then ;   ( d -- ud )
+: 2over ( n1 n2 n3 n4 -- n1 n2 n3 n4 n1 n2 )
+  >r >r 2dup r> swap >r swap r> r> -rot ;
+: 2, , , ;
+: 2constant create 2, does> 2@ ;
 
 variable test
 test +order definitions hex
@@ -70,7 +90,6 @@ variable n        ( temporary store for 'equal' )
   for aft
     r@ pick r@ n @ 1+ + pick xor if rdrop n @ 0 exit then
   then next n @ -1 ;
-
 
 \ '?stacks' is given two numbers representing stack depths, if they are
 \ not equal it prints out an error message, and calls 'abort'.
@@ -126,7 +145,7 @@ only forth definitions
 \ From: https://en.wikipedia.org/wiki/Integer_square_root
 \ This function computes the integer square root of a number.
 : sqrt ( n -- u : integer square root )
-  dup 0<  if -b throw then ( does not work for signed values )
+  s>d  if -$b throw then ( does not work for signed values )
   dup 2 < if exit then      ( return 0 or 1 )
   dup                       ( u u )
   2 rshift recurse 2*       ( u sc : 'sc' == unsigned small candidate )
@@ -148,9 +167,9 @@ only forth definitions
 
 \ http://forth.sourceforge.net/algorithm/bit-counting/index.html
 : count-bits ( number -- bits )
-  dup  $5555 and  swap  1 rshift  $5555 and  +
-  dup  $3333 and  swap  2 rshift  $3333 and  +
-  dup  $0f0f and  swap  4 rshift  $0f0f and  +
+  dup $5555 and swap 1 rshift $5555 and +
+  dup $3333 and swap 2 rshift $3333 and +
+  dup $0f0f and swap 4 rshift $0f0f and +
   $ff mod ;
 
 \ http://forth.sourceforge.net/algorithm/firstbit/index.html
@@ -194,6 +213,32 @@ only forth definitions
 
 \ : ?exit if rdrop exit then ;
 
+\ $fffe constant rp0
+\ : rdepth rp0 rp@ - chars ;
+\ \ @todo 'rpick' picks the wrong way around
+\ : rpick cells cell+ rp0 swap - @ ; 
+\ 
+\ \ @todo do not print out 'r.s' on its loop counter when 'r.s' runs
+\ : r.s ( -- print out the return stack )
+\   [char] < emit rdepth 0 u.r [char] > emit
+\   rdepth for aft r@ rpick then next 
+\   rdepth for aft u. then next ;
+\ 
+\ : +leading ( b u -- b u: skip leading space )
+\     begin over c@ dup bl = swap 9 = or while 1 /string repeat ;
+\ 
+\ \ @todo fix >number and numeric input to work with doubles...
+\ : >d ( a u -- d|ud )
+\   0 0 2swap +leading
+\   ?dup if
+\     0 >r ( sign )
+\     over c@
+\     dup  [char] - = if drop rdrop -1 >r 1 /string 
+\     else [char] + = if 1 /string then then
+\     >number nip 0<> throw
+\     r> if dnegate then ( retrieve sign )
+\   else drop then ;
+
 
 \ http://forth.sourceforge.net/word/string-plus/index.html
 \ ( addr1 len1 addr2 len2 -- addr1 len3 )
@@ -221,9 +266,15 @@ only forth definitions
 \ :  m/     dup 0< if negate >r dnegate r> then -m/mod swap drop ; ( d n - q )
 
 .( BEGIN FORTH TEST SUITE ) cr
+.( BASE to decimal ) cr
+decimal
 
+.s
+T{  1. ->  1 0 }T
+\ T{ -2. -> -2 -1 }T
+\ T{ : RDL1 6. ; RDL1 -> 6 0 }T
+\ T{ : RDL2 -4. ; RDL2 -> -4 -1 }T
 
-hex
 T{               ->  }T
 T{  1            ->  1 }T
 T{  1 2 3        ->  1 2 3 }T
@@ -256,8 +307,8 @@ T{  5  2 u>      -> -1 }T
 T{ -4 abs        ->  4 }T
 T{  0 abs        ->  0 }T
 T{  7 abs        ->  7 }T
-T{ 100 10 8  /string -> 108 8 }T
-T{ 100 10 18 /string -> 110 0 }T
+T{ $100 $10 $8  /string -> $108 $8 }T
+T{ $100 $10 $18 /string -> $110 $0 }T
 T{ 9 log2 -> 3 }T
 T{ 8 log2 -> 3 }T
 T{ 4 log2 -> 2 }T
@@ -276,6 +327,7 @@ T{ $0040 first-bit  -> $40 }T
 T{ $8040 first-bit  -> $8000 }T
 T{ $0005 first-bit  -> $0004 }T
 
+.( BINARY BASE ) cr
 binary
 
 T{ 0    gray-encode ->    0 }T
@@ -312,12 +364,8 @@ T{ 1011 gray-decode -> 1101 }T
 T{ 1001 gray-decode -> 1110 }T
 T{ 1000 gray-decode -> 1111 }T
 
-hex
-
-
-
+.( DECIMAL BASE ) cr
 decimal
-.( decimal mode ) cr
 T{ 50 25 gcd -> 25 }T
 T{ 13 23 gcd -> 1 }T
 
@@ -381,6 +429,7 @@ T{ s3 -123 <#> =string ->  0 }T
 T{ s3   99 <#> =string ->  0 }T
 
 hide s1 hide s2 hide s3
+hide <#>
 
 T{ 0 ?dup -> 0 }T
 T{ 3 ?dup -> 3 3 }T
@@ -517,28 +566,6 @@ defined? d< ?\ T{  0 -1  0  1 d< -> -1 }T
 defined? d< ?\ T{ $ffff -1  0  1 d< -> -1 }T
 defined? d< ?\ T{ $ffff -1  0  -1 d< -> 0 }T
 
-: dnegate invert >r invert 1 um+ r> + ; ( d -- d )
-\ : 2* 1 lshift  ;
-\ : 2/ 1 rshift ;
-: arshift ( n u -- n : arithmetic right shift )
-  2dup rshift >r swap $8000 and
-  if $10 swap - -1 swap lshift else drop 0 then r> or ;
-: 2/ 1 rshift ;
-: d2* over $8000 and >r 2* swap 2* swap r> if 1 or then ;
-: d2/ dup      1 and >r 2/ swap 2/ r> if $8000 or then swap ;
-: d+  >r swap >r um+ r> + r> + ; 
-\ : d+ rot + -rot um+ rot + ;
-: d- dnegate d+ ;
-: d= rot = -rot = and ;
-: 2swap >r -rot r> -rot ;
-: s>d  dup 0< ; 
-: dabs s>d if dnegate then ;
-: 2over ( n1 n2 n3 n4 -- n1 n2 n3 n4 n1 n2 )
-  >r >r 2dup r> swap >r swap r> r> -rot ;
-: 2, , , ;
-: 2constant create 2, does> 2@ ;
-\ : point dpl @ dup 0< if drop 0 then ;
-
 variable dl
 variable dh
 variable dhp
@@ -548,13 +575,12 @@ variable nnp
 variable rem
 variable quo
 
-: sm/rem ( dl dh nn | dlp dhp nnp rem quo -- rem quo , symmetric )
+: sm/rem ( dl dh nn -- rem quo, symmetric )
     nn ! dh ! dl !
-
     dl @ dh @ dabs dhp ! dlp !
     nn @ abs  nnp !
     dlp @ dhp @ nnp @ um/mod quo ! rem !
-    dh 0<
+    dh @ 0<
     if  \ negative dividend
         rem @ negate rem !
         nn @ 0>
@@ -572,36 +598,72 @@ variable quo
 : m* 2dup xor 0< >r abs swap abs um* r> if dnegate then ;
 
 : */mod ( a b c -- rem a*b/c , use double precision intermediate value )
-    >r m*
-    r> sm/rem ;
+    >r m* r> sm/rem ;
 
+$FFFF constant min-int 
+$7fff constant max-int
+$FFFF constant 1s
 
-\ forth-83 floating point.
-\  ----------------------------------
-\  copyright 1985 by robert f. illyes
+T{       0 s>d              1 sm/rem ->  0       0 }T
+T{       1 s>d              1 sm/rem ->  0       1 }T
+T{       2 s>d              1 sm/rem ->  0       2 }T
+T{      -1 s>d              1 sm/rem ->  0      -1 }T
+T{      -2 s>d              1 sm/rem ->  0      -2 }T
+T{       0 s>d             -1 sm/rem ->  0       0 }T
+T{       1 s>d             -1 sm/rem ->  0      -1 }T
+T{       2 s>d             -1 sm/rem ->  0      -2 }T
+T{      -1 s>d             -1 sm/rem ->  0       1 }T
+T{      -2 s>d             -1 sm/rem ->  0       2 }T
+T{       2 s>d              2 sm/rem ->  0       1 }T
+T{      -1 s>d             -1 sm/rem ->  0       1 }T
+T{      -2 s>d             -2 sm/rem ->  0       1 }T
+T{       7 s>d              3 sm/rem ->  1       2 }T
+T{       7 s>d             -3 sm/rem ->  1      -2 }T
+T{      -7 s>d              3 sm/rem -> -1      -2 }T
+T{      -7 s>d             -3 sm/rem -> -1       2 }T
+T{ max-int s>d              1 sm/rem ->  0 max-int }T
+T{ min-int s>d              1 sm/rem ->  0 min-int }T
+T{ max-int s>d        max-int sm/rem ->  0       1 }T
+T{ min-int s>d        min-int sm/rem ->  0       1 }T
+T{      1s 1                4 sm/rem ->  3 max-int }T
+T{       2 min-int m*       2 sm/rem ->  0 min-int }T
+T{       2 min-int m* min-int sm/rem ->  0       2 }T
+T{       2 max-int m*       2 sm/rem ->  0 max-int }T
+T{       2 max-int m* max-int sm/rem ->  0       2 }T
+T{ min-int min-int m* min-int sm/rem ->  0 min-int }T
+T{ min-int max-int m* min-int sm/rem ->  0 max-int }T
+T{ min-int max-int m* max-int sm/rem ->  0 min-int }T
+T{ max-int max-int m* max-int sm/rem ->  0 max-int }T
+
+\ ========================= FLOATING POINT CODE ===============================
+\ This floating point library has been adapted from one found in
+\ Forth Dimensions Vol.2, No.4 1986, it should be free to use so long as the
+\ following copyright is left in the code:
+\ 
+\ FORTH-83 FLOATING POINT.
+\	  ----------------------------------
+\	  COPYRIGHT 1985 BY ROBERT F. ILLYES
 \
-\        po box 2516, sta. a
-\        champaign, il 61820
-\        phone: 217/826-2734  )     
+\		PO BOX 2516, STA. A
+\		CHAMPAIGN, IL 61820
+\		PHONE: 217/826-2734 
+\
 hex
 
-
-: not invert ;
 : zero  over 0= if drop 0 then ;
-: fnegate $8000 xor zero ;
-: fabs  $7fff and ;
+: fnegate $8000 xor zero ;                  ( f -- f )
+: fabs  $7fff and ;                         ( f -- f )
 : norm  >r 2dup or
-        if begin dup 0< not
+        if begin s>d invert
            while d2* r> 1- >r
            repeat swap 0< - ?dup
            if r> else $8000 r> 1+ then
         else r> drop then ;
 
-: f2*   1+ zero ;
-: f*    rot + $4000 - >r um* r> norm ;
-: fsq   2dup f* ;
-
-: f2/   1- zero ;
+: f2*   1+ zero ;                          ( f -- f )
+: f*    rot + $4000 - >r um* r> norm ;     ( f f -- f )
+: fsq   2dup f* ;                          ( f -- f )
+: f2/   1- zero ;                          ( f -- f )
 : um/   dup >r um/mod swap r> over 2* 1+ u< swap 0< or - ;
 : f/    rot swap - $4000 + >r
         0 -rot 2dup u<
@@ -610,13 +672,11 @@ hex
         then ;
 
 : lalign $20 min for aft d2/ then next ;
-: ralign 1- ?dup if lalign then
-        1 0 d+ d2/ ;
-: fsign fabs over 0< if >r dnegate r>
-        $8000 or then ;
+: ralign 1- ?dup if lalign then 1 0 d+ d2/ ;
+: fsign fabs over 0< if >r dnegate r> $8000 or then ;
 
 : f+    rot 2dup >r >r fabs swap fabs -
-        dup if dup 0<
+        dup if s>d
                 if   rot swap  negate
                      r> r> swap >r >r
                 then 0 swap ralign
@@ -626,34 +686,40 @@ hex
         else d+ if 1+ 2/ $8000 or r> 1+
                 else r> then then ;
 
-: f-    fnegate f+ ;
-: f<    f- 0< swap drop ;
+: f@ 2@ ;              ( a -- f )
+: f! 2! ;              ( f a -- )
+: falign align ;       ( -- )
+: fdup 2dup ;          ( f -- f f )
+: fswap 2swap ;        ( f1 f2 -- f2 f1 )
+: fover 2over ;        ( f1 f2 -- f1 f2 f1 )
+: fdrop 2drop ;        ( f -- )
+: f- fnegate f+ ;      ( f1 f2 -- t )
+: f< f- 0< swap drop ; ( f1 f2 -- t )
+: f> fswap f< ;        ( f1 f2 -- t )
 
 ( floating point input/output ) 
 decimal
 
-create pl 3 , 
-            1. , ,              10. , ,
-          100. , ,            1000. , ,
-        10000. , ,          100000. , ,
-      1000000. , ,        10000000. , ,
-    100000000. , ,      1000000000. , ,
+create precision 3 , 
+            1. , ,         10. , ,
+          100. , ,       1000. , ,
+        10000. , ,     100000. , ,
+      1000000. , ,   10000000. , ,
+    100000000. , , 1000000000. , ,
 
-: tens 2* cells  [ pl cell+ ] literal + 2@ ;     
+: tens 2* cells  [ precision cell+ ] literal + 2@ ;     
 hex
-: places pl ! ;
-: shifts fabs 4010 - dup 0< not
-        abort" too big" negate ;
-: f#    base @ >r decimal >r pl @ tens drop um* r> shifts
-        ralign pl @ ?dup if for aft # then next
+: set-precision dup 0 $b within if precision ! exit then -$2B throw ; ( +n -- )
+: shifts fabs $4010 - s>d invert if -$2B throw then negate ;
+: f#    base @ >r decimal >r precision @ tens drop um* r> shifts
+        ralign precision @ ?dup if for aft # then next
         [char] . hold then #s rot sign r> base ! ;
 : f.    tuck <# f# #> type space ;
-: dfloat 4020 fsign norm ;
+: d>f $4020 fsign norm ;
 : point dpl @ ;
-: f     dfloat point tens dfloat f/ ;
-: fconstant f 2constant ;
-
-: float dup 0< dfloat ;
+: f     d>f point tens d>f f/ ;    ( d -- f )
+: fconstant f 2constant ;          ( "name" , f --, Run Time: -- f )
+: s>f   s>d d>f ;                  ( n -- f )
 : -+    drop swap 0< if negate then ;
 : fix   tuck 0 swap shifts ralign -+ ;
 : int   tuck 0 swap shifts lalign -+ ;
@@ -665,7 +731,7 @@ hex
 2001.18 fconstant x3
 1.4427  fconstant x4
 
-: exp   2dup int dup >r float f-
+: exp   2dup int dup >r s>f f-
         f2* x2 2over fsq x3 f+ f/
         2over f2/ f-     x1 f+ f/
         one f+ fsq r> + ;
@@ -673,31 +739,36 @@ hex
 : get   bl word dup 1+ c@ [char] - = tuck -
         0 0 rot ( convert drop ) count >number nip 0<> throw -+ ;
 : e     f get >r r@ abs 13301 4004 */mod
-        >r float 4004 float f/ exp r> +
+        >r s>f 4004 s>f f/ exp r> +
         r> 0< if f/ else f* then ;
 
 : e.    tuck fabs 16384 tuck -
         4004 13301 */mod >r
-        float 4004 float f/ exp f*
+        s>f 4004 s>f f/ exp f*
         2dup one f<
-        if 10 float f* r> 1- >r then
+        if 10 s>f f* r> 1- >r then
         <# r@ abs 0 #s r> sign 2drop
         [char] e hold f# #>     type space ;
 
+\ ========================= FLOATING POINT CODE ===============================
 decimal
 
-3 places
-20 float f. cr
-20 float 3 float f- f. cr
-25 float f2/ f2/ f. cr
-12 float fsq f. cr
-2 float 3 float f+ f. cr
-2 float 4 float f* f. cr
-400.0 f 2 float f/ f. cr
+3 set-precision
+20 s>f f. cr
+20 s>f 3 s>f f- f. cr
+25 s>f f2/ f2/ f. cr
+12 s>f fsq f. cr
+2 s>f 3 s>f f+ f. cr
+2 s>f 4 s>f f* f. cr
+400.0 f 2 s>f f/ f. cr
 10.3 f f. cr
-6 float f. cr
+6 s>f f. cr
 -12.34 f e. cr
-2 float 4 float exp f. cr
+2 s>f 4 s>f exp f. cr
+
+-1 s>f 2 s>f f< . cr
+2 s>f 1 s>f f< . cr
+
 save
 
 \  T{ random random <> -> -1 }T
@@ -708,4 +779,81 @@ decimal
 .( here:   ) here . cr
 statistics  = ?\ .( [ALL PASSED] ) cr     bye
 statistics <> ?\ .( [FAILED]     ) cr   abort
+
+bye
+( More Test Code )
+
+\ ## Dynamic Memory Allocation
+\ alloc.fth
+\  Dynamic Memory Allocation package
+\  this code is an adaptation of the routines by
+\  Dreas Nielson, 1990; Dynamic Memory Allocation;
+\  Forth Dimensions, V. XII, No. 3, pp. 17-27
+\ @todo This could use refactoring and better error checking, 'free' could
+\ check that its arguments are within bounds and on the free list
+
+\ pointer to beginning of free space
+variable freelist  0 , 
+
+\ : cell_size ( addr -- n ) >body cell+ @ ;       \ gets array cell size
+
+: initialize ( start_addr length -- : initialize memory pool )
+  over dup freelist !  0 swap !  swap cell+ ! ;
+
+: allocate ( u -- addr ior ) \ allocate n bytes, return pointer to block
+                             \ and result flag ( 0 for success )
+                             \ check to see if pool has been initialized 
+  freelist @ 0= abort" pool not initialized! " 
+  cell+ freelist dup
+  begin
+  while dup @ cell+ @ 2 pick u<
+    if 
+      @ @ dup   \ get new link
+    else   
+      dup @ cell+ @ 2 pick - 2 cells max dup 2 cells =
+      if 
+        drop dup @ dup @ rot !
+      else  
+        over over swap @ cell+ !   swap @ +
+      then
+      over over ! cell+ 0  \ store size, bump pointer
+    then                   \ and set exit flag
+  repeat
+  swap drop
+  dup 0= ;
+
+: free ( ptr -- ior ) \ free space at ptr, return status ( 0 for success )
+  1 cells - dup @ swap over over cell+ ! freelist dup
+  begin
+    dup 3 pick u< and
+  while
+    @ dup @
+  repeat
+
+  dup @ dup 3 pick ! ?dup
+  if 
+    dup 3 pick 5 pick + =
+    if 
+      dup cell+ @ 4 pick + 3 pick cell+ ! @ 2 pick !
+    else  
+      drop 
+    then
+  then
+
+  dup cell+ @ over + 2 pick =
+  if  
+    over cell+ @ over cell+ dup @ rot + swap ! swap @ swap !
+  else 
+    !
+  then
+  drop 0 ; \ this code always returns a success flag
+
+\ create pool  1000 allot
+\ pool 1000 dynamic-mem
+\ 5000 1000 initialize
+\ 5000 100 dump
+\ 40 allocate throw
+\ 80 allocate throw .s swap free throw .s 20 allocate throw .s cr
+ 
+
 

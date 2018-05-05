@@ -1,4 +1,4 @@
-0 <ok> ! ( Turn off *ok* prompt )
+0 <ok> ! hex ( Turn off *ok* prompt, go into hex mode )
 \ # meta.fth
 \
 \	| Project    | A Small Forth VM/Implementation   |
@@ -12,12 +12,13 @@
 \ ## A Meta-compiler, an implementation of eForth, and a tutorial on both.
 \ 
 \ ## Introduction
+\
 \ In this file a meta-compiler (or a cross compiler written in Forth) is
 \ described and implemented, and after that a working Forth interpreter
 \ is both described and implemented. This new interpreter can be used in turn
 \ to meta-compile the original program, ad infinitum. The design decisions
 \ and the philosophy behind Forth and the system will also be elucidated.
-\
+\ 
 \ ### What is Forth?
 \
 \ Forth is a stack based procedural language, which uses Reverse Polish
@@ -81,7 +82,7 @@
 \ This system, with a cross compiler and virtual machine written in C, was
 \ used to develop the present system which consists of only the virtual
 \ machine, a binary image containing a Forth interpreter, and this metacompiler
-\ with the metacompiled Forth. These changes and the discarding of the cross
+\ with the meta-compiled Forth. These changes and the discarding of the cross
 \ compiler written in C can be seen in the Git repository this project comes
 \ in (<https://github.com/howerj/embed>).
 \
@@ -305,10 +306,10 @@ a: #bye    $1B00 a; ( Exit Interpreter )
 \ without one of these operations (generally) do not affect the stacks.
 a: d+1     $0001 or a; ( increment variable stack by one )
 a: d-1     $0003 or a; ( decrement variable stack by one )
-( a: d-2     $0002 or a; ( decrement variable stack by two )
+( a: d-2   $0002 or a; ( decrement variable stack by two )
 a: r+1     $0004 or a; ( increment variable stack by one )
 a: r-1     $000C or a; ( decrement variable stack by one )
-( a: r-2     $0008 or a; ( decrement variable stack by two )
+( a: r-2   $0008 or a; ( decrement variable stack by two )
 
 \ All of these instructions execute after the ALU and stack delta operations
 \ have been performed except r->pc, which occurs before. They form part of
@@ -343,7 +344,7 @@ a: return ( -- : Compile a return into the target )
 \ the only optimization done, but is the major one. It performs tail call
 \ optimizations and merges the return instruction with the previous instruction
 \ if possible. These simple optimizations really make a lot of difference
-\ in the size of metacompiled program. It means proper tail recursive
+\ in the size of meta-compiled program. It means proper tail recursive
 \ procedures can be constructed.
 \
 \ The optimizer is wrapped up in the *exit,* word, it checks a fence variable
@@ -544,7 +545,7 @@ a: return ( -- : Compile a return into the target )
   [last] [t] t! [t] t@ tlast meta! ;
 
 \ These words implement the basic control structures needed to make
-\ applications in the metacompiled program, they are no immediate words
+\ applications in the meta-compiled program, they are no immediate words
 \ and they do not need to be, *t:* and *t;* do not change the interpreter
 \ state, once the actual metacompilation begins everything is command mode.
 
@@ -569,7 +570,7 @@ a: return ( -- : Compile a return into the target )
 : $" tdoStringLit   fetch-xt [a] call $literal ; ( "string", -- )
 
 \ The following section adds the words implementable in assembly to the
-\ metacompiler, when one of these words is used in the metacompiled program
+\ metacompiler, when one of these words is used in the meta-compiled program
 \ it will be implemented in assembly.
 
 : nop     ]asm  #t       alu asm[ ;
@@ -735,7 +736,7 @@ $0001    t, \ $1E: Header options
 \ After the header two short words are defined, visible only to the meta
 \ compiler and used by its internal machinery. The words are needed by
 \ *tvariable* and *tconstant*, and these constructs cannot be used without
-\ them. This is an example of the metacompiler and the metacompiled program
+\ them. This is an example of the metacompiler and the meta-compiled program
 \ being intermingled, which should be kept to a minimum.
 
 h: doVar   r> ;    ( -- a : push return address and exit to caller )
@@ -1486,13 +1487,12 @@ h: 2depth 2 ?ndepth ;    ( ??? -- :  check depth is at least two )
 \ alphabet after 0-9 to represent higher numbers, so *a* corresponds to *10*,
 \ there are only 36 alphanumeric characters (ignoring character case) meaning
 \ higher numbers cannot be represented. If the radix is outside of this range,
-\ then base is set back to its default, hexadecimal, and an exception is
-\ thrown.
+\ then base is set back to its default, decimal, and an exception is thrown.
 \
 
 : decimal  $A base! ;                      ( -- )
 : hex     $10 base! ;                      ( -- )
-h: radix base@ dup 2 - $22 u> if hex $28 -throw exit then ; ( -- u )
+h: radix base@ dup 2 - $22 u> if decimal $28 -throw exit then ; ( -- u )
 
 \ *digit* converts a number to its character representation, but it only
 \ deals with numbers less than 36, it does no checking for the output base,
@@ -1566,7 +1566,7 @@ h: digit 9 over < 7 and + [char] 0 + ;                 ( u -- c )
 \ if the number is negative, *str* is then defined to convert a number in any
 \ base to its signed representation, in actual use however we will only use
 \ *str* for base 10 numeric output, we usually do not want to print the sign
-\ of a number when operating with a hexadecimal base.
+\ of a number when operating with a non-decimal base.
 \
 
 : sign  0< if [char] - hold exit then ;     ( n -- )
@@ -2972,12 +2972,17 @@ h: cold ( -- : performs a cold boot  )
    $10 block b/buf 0 fill
    $12 retrieve io!
    forth sp0 cells sp!
+   ( rp0 cells rp! )
    <boot> @execute bye ;
 
-\ *hi* prints out the welcome message,
+\ *hi* prints out the welcome message, the version number, sets the numeric
+\ base to decimal, and prints out the amount of memory used and free.
+\ 
+\ *normal-running* is the boot word, that is *<boot>* is set to.
+\
 
-h: hi hex cr ." eFORTH V " ver 0 u.r cr here . .free cr postpone [ ; ( -- )
-h: normal-running hi quit ;                 ( -- : boot word )
+h: hi hex cr ." eFORTH v" ver 0 u.r cr decimal here . .free cr ;       ( -- )
+h: normal-running hi quit ;                                ( -- : boot word )
 
 \ 
 \ ## See : The Forth Disassembler
@@ -3064,12 +3069,12 @@ h: decompiler ( previous current -- : decompile starting at address )
      dup 5u.r space decompile cr cell+
    repeat rdrop drop ;
 
-\ : disassembler ( a u -- : disassemble a range of code )
-\  1 rshift for aft 
-\     dup   5u.r [char] : emit
-\     dup @ 5u.r space
-\     dup @ decompile cr cell+ 
-\  then next drop ;
+\	: disassembler ( a u -- : disassemble a range of code )
+\	 1 rshift for aft 
+\	    dup   5u.r [char] : emit
+\	    dup @ 5u.r space
+\	    dup @ decompile cr cell+ 
+\	 then next drop ;
 
 \ *see* is the Forth disassembler, it takes a word and (attempts) to
 \ turn it back into readable Forth source code. The disassembler is only

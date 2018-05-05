@@ -571,15 +571,8 @@ defined? d< ?\ T{ $ffff -1  0  -1 d< -> 0 }T
 : sm/rem ( dl dh nn -- rem quo: symmetric division )
   over >r >r          ( dl dh nn -- dl dh,      R: -- dh nn )
   dabs r@ abs um/mod  ( dl dh    -- rem quo,    R: dh nn -- dh nn )
-  r> r> swap >r       ( rem quo  -- rem quo dh, R: dh nn -- nn )
-  0< if  ( negative dividend )
-      swap negate ( <- rem ) 
-      swap
-      r> 0> if negate then ( positive divisor )
-      exit
-  then
-  ( positive dividend )
-  r> 0< if negate then ; ( negative divisor )
+  r> r@ xor +- swap r> +- swap ;
+
 
 : m* 2dup xor 0< >r abs swap abs um* r> if dnegate then ; ( n n -- d )
 

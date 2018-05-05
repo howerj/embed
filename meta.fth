@@ -1,4 +1,4 @@
-0 <ok> ! ( Turn off 'ok' prompt )
+0 <ok> ! ( Turn off *ok* prompt )
 \ # meta.fth
 \
 \	| Project    | A Small Forth VM/Implementation   |
@@ -135,7 +135,7 @@
 \ 
 \ The Virtual Machine is specifically designed to execute Forth, it is a stack
 \ machine that allows many Forth words to be encoded in one instruction but
-\ does not contain any high level Forth words, just words like '@', 'r>' and
+\ does not contain any high level Forth words, just words like *@*, 'r>' and
 \ a few basic words for I/O. A full description of the virtual machine is
 \ in the appendix.
 \ 
@@ -304,10 +304,10 @@ a: #bye    $1B00 a; ( Exit Interpreter )
 \ without one of these operations (generally) do not affect the stacks.
 a: d+1     $0001 or a; ( increment variable stack by one )
 a: d-1     $0003 or a; ( decrement variable stack by one )
-\ a: d-2     $0002 or a; ( decrement variable stack by two )
+( a: d-2     $0002 or a; ( decrement variable stack by two )
 a: r+1     $0004 or a; ( increment variable stack by one )
 a: r-1     $000C or a; ( decrement variable stack by one )
-\ a: r-2     $0008 or a; ( decrement variable stack by two )
+( a: r-2     $0008 or a; ( decrement variable stack by two )
 
 \ All of these instructions execute after the ALU and stack delta operations
 \ have been performed except r->pc, which occurs before. They form part of
@@ -345,7 +345,7 @@ a: return ( -- : Compile a return into the target )
 \ in the size of metacompiled program. It means proper tail recursive
 \ procedures can be constructed.
 \
-\ The optimizer is wrapped up in the "exit," word, it checks a fence variable
+\ The optimizer is wrapped up in the *exit,* word, it checks a fence variable
 \ first, then the previously compiled cell to see if it can replace the last
 \ compiled cell.
 \
@@ -355,16 +355,16 @@ a: return ( -- : Compile a return into the target )
 \
 \ An exit can be merged into an ALU instruction if it does not contain
 \ any return stack manipulation, or information from the return stack. This
-\ includes operations such as "r->pc", or "r+1".
+\ includes operations such as *r->pc*, or *r+1*.
 \
 \ A call then an exit can be replaced with an unconditional branch to the
 \ call.
 \
-\ If no optimization can be performed an 'exit' instruction is written into
+\ If no optimization can be performed an *exit* instruction is written into
 \ the target.
 \
-\ The optimizer can be held off manually be inserting a "nop", or a call
-\ or instruction which does nothing, before the 'exit'.
+\ The optimizer can be held off manually be inserting a *nop*, which is a call
+\ or instruction which does nothing, before the *exit*.
 \
 \ Other optimizations performed by the metacompiler, but not this optimizer,
 \ include; inlining constant values and addresses, allowing the creation of
@@ -372,6 +372,7 @@ a: return ( -- : Compile a return into the target )
 \ target, and the 'fallthrough;' word which allows for greater code sharing.
 \ Some of these optimizations have a manual element to them, such as
 \ 'fallthrough;'.
+\
 
 : previous there =cell - ;                      ( -- a )
 : lookback previous t@ ;                        ( -- u )
@@ -387,71 +388,154 @@ a: return ( -- : Compile a return into the target )
   [a] return ;
 : exit, exit-optimize update-fence ;            ( -- )
 
+\ *compile-only* and *immediate* set bits in the latest defined word for
+\ making a word a "compile only" word (one which can only be executed from
+\ within a word definition) and "immediate" respectively. None of these
+\ are relevant to the execution of the metacompiler so are not checked by it,
+\ but are needed when the target Forth is up and running.
+\ 
+\ These words affect the target dictionaries word definitions and not the
+\ meta-compilers definitions.
+\
+ 
 : compile-only tlast @ t@ $8000 or tlast @ t! ; ( -- )
 : immediate tlast @ t@ $4000 or tlast @ t! ;    ( -- )
 
-\ create a word in the metacompilers dictionary, not the targets
-: tcreate get-current >r target.1 set-current create r> set-current ;
+\ *mcreate* creates a word in the metacompilers dictionary, not the targets.
+\ For each word we create in the meta-compiled Forth we will need to create
+\ at least one word in the meta-compilers dictionary which contains an address
+\ of the Forth in the target.
+\
 
+: mcreate get-current >r target.1 set-current create r> set-current ;
+
+\ *thead* compiles a word header into the target dictionary with a name
+\ given a string. It is used by *t:*.
+\
+ 
 : thead ( b u -- : compile word header into target dictionary )
   header @ 0= if 2drop exit then
   talign
   there [last] t, tlast !
   there #target + pack$ c@ 1+ aligned tcp +! talign ;
 
+\ *lookahead* parses the next word but leaves it in the input stream, pushing
+\ a string to the parsed word. This is needed as we will be creating two
+\ words with the same name with a word defined later on called *t:*, it
+\ creates a word in the meta-compilers dictionary and compiles a word with
+\ a header into the target dictionary.
+\
+
 : lookahead ( -- b u : parse a word, but leave it in the input stream )
   >in @ >r bl parse r> >in ! ;
 
-\ The word 'h:' creates a headerless word in the target dictionary for
+\ The word *h:* creates a headerless word in the target dictionary for
 \ space saving reasons and to declutter the target search order. Ideally
 \ it would instead add the word to a different vocabulary, so it is still
 \ accessible to the programmer, but there is already very little room on the
 \ target.
+\ 
+\ *h:* does not actually affect the target dictionary, it can be used by
+\ itself and is called by *t:*. *h:* is used in conjunction with either
+\ *fallthrough;* or *t;* (*t;* calls *fallthrough;*). *h:* but does several 
+\ things:
+\
+\ 1. It sets *<literal>* to the meta-compilers version of *literal* so that
+\ when we are compiling words within a meta-compiled word definition it does
+\ the right thing, which is compile a number literal into the target
+\ dictionary.
+\ 2. It pushes a magic number *$F00D* onto the stack, this popped off and
+\ checked for by *fallthrough;*, if it is not present we have messed up a
+\ word definition some how.
+\ 3. It creates a meta-compiler word in *target.1*, this word-list consists
+\ of pointers into the target word definitions. The created word when called
+\ compiles a pointer to the word it represents into the target image.
+\ 4. It updates the *fence* variable to hold off the optimizer.
+\
+\ *fallthrough;* allows words to be created which instead of exiting just
+\ carry on into the next word, which is a space saving measure and provides
+\ a minor speed boost. Due to the way this Forth stores word headers
+\ *fallthrough;* cannot be used to fall through to a word defined with a
+\ word header.
+\
+\ *t;* does everything *fallthrough;* does except it also compiles an exit
+\ into the dictionary, which is how a normal word definition is terminated.
+\
 
 : literal [a] literal ;                      ( u -- )
 : h: ( -- : create a word with no name in the target dictionary )
  ' literal <literal> !
- $F00D tcreate there , update-fence does> @ [a] call ;
+ $F00D mcreate there , update-fence does> @ [a] call ;
 
+\ *t:* does everything *h:* does but also compiles a header for that word
+\ into the dictionary using *thead*. It does affect the target dictionary
+\ directly.
 : t: ( "name", -- : creates a word in the target dictionary )
   lookahead thead h: ;
 
-\ @warning: Only use 'fallthrough' to fallthrough to words defined with 'h:'.
+\ @warning: Only use *fallthrough* to fallthrough to words defined with *h:*.
 : fallthrough;
   ' (literal) <literal> !
   $F00D <> if source type cr 1 abort" unstructured! " then ;
-: t;
-  fallthrough; optimize if exit, else [a] return then ;
+: t; fallthrough; optimize if exit, else [a] return then ;
 
+\ *fetch-xt* is used to check that a variable contains a valid execution token,
+\ to implement certain functionality we will need to refer to functions yet
+\ to be defined in the target dictionary. We will not be able to use these
+\ features until we have defined these functions. For example we cannot use
+\ *tconstant*, which defines a constant in the target dictionary, until we
+\ have defined the target versions of *doConst*. A reference to this function
+\ will be stored in *tdoConst* once it has been defined in the target
+\ dictionary.
 : fetch-xt @ dup 0= abort" (null) " ; ( a -- xt )
 
-: tconstant ( "name", n -- , Run Time: -- n )
+\ *tconstant* as mentioned defines a constant in the target dictionary which
+\ is visible in that target dictionary (that is, it has a header and when
+\ *words* is run in the target it will be in that list).
+\ 
+\ *tconstant* behaves like *constant* does, it parses out a name and pops
+\ a variable off of the stack. As mentioned, it cannot be used until *tdoConst*
+\ has been filled with a reference to the targets *doConst*. *tconstant* makes
+\ a word in the meta-compiler which points to a word it makes in the target.
+\ This words purpose when run in the target is to push a constant onto the
+\ stack. When the constant is referenced when compiling words with the
+\ meta-compiler it does not compile references to the constant, but instead
+\ it finds out what the constant was and compiles it in as a literal - which
+\ is a small optimization.
+: tconstant ( "name", n --, Run Time: -- )
   >r
   lookahead
   thead
   there tdoConst fetch-xt [a] call r> t, >r
-  tcreate r> ,
+  mcreate r> ,
   does> @ tbody t@ [a] literal ;
 
+\ *tvariable* is like *tconstant* expect for variables. It requires *tdoVar*
+\ is set to a reference to targets version of *doVar* which pushes a pointer
+\ to the targets variable location when run in the target. It does a similar
+\ optimization as *tconstant*, it does not actually compile a call to the
+\ created variables *doVar* field but instead compiles the address as a literal
+\ in the target when the word is called by the meta-compiler.
 : tvariable ( "name", n -- , Run Time: -- a )
   >r
   lookahead
   thead
   there tdoVar fetch-xt [a] call r> t, >r
-  tcreate r> ,
+  mcreate r> ,
   does> @ tbody [a] literal ;
 
+\ *tlocation* just reserves space in the target.
 : tlocation ( "name", n -- : Reserve space in target for a memory location )
-  there swap t, tcreate , does> @ [a] literal ;
+  there swap t, mcreate , does> @ [a] literal ;
 
 : [t] ( "name", -- a : get the address of a target word )
   token target.1 search-wordlist 0= abort" [t]? "
   cfa >body @ ;
 
-\ @warning only use "[v]" on variables, not tlocations
+\ @warning only use *[v]* on variables, not *tlocations*
 : [v] [t] =cell + ; ( "name", -- a )
 
-\ xchange takes two vocabularies defined in the target by their variable
+\ *xchange* takes two vocabularies defined in the target by their variable
 \ names, "name1" and "name2", and updates "name1" so it contains the previously
 \ defined words, and makes "name2" the vocabulary which subsequent definitions
 \ are added to.
@@ -460,7 +544,7 @@ a: return ( -- : Compile a return into the target )
 
 \ These words implement the basic control structures needed to make
 \ applications in the metacompiled program, they are no immediate words
-\ and they do not need to be, 't:' and 't;' do not change the interpreter
+\ and they do not need to be, *t:* and *t;* do not change the interpreter
 \ state, once the actual metacompilation begins everything is command mode.
 
 : begin  there update-fence ;                ( -- a )
@@ -473,7 +557,7 @@ a: return ( -- : Compile a return into the target )
 : repeat [a] branch then update-fence ;      ( a -- )
 : again  [a] branch update-fence ;           ( a -- )
 : aft    drop skip begin swap ;              ( a -- a )
-: constant tcreate , does> @ literal ;       ( "name", a -- )
+: constant mcreate , does> @ literal ;       ( "name", a -- )
 : [char] char literal ;                      ( "name" )
 : postpone [t] [a] call ;                    ( "name", -- )
 : next tdoNext fetch-xt [a] call t, update-fence ; ( a -- )
@@ -538,11 +622,11 @@ a: return ( -- : Compile a return into the target )
 : over-and  ]asm  #t&n      alu asm[ ;
 : over-xor  ]asm  #t^n      alu asm[ ;
 
-\ 'for' needs the new definition of '>r' to work correctly.
+\ *for* needs the new definition of *>r* to work correctly.
 : for >r begin ;
 
 : meta: : ;
-\ : :noname h: ;
+( : :noname h: ; )
 : : t: ;
 meta: ; t; ;
 hide meta:
@@ -559,7 +643,7 @@ $A    constant =lf         ( line feed )
 $8    constant =bs         ( back space )
 $1B   constant =escape     ( escape character )
 
-$10   constant dump-width  ( number of columns for 'dump' )
+$10   constant dump-width  ( number of columns for *dump* )
 $50   constant tib-length  ( size of terminal input buffer )
 $1F   constant word-length ( maximum length of a word )
 
@@ -596,7 +680,7 @@ $18   constant header-crc     ( location of CRC in header )
 $1E   constant header-options ( location of options bits in header )
 
 target.1 +order         ( Add target word dictionary to search order )
-meta -order meta +order ( Reorder so 'meta' has a higher priority )
+meta -order meta +order ( Reorder so *meta* has a higher priority )
 forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 
 
@@ -608,7 +692,7 @@ forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 \ 
 \ ## The Image Header
 \ 
-\ The following 't,' sequence reserves space and partially populates the
+\ The following *t,* sequence reserves space and partially populates the
 \ image header with file format information, based upon the PNG specification.
 \ See <http://www.fadden.com/tech/file-formats.html> and
 \ <https://stackoverflow.com/questions/323604> for more information about
@@ -618,7 +702,7 @@ forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 \ version of the format, and to detect corruption of data, as well as
 \ having a few other nice properties - some having to do with how other
 \ systems and programs may deal with the binary (such as have a string literal
-\ 'FTH' to help identify the binary format, and the first byte being outside
+\ *FTH* to help identify the binary format, and the first byte being outside
 \ the ASCII range of characters so it is obvious that the file is meant to
 \ be treated as a binary and not as text).
 \
@@ -649,15 +733,15 @@ $0001    t, \ $1E: Header options
 \
 \ After the header two short words are defined, visible only to the meta
 \ compiler and used by its internal machinery. The words are needed by
-\ 'tvariable' and 'tconstant', and these constructs cannot be used without
+\ *tvariable* and *tconstant*, and these constructs cannot be used without
 \ them. This is an example of the metacompiler and the metacompiled program
 \ being intermingled, which should be kept to a minimum.
 
 h: doVar   r> ;    ( -- a : push return address and exit to caller )
 h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 
-\ Here the address of 'doVar' and 'doConst' in the target is stored in
-\ variables accessible by the metacompiler, so 'tconstant' and 'tvariable' can
+\ Here the address of *doVar* and *doConst* in the target is stored in
+\ variables accessible by the metacompiler, so *tconstant* and *tvariable* can
 \ compile references to them in the target.
 
 [t] doVar   tdoVar   meta!
@@ -665,26 +749,26 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 
 \ Next some space is reserved for variables which will have no name in the
 \ target and are not on the target Forths search order. We do this with
-\ 'tlocation'. These variables are needed for the internal working of the
+\ *tlocation*. These variables are needed for the internal working of the
 \ interpreter but the application programmer using the target Forth can make
 \ do without them, so they do not have names within the target.
 \
 \ A short description of the variables and their uses:
 \
-\ 'cp' is the dictionary pointer, which usually is only incremented in order
-\ to reserve space in this dictionary. Words like "," and ":" advance this
+\ *cp* is the dictionary pointer, which usually is only incremented in order
+\ to reserve space in this dictionary. Words like *,* and *:* advance this
 \ variable.
 \
-\ 'root-voc', 'editor-voc', 'assembler-voc', and '_forth-wordlist' are
-\ variables which point to word lists, they can be used with 'set-order'
-\ and pointers to them may be returned by 'get-order'. By default the only
+\ *root-voc*, *editor-voc*, *assembler-voc*, and *_forth-wordlist* are
+\ variables which point to word lists, they can be used with *set-order*
+\ and pointers to them may be returned by *get-order*. By default the only
 \ vocabularies loaded are the root vocabulary (which contains only a few
 \ vocabulary manipulation words) and the forth vocabulary are loaded (which
 \ contains most of the words in a standard Forth).
 \
-\ 'current' contains a pointer to the vocabulary which new words will be
+\ *current* contains a pointer to the vocabulary which new words will be
 \ added to when the target is up and running, this will be the forth
-\ vocabulary, or '_forth-wordlist'.
+\ vocabulary, or *_forth-wordlist*.
 \
 \ None of these variables are set to any meaningful values here and will be
 \ updated during the metacompilation process.
@@ -693,7 +777,7 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 0 tlocation cp                ( Dictionary Pointer: Set at end of file )
 0 tlocation root-voc          ( root vocabulary )
 0 tlocation editor-voc        ( editor vocabulary )
-\ 0 tlocation assembler-voc   ( assembler vocabulary )
+( 0 tlocation assembler-voc   ( assembler vocabulary )
 0 tlocation _forth-wordlist   ( set at the end near the end of the file )
 0 tlocation current           ( WID to add definitions to )
 
@@ -702,34 +786,34 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ 
 \ The first words added to the target Forths dictionary are all based on
 \ assembly instructions. The definitions may seem like nonsense, how does the
-\ definition of '+' work? It appears that the definition calls itself, which
+\ definition of *+* work? It appears that the definition calls itself, which
 \ obviously would not work. The answer is in the order new words are added
 \ into the dictionary. In Forth, a word definition is not placed in the
 \ search order until the definition of that word is complete, this allows
 \ the previous definition of a word to be use within that definition, and
-\ requires a separate word ("recurse") to implement recursion.
+\ requires a separate word (*recurse*) to implement recursion.
 \
-\ However, the words ':' and ';' are not the normal Forth define and end
-\ definitions words, they are the metacompilers and they behave differently,
-\ ':' is implemented with 't:' and ';' with 't;'.
+\ However, the words *:* and *;* are not the normal Forth define and end
+\ definitions words, they are the meta-compilers and they behave differently,
+\ *:* is implemented with *t:* and *;* with *t;*.
 \
-\ 't:' uses 'create' to make a new variable in the metacompilers
+\ *t:* uses *create* to make a new variable in the meta-compilers
 \ dictionary that points to a word definition in the target, it also creates
-\ the words header in the target ('h:' is the same, but without a header
+\ the words header in the target (*h:* is the same, but without a header
 \ being made in the target). The word is compilable into the target as soon
-\ as it is defined, yet the definition of '+' is not recursive because the
-\ metacompilers search order, "meta", is higher that the search order for
-\ the words containing the metacompiled target addresses, "target.1", so the
-\ assembly for '+' gets compiled into the definition of '+'.
+\ as it is defined, yet the definition of *+* is not recursive because the
+\ meta-compilers search order, *meta*, is higher that the search order for
+\ the words containing the meta-compiled target addresses, *target.1*, so the
+\ assembly for *+* gets compiled into the definition of *+*.
 \
 \ Manipulation of the word search order is key in understanding how the
 \ metacompiler works.
 \
 \ The following words will be part of the main search order, in
-\ 'forth-wordlist' and in the assembly search order.
+\ *forth-wordlist* and in the assembly search order.
 \
 
-\ : nop      nop      ; ( -- : do nothing )
+( : nop      nop      ; ( -- : do nothing )
 : dup      dup      ; ( n -- n n : duplicate value on top of stack )
 : over     over     ; ( n1 n2 -- n1 n2 n1 : duplicate second value on stack )
 : invert   invert   ; ( u -- u : bitwise invert of value on top of stack )
@@ -741,7 +825,7 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 : nip      nip      ; ( n1 n2 -- n2 : remove second item on stack )
 : drop     drop     ; ( n -- : remove item on stack )
 : @        @        ; ( a -- u : load value at address )
-: !        !        ; ( u a -- : store 'u' at address 'a' )
+: !        !        ; ( u a -- : store *u* at address *a* )
 : rshift   rshift   ; ( u1 u2 -- u : shift u2 by u1 places to the right )
 : lshift   lshift   ; ( u1 u2 -- u : shift u2 by u1 places to the left )
 : =        =        ; ( u1 u2 -- t : does u2 equal u1? )
@@ -750,11 +834,11 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 : and      and      ; ( u u -- u : bitwise and )
 : xor      xor      ; ( u u -- u : bitwise exclusive or )
 : or       or       ; ( u u -- u : bitwise or )
-\ : sp@    sp@      ; ( ??? -- u : get stack depth )
-\ : sp!    sp!      ; ( u -- ??? : set stack depth )
+( : sp@    sp@      ; ( ??? -- u : get stack depth )
+( : sp!    sp!      ; ( u -- ??? : set stack depth )
 : 1-       1-       ; ( u -- u : decrement top of stack )
 : 0=       0=       ; ( u -- t : if top of stack equal to zero )
-h: yield?  yield?   ; ( u -- !!! : exit VM with 'u' as return value )
+h: yield?  yield?   ; ( u -- !!! : exit VM with *u* as return value )
 h: rx?     rx?      ; ( -- c | -1 : fetch a single character, or EOF )
 h: tx!     tx!      ; ( c -- : transmit single character )
 : (save)   (save)   ; ( u1 u2 -- u : save memory from u1 to u2 inclusive )
@@ -771,8 +855,8 @@ h: tx!     tx!      ; ( c -- : transmit single character )
 \ are not available for your system. Division, the remainder operation and
 \ multiplication are provided by the virtual machine in this case, but it
 \ is interesting to see how these words are put together. The first task it
-\ to implement an add with carry, or 'um+'. Once this is available, 'um/mod'
-\ and 'um*' are coded.
+\ to implement an add with carry, or *um+*. Once this is available, *um/mod*
+\ and *um\** are coded.
 \
 \       : um+ ( w w -- w carry )
 \         over over + >r
@@ -829,7 +913,7 @@ h: tx!     tx!      ; ( c -- : transmit single character )
 \
 \ Another difference is how these words are compiled into a word definition
 \ in the target, which is due to the fact they manipulate the return stack.
-\ These words are 'inlined', which means the instruction they contain is
+\ These words are *inlined*, which means the instruction they contain is
 \ written directly into a definition being defined in the running target
 \ Forth instead of a call to a word that contains the assembly instruction,
 \ calls obviously change the return stack, so these words would either have
@@ -838,13 +922,13 @@ h: tx!     tx!      ; ( c -- : transmit single character )
 \
 \ As these words are never actually called, as they are only of use in
 \ compile mode, and then they are inlined instead of being called, we can
-\ leave off ';' which would write an exit instruction on the end of the
+\ leave off *;* which would write an exit instruction on the end of the
 \ definition.
 \
 
 there constant inline-start
-\ : rp@ rp@   fallthrough; compile-only ( -- u )
-\ : rp! rp!   fallthrough; compile-only ( u --, R: --- ??? )
+( : rp@ rp@   fallthrough; compile-only ( -- u )
+( : rp! rp!   fallthrough; compile-only ( u --, R: --- ??? )
 : exit  exit  fallthrough; compile-only ( -- )
 : >r    >r    fallthrough; compile-only ( u --, R: -- u )
 : r>    r>    fallthrough; compile-only ( -- u, R: u -- )
@@ -852,11 +936,11 @@ there constant inline-start
 : rdrop rdrop fallthrough; compile-only ( --, R: u -- )
 there constant inline-end
 
-\ Finally we can set the 'assembler-voc' to variable, we will add to the
+\ Finally we can set the *assembler-voc* to variable, we will add to the
 \ assembly vocabulary later, but all of the words defined so far belong in
 \ the assembly vocabulary. Unfortunately, the assembler when run in the
-\ target Forth interpreter will compile calls to the instructions like '+'
-\ or 'xor', only a few words will be inlined. There are potential solutions
+\ target Forth interpreter will compile calls to the instructions like *+*
+\ or *xor*, only a few words will be inlined. There are potential solutions
 \ to this problem, but they are not worth further complicating the Forth just
 \ yet.
 
@@ -870,7 +954,7 @@ $10      tvariable base  ( Current output radix )
 $0       tvariable span  ( Hold character count received by expect   )
 $8       tconstant #vocs ( number of vocabularies in allowed )
 $400     tconstant b/buf ( size of a block )
-0        tvariable blk   ( current blk loaded, set in 'cold' )
+0        tvariable blk   ( current blk loaded, set in *cold* )
 #version constant  ver   ( eForth version )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
 $ffff    tvariable dpl   ( number of places after fraction )
@@ -897,7 +981,7 @@ $ffff    tvariable dpl   ( number of places after fraction )
 \
 \ The following section of words is purely a space saving measure, or
 \ they allow for other optimizations which also save space. Examples
-\ of this include "[-1]"; any number about $7FFF requires two instructions
+\ of this include *[-1]*; any number about $7FFF requires two instructions
 \ to encode, numbers below only one, -1 is a commonly used number so this
 \ allows us to save on space.
 \
@@ -917,24 +1001,22 @@ $ffff    tvariable dpl   ( number of places after fraction )
 \	| : example-1 drop 0 literal ; | DROP LITERAL(0) EXIT     |
 \	| : example-2 drop 0 literal ; | DROP BRANCH(push-zero)   |
 \
-\ Where "example-1" being unoptimized requires three instructions, whereas
-\ "example-2" requires only two, with the two instruction overhead of
-\ "push-zero".
+\ Where *example-1* being unoptimized requires three instructions, whereas
+\ *example-2* requires only two, with the two instruction overhead of
+\ *push-zero*.
 \
 \ Optimizations like this explain some of the structure of the Forth
 \ code, it is better to exit early and heavily factorize code if space is at
 \ a premium, which it is due to the way the virtual machine works (both it
 \ being 16-bit only, and only allowing the first 16KiB to be used for program
-\ storage). Factoring code like this is similar to performing LZW compression,
-\ or similar dictionary related compression schemes.
-\ <https://www.cs.duke.edu/csed/curious/compression/lzw.html>
-\ <https://en.wikipedia.org/wiki/Lempel%E2%80%93Ziv%E2%80%93Welch>
+\ storage). Factoring code like this is similar to performing [LZW][] 
+\ compression, or similar dictionary related compression schemes.
 \
 \ Whilst factoring words into smaller, cleaner, definitions is highly
 \ encouraged for Forth code (it is often an art coming up with the right
 \ word name and associated concept it encapsulates), making words like
-\ "2drop-0" is not. It hurts readability as there is no reason or idea backing
-\ a word like "2drop-0", even if it is fairly clear what it does from its
+\ *2drop-0* is not. It hurts readability as there is no reason or idea backing
+\ a word like *2drop-0*, even if it is fairly clear what it does from its
 \ name.
 \
 h: [-1] -1 ;                 ( -- -1 : space saving measure, push -1 )
@@ -954,8 +1036,8 @@ h: base! base ! ;            ( u -- )
 \ of the basic words expected in Forth; simple stack manipulation, tests,
 \ and other one, or two line definitions that do not really require an
 \ explanation of how they work - only why they are useful. Some of the words
-\ are described by their stack comment entirely, like "2drop", other like
-\ "cell+" require a reason for such a simple word (they embody a concept or
+\ are described by their stack comment entirely, like *2drop*, other like
+\ *cell+* require a reason for such a simple word (they embody a concept or
 \ they help hide implementation details).
 
 : 2drop drop drop ;         ( n n -- )
@@ -980,7 +1062,7 @@ h: u>= u< invert ;          ( u1 u2 -- t : unsigned greater/equal )
 : 0< 0 < ;                  ( n -- t : less than zero? )
 : 2dup over over ;          ( n1 n2 -- n1 n2 n1 n2 )
 : tuck swap over ;          ( n1 n2 -- n2 n1 n2 )
-: +! tuck @ +  fallthrough; ( n a -- : increment value at 'a' by 'n' )
+: +! tuck @ +  fallthrough; ( n a -- : increment value at *a* by *n* )
 h: swap! swap ! ;           ( a u -- )
 h: zero  0 swap! ;          ( a -- : zero value at address )
 : 1+!   1  swap +! ;        ( a -- : increment value at address by 1 )
@@ -1002,38 +1084,38 @@ h: rot-drop rot drop ;                ( n1 n2 n3 -- n2 n3 )
 h: d0= or 0= ;                         ( d -- t )
 h: dnegate invert >r invert 1 um+ r> + ; ( d -- d )
 h: d+  >r swap >r um+ r> + r> + ;      ( d d -- d )
-\ : 2swap >r -rot r> -rot ; ( n1 n2 n3 n4 -- n3 n4 n1 n2 )
+( : 2swap >r -rot r> -rot ; ( n1 n2 n3 n4 -- n3 n4 n1 n2 )
 \ : d< rot   
 \     2dup
 \     > if = nip nip if 0 exit then [-1] exit then 2drop u< ; ( d -- f )
-\ : d>  2swap d< ;                      ( d -- t )
-\ : du> 2swap du< ;                     ( d -- t )
-\ : d= rot xor -rot xor xor 0= ;      ( d d -- t )
-\ : d- dnegate d+ ;                   ( d d -- d )
-\ : dabs  s>d if dnegate exit then ;  ( d -- ud )
-\ : even first-bit 0= ;               ( u -- t )
-\ : odd even 0= ;                     ( u -- t )
-\ : pow2? dup dup 1- and 0= and ;     ( u -- u|0 : is u a power of 2? )
-\ : opposite? xor 0< ;                ( n n -- f : true if opposite signs )
+( : d>  2swap d< ;                      ( d -- t )
+( : du> 2swap du< ;                     ( d -- t )
+( : d= rot xor -rot xor xor 0= ;      ( d d -- t )
+( : d- dnegate d+ ;                   ( d d -- d )
+( : dabs  s>d if dnegate exit then ;  ( d -- ud )
+( : even first-bit 0= ;               ( u -- t )
+( : odd even 0= ;                     ( u -- t )
+( : pow2? dup dup 1- and 0= and ;     ( u -- u|0 : is u a power of 2? )
+( : opposite? xor 0< ;                ( n n -- f : true if opposite signs )
 
-\ 'execute' requires an understanding of the return stack, much like
-\ 'doConst' and 'doVar', when given an execution token of a word, a pointer
-\ to its Code Field Address (or CFA), 'execute' will call that word. This
+\ *execute* requires an understanding of the return stack, much like
+\ *doConst* and *doVar*, when given an execution token of a word, a pointer
+\ to its Code Field Address (or CFA), *execute* will call that word. This
 \ allows us to call arbitrary function and change, or vector, execution at
-\ run time. All 'execute' needs to do is push the address onto the return
-\ stack and when 'execute' exits it will jump to the desired word, the callers
+\ run time. All *execute* needs to do is push the address onto the return
+\ stack and when *execute* exits it will jump to the desired word, the callers
 \ address is still on the return stack, so when the called word exit it will
-\ jump back to 'executes' caller.
+\ jump back to *executes* caller.
 \
-\ '@execute' is similar but it only executes the token if it is non-zero.
+\ *@execute* is similar but it only executes the token if it is non-zero.
 \
 
 : execute >r ;                   ( cfa -- : execute a function )
 h: @execute @ ?dup if >r then ;  ( cfa -- )
 \
 \ As the virtual machine is only addressable by cells, and not by characters,
-\ the words 'c@' and 'c!' cannot be defined as simple assembly primitives,
-\ they must be defined in terms of '@' and '!'. It is not difficult to do,
+\ the words *c@* and *c!* cannot be defined as simple assembly primitives,
+\ they must be defined in terms of *@* and *!*. It is not difficult to do,
 \ but does mean these two primitives are slower than might be first thought.
 \
 
@@ -1044,23 +1126,23 @@ h: @execute @ ?dup if >r then ;  ( cfa -- )
   lshift over @
   $FF r> 8 xor lshift and or swap! ;
 
-\ 'command?' will be used later for words that are state aware. State awareness
+\ *command?* will be used later for words that are state aware. State awareness
 \ and whether the interpreter is in command mode, or compile mode, as well as
 \ immediate words, will require a lot of explanation for the beginner until
-\ they are understood. This is best done elsewhere. 'command?' is used to
+\ they are understood. This is best done elsewhere. *command?* is used to
 \ determine if the interpreter is in command mode or not, it returns true
 \ if it is.
 \
 
 h: command? state@ 0= ;               ( -- t )
 
-\ 'here', 'align', 'cp!' and 'allow' all manipulate the dictionary pointer,
-\ which is a common operation. 'align' aligns the pointer up to the next
-\ cell boundary, and 'cp!' sets the dictionary pointer to a value whilst
+\ *here*, *align*, *cp!* and *allow* all manipulate the dictionary pointer,
+\ which is a common operation. *align* aligns the pointer up to the next
+\ cell boundary, and *cp!* sets the dictionary pointer to a value whilst
 \ enforcing that the value written is aligned.
 \
-\ 'here' retrieves the current dictionary pointer, which is needed for
-\ compiling control structures into words, so is used by words like 'if',
+\ *here* retrieves the current dictionary pointer, which is needed for
+\ compiling control structures into words, so is used by words like *if*,
 \ and has other uses as well.
 \
 
@@ -1068,7 +1150,7 @@ h: command? state@ 0= ;               ( -- t )
 : align here fallthrough;             ( -- )
 h: cp! aligned cp ! ;                 ( n -- )
 
-\ 'allot' is used in Forth to allocate memory after using 'create' to make
+\ *allot* is used in Forth to allocate memory after using *create* to make
 \ a new word. It reserves space in the dictionary, space can be deallocated
 \ by giving it a negative number, however this may trash whatever data is
 \ written there and should not generally be done.
@@ -1081,81 +1163,81 @@ h: cp! aligned cp ! ;                 ( n -- )
 
 : allot cp +! ;                        ( n -- )
 
-\ '2>r' and '2r>' are like 'rot' and '-rot', useful but they should not
+\ *2>r* and *2r>* are like *rot* and *-rot*, useful but they should not
 \ be overused. The words move two values to and from the return stack. Care
 \ should exercised when using them as the return stack can easily be corrupted,
 \ leading to unpredictable behavior, much like all the return stack words.
 \ The optimizer might also change a call to one of these words into a jump,
 \ which should be avoided as it could cause problems in edge cases, so do not
-\ use these words directly before an 'exit' or ';'.
+\ use these words directly before an *exit* or *;*.
 \
 
 h: 2>r rxchg swap >r >r ;              ( u1 u2 --, R: -- u1 u2 )
 h: 2r> r> r> swap rxchg nop ;          ( -- u1 u2, R: u1 u2 -- )
 
-\ 'doNext' needs to be defined before we can use 'for...next' loops, the
-\ metacompiler compiles a reference to this word when 'next' is encountered.
+\ *doNext* needs to be defined before we can use *for...next* loops, the
+\ metacompiler compiles a reference to this word when *next* is encountered.
 \
 \ It is worth explaining how this word works, it is a complex word that
 \ requires an understanding of how the return stack words, as well as how
-\ both 'for' and 'next work.
+\ both *for* and *next* work.
 \
-\ The 'for...next' loop accepts a value, 'u' and runs for 'u+1' times.
-\ 'for' puts the loop counter onto the return stack, meaning the
+\ The *for...next* loop accepts a value, *u* and runs for *u+1* times.
+\ *for* puts the loop counter onto the return stack, meaning the
 \ loop counter value is available to us as the first stack element, but
-\ also meaning if we want to exit from within a 'for...next' loop we must
+\ also meaning if we want to exit from within a *for...next* loop we must
 \ pop off the value from the return stack first.
 \
-\ The 'next' word compiles a 'doNext' into the dictionary, and then the
-\ address to jump back to, just after the 'for' has compiled a '>r' into the
+\ The *next* word compiles a *doNext* into the dictionary, and then the
+\ address to jump back to, just after the *for* has compiled a *>r* into the
 \ dictionary.
 \
-\ 'doNext' has two possible actions, it either takes the branch back to
-\ the place after 'for' if the loop counter non zero, being careful to
+\ *doNext* has two possible actions, it either takes the branch back to
+\ the place after *for* if the loop counter non zero, being careful to
 \ decrement the loop counter and restoring it the correct place, or
 \ it jumps over the place where the back jump address is stored in the
 \ case when the loop counter is zero, removing the loop counter from the
 \ return stack.
 \
-\ This is all possible, because when 'doNext' is called (and it must be
+\ This is all possible, because when *doNext* is called (and it must be
 \ called, not jumped to), the return address points to the cell after
-\ 'doNext' is compiled into. By manipulating the return stack correctly it
+\ *doNext* is compiled into. By manipulating the return stack correctly it
 \ can change the program flow to either jump over the next cell, or jump
 \ to the address contained in the next cell. Understanding the simpler
-\ 'doConst' and 'doVar' helps in understanding this word.
+\ *doConst* and *doVar* helps in understanding this word.
 \
 
 h: doNext 2r> ?dup if 1- >r @ >r exit then cell+ >r ;
 [t] doNext tdoNext meta!
 
-\ 'min' and 'max' are standard operations in many languages, they operate
-\ on signed values. Note how they are factored to use the 'mux' word, with
-\ 'min' falling through into it, and 'max' calling 'mux', all to save on space.
+\ *min* and *max* are standard operations in many languages, they operate
+\ on signed values. Note how they are factored to use the *mux* word, with
+\ *min* falling through into it, and *max* calling *mux*, all to save on space.
 \
 
 : min 2dup< fallthrough;              ( n n -- n )
 h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 : max 2dup > mux ;                    ( n n -- n )
 
-\ : 2over 2>r 2dup 2r> 2swap ;
-\ : 2nip 2>r 2drop 2r> nop ;
-\ : 4dup 2over 2over ;
-\ : dmin 4dup d< if 2drop exit else 2nip ;
-\ : dmax 4dup d> if 2drop exit else 2nip ;
+( : 2over 2>r 2dup 2r> 2swap ; )
+( : 2nip 2>r 2drop 2r> nop ; )
+( : 4dup 2over 2over ; )
+( : dmin 4dup d< if 2drop exit else 2nip ; )
+( : dmax 4dup d> if 2drop exit else 2nip ; )
 
-\ 'key' retrieves a single character of input, it is a vectored word so the
+\ *key* retrieves a single character of input, it is a vectored word so the
 \ method used to get data can be changed.
 \
-\ It calls 'bye' if the End of File character is returned (-1, which is
+\ It calls *bye* if the End of File character is returned (-1, which is
 \ outside the normal byte range).
 \
 
 : key <key> @execute dup [-1] = if bye then ; ( -- c )
 
-\ '/string', '+string' and 'count' are for manipulating strings, 'count'
+\ */string*, *+string* and *count* are for manipulating strings, *count*
 \ words best on counted strings which have a length prefix, but can be used
-\ to advance through an array of byte data, whereas '/string' is used with
-\ a address and length pair that is already on the stack. '/string' will not
+\ to advance through an array of byte data, whereas */string* is used with
+\ a address and length pair that is already on the stack. */string* will not
 \ advance the pair beyond the end of the string.
 \
 
@@ -1164,7 +1246,7 @@ h: +string 1 /string ;                 ( b u -- b u : )
 : count dup 1+ swap c@ ;               ( b -- b u )
 h: string@ over c@ ;                   ( b u -- b u c )
 
-\ 'crc' computes the 16-bit CCITT CRC over a segment of memory, and 'ccitt'
+\ *crc* computes the 16-bit CCITT CRC over a segment of memory, and *ccitt*
 \ is the word that does the polynomial checking. It can be also be used as a
 \ crude Pseudo Random Number Generator. CRC routines are useful for detecting
 \ memory corruption in the Forth image.
@@ -1185,38 +1267,38 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
    string@ r> swap ccitt >r +string
   repeat 2drop r> ;
 
-\ : random ( -- u : pseudo random number )
-\  seed @ 0= seed toggle seed @ 0 ccitt dup seed ! ;
+( : random ( -- u : pseudo random number )
+(  seed @ 0= seed toggle seed @ 0 ccitt dup seed ! ; )
 
-\ 'address' and '@address' are for use with the previous word point in the word
-\ header,  the top two bits for other purposes (a 'compile-only' and an
-\ 'immediate' word bit). This makes traversing the dictionary a little more
-\ tricker than normal, and affects functions like 'words' and 'search-wordlist'
+\ *address* and *@address* are for use with the previous word point in the word
+\ header,  the top two bits for other purposes (a *compile-only* and an
+\ *immediate* word bit). This makes traversing the dictionary a little more
+\ tricker than normal, and affects functions like *words* and *search-wordlist*
 \ Code can only exist in the first 16KiB of space anyway, so the top two bits
 \ cannot be used for anything else. It is debatable as to what the best way
 \ of marking words as immediate is, to use unused bits in a word header, or to
-\ place 'immediate' words in a special vocabulary which a minority of Forths
-\ do. Most Forths use the 'unused-bits-in-word-header' approach.
+\ place *immediate* words in a special vocabulary which a minority of Forths
+\ do. Most Forths use the *unused-bits-in-word-header* approach.
 \
 
 h: @address @ fallthrough;             ( a -- a )
 h: address $3FFF and ;                 ( a -- a : mask off address bits )
 
-\ 'last' gets a pointer to the most recently defined word, which is used to
-\ implement words like 'recurse', as well as in words which must traverse the
+\ *last* gets a pointer to the most recently defined word, which is used to
+\ implement words like *recurse*, as well as in words which must traverse the
 \ current word list.
 
 h: last get-current @address ;         ( -- pwd )
 
 \ A few character emitting words will now be defined, it should be obvious
-\ what these words do, 'emit' is the word that forms the basis of all these
+\ what these words do, *emit* is the word that forms the basis of all these
 \ words. By default it is set to the primitive virtual machine instruction
-\ 'tx!'. In eForth another character emitting primitive was defined alongside
-\ 'emit', which was 'echo', which allowed for more control in how the
+\ *tx!*. In eForth another character emitting primitive was defined alongside
+\ *emit*, which was *echo*, which allowed for more control in how the
 \ interpreter interacts with the programmer and other programs. It is not
 \ necessary in a hosted Forth to have such a mechanism, but it can be added
 \ back in as needed, we will see commented out relics of this features later,
-\ when we see '^h' and 'ktap'.
+\ when we see *^h* and *ktap*.
 \
 
 ( h: echo <echo> @execute ; )          ( c -- )
@@ -1229,12 +1311,12 @@ h: nchars                              ( +n c -- : emit c n times )
    swap 0 max for aft dup emit then next drop ;
 \  swap 0 max begin ?dup while over emit 1- repeat drop ;
 
-\ 'depth' and 'pick' require knowledge of how this Forth implements its
-\ stacks. 'sp0' contains the location of the stack pointer when there is
-\ nothing on the stack, and 'sp@' contains the current position. Using this
-\ it is possible to work out how many items, or how deep it is. 'pick' is
+\ *depth* and *pick* require knowledge of how this Forth implements its
+\ stacks. *sp0* contains the location of the stack pointer when there is
+\ nothing on the stack, and *sp@* contains the current position. Using this
+\ it is possible to work out how many items, or how deep it is. *pick* is
 \ used to pick an item at an arbitrary depth from the return stack. This
-\ version of 'pick' does this by indexing into the correct position and using
+\ version of *pick* does this by indexing into the correct position and using
 \ a memory load operation to do this.
 \
 \ In some systems Forth is implemented on this is not possible to do, for
@@ -1243,7 +1325,7 @@ h: nchars                              ( +n c -- : emit c n times )
 \ a hypothetical, the H2 Forth CPU (based on the J1 CPU) available at
 \ <https://github.com/howerj/forth-cpu> has stacks whose only operations are
 \ to increment and decrement them by a small number, and to get the current
-\ stack depth. On a platform like this, 'pick' can still be implemented,
+\ stack depth. On a platform like this, *pick* can still be implemented,
 \ but it is more complex and can be done like this:
 \
 \   : pick ?dup if swap >r 1- pick r> swap exit then dup ;
@@ -1253,16 +1335,16 @@ h: vrelative cells sp@ swap - ;  ( u -- u : position relative to sp )
 : depth sp0 vrelative chars 1- ; ( -- u : get current depth )
 : pick vrelative @ ;             ( vn...v0 u -- vn...v0 vu )
 
-\ 'ndrop' removes a variable number of items off the variable stack, which
+\ *ndrop* removes a variable number of items off the variable stack, which
 \ is sometimes needed for cleaning things up before exiting a word.
 \
 
 h: ndrop vrelative sp! drop ; ( 0u...nu n -- : drop n cells )
 
-\ '>char' takes a character and converts it to an underscore if it is not
+\ *>char* takes a character and converts it to an underscore if it is not
 \ printable, which is useful for printing out arbitrary sections of memory
-\ which may contain spaces, tabs, or non-printable. 'list' and 'dump' use
-\ this word. 'typist' can either use '>char' to print out a memory range
+\ which may contain spaces, tabs, or non-printable. *list* and *dump* use
+\ this word. *typist* can either use *>char* to print out a memory range
 \ or it can print out the value regardless if it is printable.
 \
 
@@ -1281,7 +1363,7 @@ h: typist                              ( b u f -- : print a string )
 h: print count type ;                    ( b -- )
 h: $type [-1] typist ;                   ( b u --  )
 
-\ 'cmove' and 'fill' are generic memory related functions for moving blocks
+\ *cmove* and *fill* are generic memory related functions for moving blocks
 \ of memory around and setting blocks of memory to a specific value
 \ respectively.
 
@@ -1291,30 +1373,27 @@ h: $type [-1] typist ;                   ( b u --  )
 \ 
 \ ### Exception Handling
 \
-\ 'catch' and 'throw' are complex and very useful words, these words are
-\ minor modifications to the ones provided in the ANS Forth standard,
-\ See <https://www.complang.tuwien.ac.at/forth/dpans-html/dpansa9.htm> and
-\ http://forth.sourceforge.net/standard/dpans/dpans9.htm
+\ *catch* and *throw* are complex and very useful words, these words are
+\ minor modifications to the ones provided in the [ANS Forth standard][].
 \
-\ The standard describes the stack effects of 'catch' and 'throw' as so:
+\ The standard describes the stack effects of *catch* and *throw* as so:
 \
 \	catch ( i*x xt -- j*x 0 | i*x n )
 \	throw ( k*x n -- k*x | i*x n )
 \
-\ Which is apparently meant to mean something, to someone. Either way, these
-\ words are how Forth implements exception handling, as many modern languages
-\ do. Their use is quite simple.
+\ Which is a difficult stack effect to digest, although their use is quite
+\ simple.
 \
-\ 'catch' accepts an execution token, which it executes, if throw is somehow
-\ invoked when the execution token is run, then 'catch' catches the exception
+\ *catch* accepts an execution token, which it executes, if throw is somehow
+\ invoked when the execution token is run, then *catch* catches the exception
 \ and returns the exception number thrown. If no exception was thrown then
-\ 'catch' returns zero.
+\ *catch* returns zero.
 \
-\ 'throw' is used to throw exceptions, it can be used anyway to indicate
+\ *throw* is used to throw exceptions, it can be used anyway to indicate
 \ something has gone wrong, or to affect the control throw of a program in
-\ a portable way (instead of messing around with the return stack using '>r'
-\ and 'r>', which is non-portable), although it is ill advised to use
-\ exceptions for control flow purposes. 'throw' only throws an exception if
+\ a portable way (instead of messing around with the return stack using *>r*
+\ and *r>*, which is non-portable), although it is ill advised to use
+\ exceptions for control flow purposes. *throw* only throws an exception if
 \ the value provided to it was non-zero, otherwise execution continues as
 \ normal.
 \
@@ -1339,21 +1418,21 @@ h: $type [-1] typist ;                   ( b u --  )
   ?dup if
     handler @ rp!
     r> handler !
-    rxchg ( 'rxchg' is equivalent to 'r> swap >r' )
+    rxchg ( *rxchg* is equivalent to 'r> swap >r' )
     sp! drop r>
   then ;
 
 \ Negative numbers take up two cells in a word definition when compiled into
 \ one, whilst positive words only take up one cell, as a space saving
-\ measure we define '-throw'. Which negates a number before calling 'throw'.
+\ measure we define *-throw*. Which negates a number before calling *throw*.
 \
 \ We then do something curious, we set the second cell in the target virtual
-\ machine image to a branch to '-throw'. This is because it is the
+\ machine image to a branch to *-throw*. This is because it is the
 \ the virtual machine sets the program counter to the second cell (at address
 \ $2, or 1 cell in) whenever an exception is raised when executing an
 \ instruction, such as a division by zero. By setting the cell to the
 \ execution token divided by two we are setting that cell to an unconditional
-\ branch to '-throw'. The virtual machine also puts a number indicating what
+\ branch to *-throw*. The virtual machine also puts a number indicating what
 \ the exception was on the top of the stack so it is possible to determine
 \ what went wrong.
 \
@@ -1361,11 +1440,11 @@ h: $type [-1] typist ;                   ( b u --  )
 h: -throw negate throw ;  ( u -- : negate and throw )
 [t] -throw 2/ 4 tcells t!
 
-\ '?ndepth' throws an exception if a certain number of items on the stack
+\ *?ndepth* throws an exception if a certain number of items on the stack
 \ do not exist. It is possible to use this primitive to implement some basic
 \ checks to make sure that words are passed the correct number of arguments.
 \
-\ By using '?ndepth' strategically it is possible to catch errors quite
+\ By using *?ndepth* strategically it is possible to catch errors quite
 \ quickly with minimal overhead in speed and size by selecting only a few
 \ words to put depth checking in.
 
@@ -1381,29 +1460,29 @@ h: 2depth 2 ?ndepth ;    ( ??? -- :  check depth is at least two )
 \ this word set will allow numbers to be printed or strings to the numeric
 \ representation of a number defined.
 \
-\ Numeric output in Forth, as well as input, is controlled by the 'base'
+\ Numeric output in Forth, as well as input, is controlled by the *base*
 \ variable, it is possible to enter numbers and print them out in binary,
 \ octal, decimal, hexadecimal or any base from base 2 to base 36 inclusive.
 \ This section only deals with numeric output. The numeric output string
 \ is formed within a temporary buffer which can either be printed out or
 \ copied to another location as needed, the method for doing this is known
-\ as Pictured Numeric Output. The words '<#', '#', '#>' and 'hold' form the
+\ as Pictured Numeric Output. The words *<#*, *#*, *#>* and *hold* form the
 \ kernel from which the other numeric output words are formed.
 \
-\ As a note, Base 36 can be used as a fairly compact textual encoding of binary
-\ data if needed, like Base-64 encoding but without the need for a special
-\ encoding and decoding scheme (See: <https://en.wikipedia.org/wiki/Base64>).
+\ As a note, [Base-36][] can be used as a fairly compact textual encoding of 
+\ binary data if needed, like [Base-64][] encoding but without the need for a 
+\ special encoding and decoding scheme.
 \
-\ First, a few utility words are formed, 'decimal' and 'hex' set the base
+\ First, a few utility words are formed, *decimal* and *hex* set the base
 \ to known values. These are needed so the programmer can get the interpret
 \ back to a known state when they have set the radix to a value (remember,
-\ '10' is valid and different value in every base!), as well as a quick
+\ *10* is valid and different value in every base!), as well as a quick
 \ shorthand.
 \
-\ The word 'radix' is then defined, which is used to check that the 'base'
+\ The word *radix* is then defined, which is used to check that the *base*
 \ variable is set to a meaningful value before it is used, between 2 and 36,
 \ inclusive as previously mentioned. Radixes or bases higher than 10 uses the
-\ alphabet after 0-9 to represent higher numbers, so 'a' corresponds to '10',
+\ alphabet after 0-9 to represent higher numbers, so *a* corresponds to *10*,
 \ there are only 36 alphanumeric characters (ignoring character case) meaning
 \ higher numbers cannot be represented. If the radix is outside of this range,
 \ then base is set back to its default, hexadecimal, and an exception is
@@ -1414,26 +1493,26 @@ h: 2depth 2 ?ndepth ;    ( ??? -- :  check depth is at least two )
 : hex     $10 base! ;                      ( -- )
 h: radix base@ dup 2 - $22 u> if hex $28 -throw exit then ; ( -- u )
 
-\ 'digit' converts a number to its character representation, but it only
+\ *digit* converts a number to its character representation, but it only
 \ deals with numbers less than 36, it does no checking for the output base,
-\ but is a straight forward conversion utility. It assumes that the ASCII
-\ character set is being used (See: <https://en.wikipedia.org/wiki/Ascii>).
+\ but is a straight forward conversion utility. It assumes that the [ASCII][]
+\ character set is being used. 
 \
-\ 'extract' is used to divide the number being converted by the current
-\ output radix, extracting a single digit which can be passed to 'digit'
+\ *extract* is used to divide the number being converted by the current
+\ output radix, extracting a single digit which can be passed to *digit*
 \ for conversion.
 \
-\ 'hold' then takes this extracted and converted digit and places in the
+\ *hold* then takes this extracted and converted digit and places in the
 \ hold space, this is where the string representing the number to be output
 \ is held. It adds characters in reverse order to the hold space, which is
-\ due to how 'extract' works, 'extract' gets the lowest digit first.
+\ due to how *extract* works, *extract* gets the lowest digit first.
 \
 \ Lets look at how conversion would work for the number 1234 in base 10. We
 \ start of the number to convert and extract the first digit:
 \
 \         1234 / 10 = 123, remainder 4 (hold ASCII 4)
 \
-\ We then add '4' to the hold space, which is the last digit that needs to
+\ We then add *4* to the hold space, which is the last digit that needs to
 \ be output, hence storage in reverse order. We then continue on with the
 \ output conversion:
 \
@@ -1443,13 +1522,13 @@ h: radix base@ dup 2 - $22 u> if hex $28 -throw exit then ; ( -- u )
 \         0 <- conversion complete!
 \
 \ If we did not store the string in reverse order, we would end up printing
-\ '4321' which is the exact opposite of what we want!
+\ *4321*.
 \
-\ The words '<#', '#', and '#>' call these words to do the work of numeric
+\ The words *<#*, *#*, and *#>* call these words to do the work of numeric
 \ conversion, but before this is described,  Notice the checking that is done
-\ within each of these words, 'hold' makes sure that too many characters are
-\ not stored in the hold space. '#' checks the depth of the stack before it
-\ is called and the base variable is only accessed with the 'radix' word.
+\ within each of these words, *hold* makes sure that too many characters are
+\ not stored in the hold space. *#* checks the depth of the stack before it
+\ is called and the base variable is only accessed with the *radix* word.
 \ This combination of checking catches most errors that occur and makes sure
 \ they do not propagate.
 
@@ -1462,19 +1541,19 @@ h: digit 9 over < 7 and + [char] 0 + ;                 ( u -- c )
 \ are quite simple. They allow the format of numeric output to be controlled
 \ quite easily by the programmer. A description of these words:
 \
-\ * '<#' resets the hold space and initializes the conversion.
-\ * '#'  extracts, converts and holds a single character.
-\ * '#s' repeatedly calls '#' until the number has been fully converted.
-\ * '#>' finalizes the conversion and pushes a string.
+\ - *<#* resets the hold space and initializes the conversion.
+\ - *#*  extracts, converts and holds a single character.
+\ - *#s* repeatedly calls *#* until the number has been fully converted.
+\ - *#>* finalizes the conversion and pushes a string.
 \
 \ Anywhere within this conversion arbitrary characters can be added to
-\ the hold space with 'hold'. These words should always be used together,
-\ whenever you see '<#', you should see an enclosing '#>'. Once the '#>' has
+\ the hold space with *hold*. These words should always be used together,
+\ whenever you see *<#*, you should see an enclosing *#>*. Once the *#>* has
 \ been called the number provided has been fully converted to a number string
 \ in the current output base, and can be printed or copied.
 \
 \ These words will go on to form more convenient words for numeric output,
-\ like '.', or 'u.r'.
+\ like *.*, or *u.r*.
 \
 
 : #> 2drop hld @ pad over- ;              ( w -- b u )
@@ -1482,10 +1561,10 @@ h: digit 9 over < 7 and + [char] 0 + ;                 ( u -- c )
 : #s begin # 2dup d0= until ;             ( d -- 0 )
 : <# pad hld ! ;                          ( -- )
 
-\ 'sign' is used with the Pictured Numeric Output words to add a sign character
-\ if the number is negative, 'str' is then defined to convert a number in any
+\ *sign* is used with the Pictured Numeric Output words to add a sign character
+\ if the number is negative, *str* is then defined to convert a number in any
 \ base to its signed representation, in actual use however we will only use
-\ 'str' for base 10 numeric output, we usually do not want to print the sign
+\ *str* for base 10 numeric output, we usually do not want to print the sign
 \ of a number when operating with a hexadecimal base.
 \
 
@@ -1493,40 +1572,40 @@ h: digit 9 over < 7 and + [char] 0 + ;                 ( u -- c )
 h: str ( n -- b u : convert a signed integer to a numeric string )
   dup>r abs 0 <# #s r> sign #> ;
 
-\ '.r', 'u.r' are used as the basis of further words with a more controlled
+\ *.r*, *u.r* are used as the basis of further words with a more controlled
 \ output format. They implement right justification of a number (signed for
-\ '.r', unsigned for 'u.r') by the number of spaces specified by the first
+\ *.r*, unsigned for *u.r*) by the number of spaces specified by the first
 \ argument provided to them. This is useful for printing out columns of
 \ data that is for human consumption.
 \
-\ 'u.' prints out an unsigned number with a trailing space, and '.' prints out
+\ *u.* prints out an unsigned number with a trailing space, and *.* prints out
 \ a signed number when operating in decimal, and an unsigned one otherwise,
 \ again with a trailing space. Neither adds leading spaces.
 \
 
-h: (u.) 0 <# #s #> ;             ( u -- b u : turn 'u' into number string )
+h: (u.) 0 <# #s #> ;             ( u -- b u : turn *u* into number string )
 : u.r >r (u.) r> fallthrough;    ( u +n -- : print u right justified by +n)
 h: adjust over- spaces type ;    ( b n n -- )
 h: 5u.r 5 u.r ;                  ( u -- )
-\ :  .r >r str r> adjust ;       ( n n -- : print n, right justified by +n )
+( :  .r >r str r> adjust ;       ( n n -- : print n, right justified by +n )
 : u.  (u.) space type ;          ( u -- : print unsigned number )
 :  .  radix $A xor if u. exit then str space type ; ( n -- print number )
-\ : >base swap base @ >r base ! execute r> base ! ;
-\ : d. $a  '  . >base ;
-\ : h. $10 ' u. >base ;
+( : >base swap base @ >r base ! execute r> base ! ; )
+( : d. $a  '  . >base ; )
+( : h. $10 ' u. >base ; )
 
-\ 'holds' and '.base' can be defined as so:
+\ *holds* and *.base* can be defined as so:
 \
 \        : holds begin dup while 1- 2dup + c@ hold repeat 2drop ;
 \        : .base base@ dup decimal base! ; ( -- )
 \
-\ If needed. '?' is another common utility for printing out the contents at an
+\ If needed. *?* is another common utility for printing out the contents at an
 \ address:
 \
 \        : ? @ . ; ( a -- : display the contents in a memory cell )
 \
 
-\ Words that use the numeric output words can be defined, '.free' can now
+\ Words that use the numeric output words can be defined, *.free* can now
 \ be defined which prints out the amount of space left in memory for programs
 \
 
@@ -1536,11 +1615,11 @@ h: .free unused u. ;             ( -- : print unused program space )
 \ 
 \ ### String Handling and Input
 \ 
-\ 'pack$' and '=string' are more advanced string handling words for copying
-\ strings to a new location, turning it into a counted string, which 'pack$'
-\ does, or for comparing two string, which '=string' does.
+\ *pack$* and *=string* are more advanced string handling words for copying
+\ strings to a new location, turning it into a counted string, which *pack$*
+\ does, or for comparing two string, which *=string* does.
 \
-\ 'expect', 'query' and 'accept' are used for fetching a line of input which
+\ *expect*, *query* and *accept* are used for fetching a line of input which
 \ can be further processed. Input in Forth is fundamentally line based, a
 \ line is fetch from the terminal, which is then parsed into tokens delimited
 \ by whitespace called words, which are then processed by the Forth
@@ -1557,20 +1636,19 @@ h: .free unused u. ;             ( -- : print unused program space )
 \ to such platforms. Either way, a line of text needs to be fetched from an
 \ input stream.
 \
-\ First to describe 'pack$' and '=string'.
+\ First to describe *pack$* and *=string*.
 \
-\ 'pack$' takes a string, its length, and a place which is assumed to be
+\ *pack$* takes a string, its length, and a place which is assumed to be
 \ large enough to store the string in as a final argument. Creates a counted
 \ string and places it in the target location, this word is especially useful
 \ for the creation of word headers which will be needed later.
 \
-\ '=string' checks for string equality, as it has the length of both strings
+\ *=string* checks for string equality, as it has the length of both strings
 \ it checks their lengths first before proceeding to check all of the string,
 \ this saves a little time. Only a yes/no to the comparison is returned as
-\ a boolean answer, unlike 'strcmp' in C
-\ (See: <http://www.cplusplus.com/reference/cstring/strcmp/>)
+\ a boolean answer, unlike [strcmp][] in C.
 \ 
-\ 'down' aligns a cell down to the next aligned address.
+\ *down* aligns a cell down to the next aligned address.
 \
 
 h: down cell negate and ; ( a -- a : align down )
@@ -1590,14 +1668,14 @@ h: down cell negate and ; ( a -- a : align down )
     then
   next 2drop [-1] ;
 
-\ '^h' and 'ktap' are commented out as they are not needed, they deal with
-\ line based input, some sections of 'tap' and 'accept' are commented out
-\ as well as they are not needed on a hosted system, thus the job of 'accept'
+\ *^h* and *ktap* are commented out as they are not needed, they deal with
+\ line based input, some sections of *tap* and *accept* are commented out
+\ as well as they are not needed on a hosted system, thus the job of *accept*
 \ is simplified. It is still worth talking about what these words do however,
 \ in case they need to be added back in.
 \
-\ 'accept' is the word that does all of the work and calls '^h' and 'ktap' when
-\ needed, 'query' and 'expect' a wrappers around it. Image we are talking to
+\ *accept* is the word that does all of the work and calls *^h* and *ktap* when
+\ needed, *query* and *expect* a wrappers around it. Image we are talking to
 \ the Forth interpreter over a serial line, if the programmer sends a character
 \ to the Forth interpreter it is up to the Forth interpreter how to respond,
 \ the remote interpreter needs to echo back characters to the programmer
@@ -1608,13 +1686,13 @@ h: down cell negate and ; ( a -- a : align down )
 \ input line. It also needs to make sure it does not overflow the input buffer,
 \ or when deleting characters go beyond the beginning of the input buffer.
 \
-\ 'accept' takes an address of an input buffer and a length of it, the words
-\ '^h', 'tap' and 'ktap' are free to move around inside that buffer and do
+\ *accept* takes an address of an input buffer and a length of it, the words
+\ *^h*, *tap* and *ktap* are free to move around inside that buffer and do
 \ so based on the latest character received.
 \
-\ '^h' takes a pointer to the bottom of the input buffer, one to the end of
+\ *^h* takes a pointer to the bottom of the input buffer, one to the end of
 \ the input buffer and the current position. It decrements the current position
-\ within the buffer and uses 'echo' - not 'emit' - to output a backspace to
+\ within the buffer and uses *echo* - not *emit* - to output a backspace to
 \ move the terminal cursor back one place, a space to erase the character and
 \ a backspace to move the cursor back one space again. It only does this if it
 \ will not go below the bottom of the input buffer.
@@ -1625,8 +1703,8 @@ h: down cell negate and ; ( a -- a : align down )
 \           =bs dup echo =bl echo echo
 \         then r> + ;
 \
-\ 'ktap' processes the current character received, and has the same buffer
-\ information that '^h' does, in fact it passes that information to '^h' to
+\ *ktap* processes the current character received, and has the same buffer
+\ information that *^h* does, in fact it passes that information to *^h* to
 \ process if the character is a backspace. It also handles the case where a
 \ line feed, indicating a new line, has been entered. It returns a modified
 \ buffer.
@@ -1638,19 +1716,19 @@ h: down cell negate and ; ( a -- a : align down )
 \           exit
 \         then drop nip dup ;
 \
-\ 'tap' is used to store a character in the current line, 'ktap' can also
-\ call this word, 'tap' uses echo to echo back the character - it is currently
+\ *tap* is used to store a character in the current line, *ktap* can also
+\ call this word, *tap* uses echo to echo back the character - it is currently
 \ commented out as this is handled by the terminal emulator but would be
 \ needed for serial communication.
 
 h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 
-\ 'accept' takes an buffer input buffer and returns a pointer and line length
+\ *accept* takes an buffer input buffer and returns a pointer and line length
 \ once a line of text has been fully entered. A line is considered fully
 \ entered when either a new line is received or the maximum number of input
-\ characters in a line is received, 'accept' checks for both of these
-\ conditions. It calls 'tap to do the work. In an alternate version it calls
-\ the execution vector '<tap>', which is usually set to 'ktap', which is shown
+\ characters in a line is received, *accept* checks for both of these
+\ conditions. It calls *tap* to do the work. In an alternate version it calls
+\ the execution vector *<tap>*, which is usually set to *ktap*, which is shown
 \ as a commented out line.
 \
 
@@ -1660,23 +1738,23 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
     2dupxor
   while
     key dup =lf xor if tap else drop nip dup then
-    \ The alternative 'accept' code replaces the line above:
+    \ The alternative *accept* code replaces the line above:
     \
     \   key  dup =bl - 95 u< if tap else <tap> @execute then
     \
   repeat drop over- ;
 
-\ '<expect>' is set to 'accept' later on in this file, but can be changed if
-\ needed. 'expect' and 'query' both call 'accept' this way. 'query' uses the
+\ *<expect>* is set to *accept* later on in this file, but can be changed if
+\ needed. *expect* and *query* both call *accept* this way. *query* uses the
 \ systems input buffer and stores the result in a know location so that the
-\ rest of the interpreter can use the results. 'expect' gets a buffer from the
-\ use and stores the length of the resulting string in 'span'.
+\ rest of the interpreter can use the results. *expect* gets a buffer from the
+\ use and stores the length of the resulting string in *span*.
 
 : expect <expect> @execute span ! drop ;                     ( b u -- )
 : query tib tib-length <expect> @execute #tib ! drop-0 in! ; ( -- )
 
-\ 'query' stores its results in the Terminal Input Buffer (TIB), which is way
-\ the word 'tib' gets its name. The TIB is a simple data structure which
+\ *query* stores its results in the Terminal Input Buffer (TIB), which is way
+\ the word *tib* gets its name. The TIB is a simple data structure which
 \ contains a pointer to the buffer itself and the length of the most current
 \ input line.
 \ 
@@ -1696,131 +1774,128 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ we search through all of the word lists in the current search order following
 \ the linked lists until they terminate.
 \
-\ This Forth, like Jones Forth (another literate Forth designed to teach how
-\ a Forth interpreter works, see
-\ <https://rwmj.wordpress.com/2010/08/07/jonesforth-git-repository/>), lays
-\ out its dictionary in a way that is simpler than having a separate storage
-\ area for word names, but complicates other parts of the system. Most other
-\ Forths have a separate space for string storage where names of words and
-\ pointers to their code field are kept. This is how things were done in the
-\ original eForth model.
+\ This Forth, like [Jones Forth][] (another literate Forth designed to teach 
+\ how a Forth interpreter works), lays out its dictionary in a way that is 
+\ simpler than having a separate storage area for word names, but complicates 
+\ other parts of the system. Most other Forths have a separate space for 
+\ string storage where names of words and pointers to their code field are 
+\ kept. This is how things were done in the original eForth model.
 \
 \ A word list looks like this..
 \
-\         ^
-\         |
-\      .-----.-----.-----.----.----
-\      | PWD | NFA | CFA | ...         <--- Word definition
-\      .-----.-----.-----.----.----
-\         ^        ^                ^
-\         |        |--Word Body...  |
-\         |
-\      .-----.-----.-----.----.----
-\      | PWD | NFA | CFA | ...
-\      .-----.-----.-----.----.----
-\      ^                 ^
-\      |---Word Header---|
+\	   ^
+\	   |
+\	.-----.-----.-----.----.----
+\	| PWD | NFA | CFA | ...         <--- Word definition
+\	.-----.-----.-----.----.----
+\	   ^        ^                ^
+\	   |        |--Word Body...  |
+\	   |
+\	.-----.-----.-----.----.----
+\	| PWD | NFA | CFA | ...
+\	.-----.-----.-----.----.----
+\	^                 ^
+\	|---Word Header---|
 \
 \
 \
-\ We 'PWD' is the Previous Word pointer, 'NFA' is the Name Field Address, and
-\ the 'CFA' is the first code word in the Forth word. In other Forths this
-\ is a special field, but as this is a Subroutine Threaded forth
-\ (see https://en.wikipedia.org/wiki/Threaded_code), designed to execute
-\ on a Forth machine, this field does not need to do anything. It is simply
-\ the first bit of code that gets executed in a Forth definition, and things
-\ point to the 'CFA'. The rest of the word definition follows and includes the
-\ 'CFA'. The 'NFA' is a variable length field containing the name of the
-\ Forth word, it is stored as a counted string, which is what 'pack$' was
-\ defined for.
+\ *PWD* is the Previous Word pointer, *NFA* is the Name Field Address, and
+\ the *CFA* is the first code word in the Forth word. In other Forths this
+\ is a special field, but as this is a [Subroutine Threaded][] forth, 
+\ designed to execute on a Forth machine, this field does not need to do 
+\ anything. It is simply the first bit of code that gets executed in a Forth 
+\ definition, and things point to the *CFA*. The rest of the word definition 
+\ follows and includes the *CFA*. The *NFA* is a variable length field 
+\ containing the name of the Forth word, it is stored as a counted string, 
+\ which is what *pack$* was defined for.
 \
-\ The 'PWD' field is not just a simple pointer, as already mentioned, it is
+\ The *PWD* field is not just a simple pointer, as already mentioned, it is
 \ also used to store information about the word, the top two most bits store
 \ whether a word is compile only (the top most bit) meaning the word should
 \ only be used within a word definition, being compiled into it, and whether
 \ or not the word is an immediate word or not (the second highest bit in the
-\ 'PWD' field). Another property of a word is whether it is an inline word
+\ *PWD* field). Another property of a word is whether it is an inline word
 \ or not, which is a property of the location of where the word is defined,
-\ and applies to words like 'r@' and 'r>', this is done by checking to see
+\ and applies to words like *r@* and *r>*, this is done by checking to see
 \ if the word is between two sentinel values.
 \
 \ Immediate and compiling words are a very important concept in Forth, and it
 \ is possible for the programmer to define their own immediate words. The
 \ Forth Read-Evaluate loop is quite simple, as this diagram shows:
 \
-\         .--------------------------.        .----------------------------.
-\      .->| Get Next Word From Input |<-------| Error: Throw an Exception! |
-\      |  .--------------------------.        .----------------------------.
-\      |    |                                           ^
-\      |   \|/                                          | (No)
-\      |    .                                           |
-\      ^  .-----------------.  (Not Found)            .--------------------.
-\      |  | Search For Word |------------------------>| Is token a number? |
-\      |  .-----------------.                         .--------------------.
-\      |    |                                           |
-\      ^   \|/ (Found)                                 \|/ (Yes)
-\      |    .                                           .
-\      |  .-------------------------.            .-------------------------.
-\      |  | Are we in command mode? |            | Are we in command mode? |
-\      ^  .-------------------------.            .-------------------------.
-\      |    |                   |                  |                     |
-\      |   \|/ (Yes)            | (No)            \|/ (Yes)              | (No)
-\      |    .                   |                  .                     |
-\      |  .--------------.      |             .------------------------. |
-\      .--| Execute Word |      |             | Push Number onto Stack | |
-\      |  .--------------.      |             .------------------------. |
-\      |         ^             \|/                 |                     |
-\      ^         |              .                  |                    \|/
-\      |         | (Yes)   .--------------------.  |                     .
-\      |         ----------| Is word immediate? |  | .------------------------.
-\      |                   .--------------------.  | | Compile number literal |
-\      ^                        |                  | | into next available    |
-\      |                       \|/ (No)            | | location in the        |
-\      |                        .                  | | dictionary             |
-\      |  .--------------------------------.       | .------------------------.
-\      |  |    Compile Pointer to word     |       |                     |
-\      .--| in next available location in  |       |                     |
-\      |  |         the dictionary         |      \|/                   \|/
-\      |  .--------------------------------.       .                     .
-\      |                                           |                     |
-\      .----<-------<-------<-------<-------<------.------<-------<------.
+\	   .--------------------------.        .----------------------------.
+\	.->| Get Next Word From Input |<-------| Error: Throw an Exception! |
+\	|  .--------------------------.        .----------------------------.
+\	|    |                                           ^
+\	|   \|/                                          | (No)
+\	|    .                                           |
+\	^  .-----------------.  (Not Found)            .--------------------.
+\	|  | Search For Word |------------------------>| Is token a number? |
+\	|  .-----------------.                         .--------------------.
+\	|    |                                           |
+\	^   \|/ (Found)                                 \|/ (Yes)
+\	|    .                                           .
+\	|  .-------------------------.            .-------------------------.
+\	|  | Are we in command mode? |            | Are we in command mode? |
+\	^  .-------------------------.            .-------------------------.
+\	|    |                   |                  |                     |
+\	|   \|/ (Yes)            | (No)            \|/ (Yes)              | (No)
+\	|    .                   |                  .                     |
+\	|  .--------------.      |             .------------------------. |
+\	.--| Execute Word |      |             | Push Number onto Stack | |
+\	|  .--------------.      |             .------------------------. |
+\	|         ^             \|/                 |                     |
+\	^         |              .                  |                    \|/
+\	|         | (Yes)   .--------------------.  |                     .
+\	|         ----------| Is word immediate? |  | .------------------------.
+\	|                   .--------------------.  | | Compile number literal |
+\	^                        |                  | | into next available    |
+\	|                       \|/ (No)            | | location in the        |
+\	|                        .                  | | dictionary             |
+\	|  .--------------------------------.       | .------------------------.
+\	|  |    Compile Pointer to word     |       |                     |
+\	.--| in next available location in  |       |                     |
+\	|  |         the dictionary         |      \|/                   \|/
+\	|  .--------------------------------.       .                     .
+\	|                                           |                     |
+\	.----<-------<-------<-------<-------<------.------<-------<------.
 \
 \ No matter how complex the Forth system may appear, this loop forms the heart
 \ of it: parse a word and execute it or compile it, with numbers handled as
 \ a special case. Immediate words are always executed, whereas compiling words
 \ may be executed depending on whether we are in command mode, or in compile
-\ mode, which is stored in the 'state' variable. There are several words that
-\ affect the interpreter state, such as ':', ';', '[', and ']'.
+\ mode, which is stored in the *state* variable. There are several words that
+\ affect the interpreter state, such as *:*, *;*, *[*, and *]*.
 \
 \ We should now talk about some examples of immediate and compiling words,
-\ ':' is a compiling word that when executed reads in a single token and
+\ *:* is a compiling word that when executed reads in a single token and
 \ creates a new word header with this token. It does not add the new word
 \ to the definition just yet. It also does one other things, it switches the
 \ interpreter to compile mode, words that are not immediate are instead
 \ compiled into the dictionary, as are numbers. This allows us to define
 \ new words. However, we need immediate words so that we can break out of
 \ compile mode, and enter back into command word so we can actually execute
-\ something. ';' is an example of an immediate word, it is executed instead
+\ something. *;* is an example of an immediate word, it is executed instead
 \ of compiled into the dictionary, it switches the interpreter back into
 \ command mode, as well as finishing off the word definition by compiling
 \ an exit instructions into the dictionary, and adding the word into the
 \ current definitions word list.
 \
-\ The control structure words, like 'if', 'for', and 'begin', are just words
+\ The control structure words, like *if*, *for*, and *begin*, are just words
 \ as well, they are immediate words and will be explained later.
 \
-\ 'nfa' and 'cfa' both take a pointer to the 'PWD' field and adjust it to
+\ *nfa* and *cfa* both take a pointer to the *PWD* field and adjust it to
 \ point to different sections of the word.
 
 : nfa address cell+ ; ( pwd -- nfa : move to name field address)
 : cfa nfa dup c@ + cell+ down ; ( pwd -- cfa )
 
-\ '.id' prints out a words name field.
+\ *.id* prints out a words name field.
 
 h: .id nfa print ;                          ( pwd -- : print out a word )
 
-\ 'immediate?', 'compile-only?' and 'inline?' are the tests words that
-\ all take a pointer to the 'PWD' field.
+\ *immediate?*, *compile-only?* and *inline?* are the tests words that
+\ all take a pointer to the *PWD* field.
 
 h: immediate? @ $4000 and fallthrough;      ( pwd -- t : immediate word? )
 h: logical 0= 0= ;                          ( n -- t )
@@ -1828,22 +1903,22 @@ h: compile-only? @ 0x8000 and logical ;     ( pwd -- t : is compile only? )
 h: inline? inline-start inline-end within ; ( pwd -- t : is word inline? )
 
 \ Now we know the structure of the dictionary we can define some words that
-\ work with it. We will define 'find' and 'search-wordlist', which will
-\ be derived from 'finder' and 'searcher'. 'searcher' will attempt to
-\ find a word in a specific word list, and 'find' will attempt to find a
+\ work with it. We will define *find* and *search-wordlist*, which will
+\ be derived from *finder* and *searcher*. *searcher* will attempt to
+\ find a word in a specific word list, and *find* will attempt to find a
 \ word in all the word lists in the current order.
 \
-\ 'searcher' and 'finder' both return as much information about the words
-\ they find as possible, if they find them. 'searcher' returns
-\ the 'PWD' of the word that points to the found word, the 'PWD' of the
+\ *searcher* and *finder* both return as much information about the words
+\ they find as possible, if they find them. *searcher* returns
+\ the *PWD* of the word that points to the found word, the *PWD* of the
 \ found word and a number indicating whether the found word is immediate
 \ (1) or a compiling word (-1). It returns zero, the original counted string,
 \ and another zero if the word could not be found in its first argument, a word
 \ list (wid). The word is provided as a counted string in the second argument
-\ to 'searcher'.
+\ to *searcher*.
 \
-\ 'finder' wraps up 'searcher' and applies it to all the words in the
-\ search order. It returns the same values as 'searcher' if a word is found,
+\ *finder* wraps up *searcher* and applies it to all the words in the
+\ search order. It returns the same values as *searcher* if a word is found,
 \ returns the original counted word string address if it was not found, as
 \ well as zeros.
 \
@@ -1875,11 +1950,11 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
     cell+
   repeat drop-0 r> 0x0000 ;
 
-\ 'search-wordlist' and 'find' are simple applications of 'searcher' and
-\ 'finder', there is a difference between this Forths version of 'find' and
-\ the standard one, this version of 'find' does not return an execution token
+\ *search-wordlist* and *find* are simple applications of *searcher* and
+\ *finder*, there is a difference between this Forths version of *find* and
+\ the standard one, this version of *find* does not return an execution token
 \ but a pointer in the word header which can be turned into an execution token
-\ with 'cfa'.
+\ with *cfa*.
 
 : search-wordlist searcher rot-drop ; ( a wid -- pwd 1 | pwd -1 | a 0 )
 : find ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
@@ -1891,7 +1966,7 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
 \ Numeric input is handled next, converting a string into a number, which is
 \ similar to numeric output. 
 \ 
-\ 'digit?' takes a character and the current base and returns a character
+\ *digit?* takes a character and the current base and returns a character
 \ converted to the number it represents in the base and a boolean indicating
 \ whether or not the conversion was successful. An ASCII character set is
 \ assumed.
@@ -1904,17 +1979,17 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
     dup $A < or 
   then dup r> u< ;
 
-\ '>number' does the work of the numeric conversion, getting a character
+\ *>number* does the work of the numeric conversion, getting a character
 \ from an input array, converting the character to a number, multiplying it
 \ by the current input base and adding in to the number being converted. It
 \ stops on the first non-numeric character.
 \
-\ '>number' accepts a string as an address-length pair which are the first
+\ *>number* accepts a string as an address-length pair which are the first
 \ two arguments, and a starting number for the number conversion (which is
-\ usually zero). '>number' returns a string containing the unconverted
+\ usually zero). *>number* returns a string containing the unconverted
 \ characters, if any, as well as the converted number.
 \ 
-\ '>number' operates on unsigned double cell values, not single cell values.
+\ *>number* operates on unsigned double cell values, not single cell values.
 \
 
 : >number ( ud b u -- ud b u : convert string to number )
@@ -1932,16 +2007,16 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
     +string dup0= ( advance string and test for end )
   until ;
 
-\ 'negative?' and 'base?' should be thought of as working in conjunction
-\ with '>number' only. Numbers can have certain prefixes which change the
-\ interpretation of the number, for example a prefix of '-' means the number
-\ is negative, a '$' prefix means the number is hexadecimal regardless of the
-\ current input base, and a '#' prefix (which is a less common prefix) means
-\ the number is decimal. 'negative?' handles the negative case, and could
-\ potentially be used as standalone word, however using 'base?' comes with
+\ *negative?* and *base?* should be thought of as working in conjunction
+\ with *>number* only. Numbers can have certain prefixes which change the
+\ interpretation of the number, for example a prefix of *-* means the number
+\ is negative, a *$* prefix means the number is hexadecimal regardless of the
+\ current input base, and a *#* prefix (which is a less common prefix) means
+\ the number is decimal. *negative?* handles the negative case, and could
+\ potentially be used as standalone word, however using *base?* comes with
 \ caveats, it changes the current base if one of the base changing prefixes
-\ is encountered, '>number' is careful to restore the base back to what it
-\ was when it uses 'base?'.
+\ is encountered, *>number* is careful to restore the base back to what it
+\ was when it uses *base?*.
 \
 
 h: negative? ( b u -- t : is >number negative? )
@@ -1954,14 +2029,14 @@ h: base? ( b u -- )
   then ( #decimal )
   string@ [char] # = if +string decimal exit then ;
 
-\ '>number' is a generic word, but awkward to use,  'number?' does some
-\ processing of the results to '>number' and handles other input processing
-\ expected for numbers. For example numbers can be prefixed by '$' to specify
-\ they are in hex, or '#' for decimal, regardless of the current base. The
-\ decimal point is handled for double cell input. The minus sign, '-', can
+\ *>number* is a generic word, but awkward to use,  *number?* does some
+\ processing of the results to *>number* and handles other input processing
+\ expected for numbers. For example numbers can be prefixed by *$* to specify
+\ they are in hex, or *#* for decimal, regardless of the current base. The
+\ decimal point is handled for double cell input. The minus sign, *-*, can
 \ be used as a prefix for all of these different formats to specify that
 \ the number is negative. The negative prefix must come before any base
-\ specifier. 'dpl' is used to store where the decimal place occurred in the
+\ specifier. *dpl* is used to store where the decimal place occurred in the
 \ input.
 \
 
@@ -1997,7 +2072,7 @@ h: -trailing ( b u -- b u : remove trailing spaces )
     then
   next 0x0000 ;
 
-h: lookfor ( b u c xt -- b u : skip until 'xt' test succeeds )
+h: lookfor ( b u c xt -- b u : skip until *xt* test succeeds )
   swap >r -rot
   begin
     dup
@@ -2030,23 +2105,23 @@ h: ?length dup word-length u> if $13 -throw exit then ;
 \
 \ ## The Interpreter
 \ 
-\ The interpreter consists of two main words, 'literal' and 'interpret'. Other
-\ useful words are also defined, such as ',' or 'immediate', but they are
+\ The interpreter consists of two main words, *literal* and *interpret*. Other
+\ useful words are also defined, such as *,* or *immediate*, but they are
 \ relatively trivial in comparison.
 \ 
-\ 'interpret' takes a pointer to a counted string and interprets the
+\ *interpret* takes a pointer to a counted string and interprets the
 \ results, with this word we have the main interpreter. It searches for
 \ words, executes them or compiles them if found, or if it is not a word
 \ it attempts to convert it to a number, if this fails an error is signaled.
 \ 
-\ 'interpret' also handles single cell and double cell conversion and
+\ *interpret* also handles single cell and double cell conversion and
 \ compilation. It does not know what to do with numbers directly, instead
-\ it executes the execution token stored in '<literal>', which contains
-\ '(literal)'. '(literal)' has two different behaviors depending on the
+\ it executes the execution token stored in *<literal>*, which contains
+\ *(literal)*. *(literal)* has two different behaviors depending on the
 \ execution state, in compiling mode the number is compiled into the
-\ dictionary with 'literal'.
+\ dictionary with *literal*.
 \ 
-\ 'literal' takes a number and compiles a number literal into the dictionary
+\ *literal* takes a number and compiles a number literal into the dictionary
 \ which when run will push the number provided to it. Numbers below $7FFF
 \ can be compiled to a single instruction, numbers between $FFFF and $8000
 \ are compiled as the bitwise inversion of the number followed by and invert
@@ -2054,30 +2129,30 @@ h: ?length dup word-length u> if $13 -throw exit then ;
 \ and double cell values between 2 and 4 instructions.
 \ 
 \ As said, the other words a pretty straight forward and behave the same
-\ as you would expect in most other Forths, ',' writes a value in the
-\ next available location in the dictionary, 'c,' does the same but for
+\ as you would expect in most other Forths, *,* writes a value in the
+\ next available location in the dictionary, *c,* does the same but for
 \ character sized values (potentially making the dictionary unaligned). They
 \ both check there is enough room left in the dictionary to proceed.
 \ 
-\ 'compile,' is needed as this is a subroutine threaded Forth, execution
-\ tokens should be handed to 'compile,' and not straight to ',' which would
+\ *compile,* is needed as this is a subroutine threaded Forth, execution
+\ tokens should be handed to *compile,* and not straight to *,* which would
 \ be ideal. This is because addresses need to be converted into a call
 \ instruction before they are written into the dictionary. On other Forths
-\ you might get away with using ','.
+\ you might get away with using *,*.
 \ 
-\ 'immediate', 'compile-only' and 'smudge' work by setting bits in the
-\ word header. 'immediate' and 'compile-only' should be familiar by now, they
-\ set bits in the 'PWD' field of a words header. 'smudge' works by toggling
+\ *immediate*, *compile-only* and *smudge* work by setting bits in the
+\ word header. *immediate* and *compile-only* should be familiar by now, they
+\ set bits in the *PWD* field of a words header. *smudge* works by toggling
 \ a bit in the name fields length byte, which by virtue of how searching
 \ works means that the word will not be found in the dictionary any more.
-\ 'smudge' is *not* used to hide the word being currently defined until the
-\ matching ';' is met, however that is it's most common use in other Forths
+\ *smudge* is *not* used to hide the word being currently defined until the
+\ matching *;* is met, however that is it's most common use in other Forths
 \ if it is defined. It hides the latest define word.
 \ 
 
 h: ?dictionary dup $3F00 u> if 8 -throw exit then ;
-: , here dup cell+ ?dictionary cp! ! ; ( u -- : store 'u' in dictionary )
-: c, here ?dictionary c! cp 1+! ;      ( c -- : store 'c' in the dictionary )
+: , here dup cell+ ?dictionary cp! ! ; ( u -- : store *u* in dictionary )
+: c, here ?dictionary c! cp 1+! ;      ( c -- : store *c* in the dictionary )
 h: doLit 0x8000 or , ;                 ( n+ -- : compile literal )
 : literal ( n -- : write a literal into the dictionary )
   dup 0x8000 and ( n > $7FFF ? )
@@ -2094,6 +2169,7 @@ h: not-found source type $D -throw ; ( -- : throw 'word not found' )
 h: ?compile dup compile-only? if source type $E -throw exit then ;
 : (literal) state@ if postpone literal exit then ; ( u -- u | )
 : interpret ( ??? a -- ??? : The command/compiler loop )
+  \ dup count type space ( <- for tracing the parser )
   find ?dup if
     state@
     if
@@ -2101,7 +2177,7 @@ h: ?compile dup compile-only? if source type $E -throw exit then ;
       $compile exit               \ <- compiling word are...compiled.
     then
     drop ?compile     \ <- check it's not a compile only word word
-    cfa execute exit  \ <- if its not, execute it, then exit 'interpreter'
+    cfa execute exit  \ <- if its not, execute it, then exit *interpreter*
   then
   \ not a word
   dup>r count number? if rdrop \ it's a number!
@@ -2115,20 +2191,20 @@ h: ?compile dup compile-only? if source type $E -throw exit then ;
   then
   r> not-found ; \ not a word or number, it's an error!
 
-\ NB. 'compile' only works for words, instructions, and numbers below $8000
+\ NB. *compile* only works for words, instructions, and numbers below $8000
 : compile  r> dup@ , cell+ >r ; compile-only ( --:Compile next compiled word )
 : immediate $4000 last fallthrough; ( -- : previous word immediate )
 h: toggle tuck @ xor swap! ;        ( u a -- : xor value at addr with u )
-\ : compile-only 0x8000 last toggle ;
+( : compile-only 0x8000 last toggle ; )
 
-\ : smudge last fallthrough;
+( : smudge last fallthrough; )
 h: (smudge) nfa $80 swap toggle ; ( pwd -- )
 
 \ 
 \ ## Strings
 \ 
 \ The string word set is quite small, there are words already defined for
-\ manipulating strings such 'c@', and 'count', but they are not exclusively
+\ manipulating strings such *c@*, and *count*, but they are not exclusively
 \ used for strings. These woulds will allow string literals to be embedded
 \ within word definitions.
 \
@@ -2146,15 +2222,15 @@ h: (smudge) nfa $80 swap toggle ; ( pwd -- )
 \
 \ Using a larger count prefix obviously allows for larger strings, but it
 \ is not standard and new words would have to be written, or new conventions
-\ followed, when dealing with these strings. For example the 'count' word can
+\ followed, when dealing with these strings. For example the *count* word can
 \ be used on the entire string if the string size is a single byte in size.
 \ Another complication is how big should the length prefix be? 16, 32, or
 \ 64-bit? This might depend on the intended use, the preferences of the
 \ programmer, or what is most natural on the platform.
 \
-\ Another complication in modern string handling is UTF-8,
-\ <https://en.wikipedia.org/wiki/UTF-8> and other character encoding schemes,
-\ which is something to be aware of, but not a subject we will go in to.
+\ Another complication in modern string handling is [UTF-8][], and other 
+\ character encoding schemes, which is something to be aware of, but not a 
+\ subject we will go in to.
 \
 \ The issues described only talk about problems with Forths representation
 \ of strings, nothing has even been said about the difficulty of using them
@@ -2175,7 +2251,7 @@ h: do$ r> r@ r> count+ aligned >r swap >r ; ( -- a )
 h: string-literal do$ nop ; ( -- a : do string NB. nop to fool optimizer )
 h: .string do$ print ; ( -- : print string  )
 
-\ To allow the metacompilers version of '."' and '$"' to work we will need
+\ To allow the meta-compilers version of *."* and *$"* to work we will need
 \ to populate two variables in the metacompiler with the correct actions.
 [t] .string        tdoPrintString meta!
 [t] string-literal tdoStringLit   meta!
@@ -2197,43 +2273,46 @@ h: (abort) do$ ?abort ;                                        ( -- )
 \ words will need to be defined to make the system usable, as well as some
 \ house keeping.
 \
-\ 'quit' is the name for the word which implements the interpreter loop,
+\ *quit* is the name for the word which implements the interpreter loop,
 \ which is an odd name for its function, but this is what it is traditionally
-\ called. 'quit' calls a few minor functions:
+\ called. *quit* calls a few minor functions:
 \
-\ * '<ok>', which is the execution vector for the Forth prompt, its contents
-\ are executed by 'eval'.
-\ * '(ok)' defines the default prompt, it only prints 'ok' if we are in
+\ - *<ok>*, which is the execution vector for the Forth prompt, its contents
+\ are executed by *eval*.
+\ - *(ok)* defines the default prompt, it only prints *ok* if we are in
 \ command mode.
-\ * '[' and ']' for changing the interpreter state to command and compile mode
-\ respectively. Note that '[' must be an immediate word.
-\ * 'preset' which resets the input line variables
-\ * '?error' handles an error condition from 'throw', it forms the error
+\ - *[* and *]* for changing the interpreter state to command and compile mode
+\ respectively. Note that *[* must be an immediate word.
+\ - *preset* which resets the input line variables
+\ - *?error* handles an error condition from *throw*, it forms the error
 \ handling part of the error handler of last resort. It prints out the
 \ non-zero error number that occurred and attempts to return the interpreter
 \ into a sensible state.
-\ * '?depth' checks for a stack underflow
-\ * 'eval' tokenizes the current input line which 'quit' has fetched and
-\ calls 'interpret' on each token until there is no more. Any errors that
-\ occur within 'interpreter' or 'eval' will be caught by 'quit'.
+\ - *?depth* checks for a stack underflow
+\ - *eval* tokenizes the current input line which *quit* has fetched and
+\ calls *interpret* on each token until there is no more. Any errors that
+\ occur within *interpreter* or *eval* will be caught by *quit*.
+\ 
+\ *quit* will be called from the boot word later on.
+\
 
-h: preset tib-start #tib cell+ ! 0 in! id zero ;
-: ] [-1] state ! ;
-: [   state zero ; immediate
+h: preset tib-start #tib cell+ ! 0 in! id zero ;  ( -- : reset input )
+: ] [-1] state ! ;                                ( -- : compile mode )
+: [   state zero ; immediate                      ( -- : command mode )
 
 h: ?error ( n -- : perform actions on error )
   ?dup if
     .             ( print error number )
     [char] ? emit ( print '?' )
-    cr
-    sp0 cells sp!       ( empty stack )
+    cr            ( and terminate the line )
+    sp0 cells sp! ( empty the stack )
     preset        ( reset I/O streams )
     postpone [    ( back into interpret mode )
     exit
   then ;
 
 h: (ok) command? if ."  ok  " cr exit then ;  ( -- )
-\ : ok <ok> @execute ;
+( : ok <ok> @execute ; )
 h: ?depth sp@ sp0 u< if 4 -throw exit then ;  ( u -- : depth check )
 h: eval ( -- )
   begin
@@ -2242,22 +2321,22 @@ h: eval ( -- )
     interpret ?depth
   repeat drop <ok> @execute ;
 
-\ 'quit' can now be defined, it sets up the input line variables, sets the
+\ *quit* can now be defined, it sets up the input line variables, sets the
 \ interpreter into command mode, enters an infinite loop it does not exit
 \ from, and within that loop it reads in a line of input, evaluates it and
 \ processes any errors that occur, if any.
 
 : quit preset [ begin query ' eval catch ?error again ; ( -- )
 
-\ 'evaluate' is used to evaluate a string of text as if it were typed in by
+\ *evaluate* is used to evaluate a string of text as if it were typed in by
 \ the programmer. It takes an address and its length, this is used in the
-\ word 'load'. It needs two new words apart from 'eval', which are 'get-input'
-\ and 'set-input', these two words are used to retrieve and set the input
-\ input stream, which 'evaluate' needs to manipulate. 'evaluate' saves the
+\ word *load*. It needs two new words apart from *eval*, which are *get-input*
+\ and *set-input*, these two words are used to retrieve and set the input
+\ input stream, which *evaluate* needs to manipulate. *evaluate* saves the
 \ current input stream specification and changes it to the new string,
 \ restoring to what it was before the evaluation took place. It is careful
 \ to catch errors and always perform the restore, any errors that thrown are
-\ rethrown after the input is restored.
+\ re-thrown after the input is restored.
 \
 
 h: get-input source in@ source-id <ok> @ ;    ( -- n1...n5 )
@@ -2285,8 +2364,8 @@ h: io! preset fallthrough;  ( -- : initialize I/O )
 h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
 h: hand ' (ok)  ( ' drop <-- was emit )  ( ' ktap ) fallthrough;
 h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) <ok> ! ;
-\ h: pace 11 emit ;
-\ t: file ' pace ' drop ' ktap xio ;
+( h: pace 11 emit ; )
+( : file ' pace ' drop ' ktap xio ; )
 
 \ 
 \ ## Control Structures and Defining words
@@ -2305,61 +2384,61 @@ h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) <ok> ! ;
 \ words defined here are quite complex, even if their definitions are only
 \ a few lines long.
 \
-\ Control structure words include 'if', 'else', 'then', 'begin', 'again',
-\ 'until', 'for', 'next', 'recurse' and 'tail'. These words are all immediate
+\ Control structure words include *if*, *else*, *then*, *begin*, *again*,
+\ *until*, *for*, *next*, *recurse* and *tail*. These words are all immediate
 \ words and are also compile only, most words visible in the target dictionary
 \ in this section have these properties.
 \
 \ New control structure words can be defined by the user quite easily, for
-\ example a word called 'unless' can be made which executes a clause if the
-\ test provided is false, which is the opposite of 'if'. This is one of the
+\ example a word called *unless* can be made which executes a clause if the
+\ test provided is false, which is the opposite of *if*. This is one of the
 \ many unique features of Forth, that the language itself can be extended
-\ and customized. This is possible in languages like 'lisp', but not in 'C',
-\ to do the same in 'C' would require the modification of the 'C' compiler and
-\ recompilation. In 'forth' (and 'lisp') it is a natural part of the language.
+\ and customized. This is possible in languages like *lisp*, but not in *C*,
+\ to do the same in *C* would require the modification of the *C* compiler and
+\ recompilation. In *forth* (and *lisp*) it is a natural part of the language.
 \ 
-\ Using our 'unless' example:
+\ Using our *unless* example:
 \ 
 \     : unless ' 0= compile, postpone if ; immediate
 \ 
 \ We this newly defined control structure like so:
 \ 
 \     : x unless 99 . cr then ;
-\     0 x ( prints '99' )
+\     0 x ( prints *99* )
 \     1 x ( prints nothing )
 \ 
 \ Not only are the control structures defined in this section, but so are
 \ several defining words. These Nietzschean words create new values and
-\ words in the dictionary. These words include ':', and ';', as well as
-\ the more complex 'create' and 'does>'. To define a new word they need to
+\ words in the dictionary. These words include *:*, and *;*, as well as
+\ the more complex *create* and *does>*. To define a new word they need to
 \ parse the next word in input stream, so they take over from interpreter loop
 \ from one token. They then have differing actions on what they do with this
 \ token.
 \ 
-\ ':' and ';' should need no explanation as to what they do by now, only 
-\ the 'how' needs to be elucidated. ':' parses the next word in the input 
-\ stream and puts the 'state' variable into compile mode, the 'interpret' 
+\ *:* and *;* should need no explanation as to what they do by now, only 
+\ the *how* needs to be elucidated. *:* parses the next word in the input 
+\ stream and puts the *state* variable into compile mode, the *interpret* 
 \ word will pick this state change up when the word after the one just 
-\ read in. ':' also makes sure the dictionary is aligned before compilation
+\ read in. *:* also makes sure the dictionary is aligned before compilation
 \ takes place, it prints out a warning if a word is redefined, compiles the
 \ word header for the new word and pushes a magic constant value onto the
-\ stack which ';' will pull off. Apart from the word header it does no
-\ compilation itself, this is left for the interpreter to do. ';' checks
-\ for the magic number ':' left on the stack and throws an error if this
-\ is not found. It compiles an 'exit' instruction into the dictionary as
+\ stack which *;* will pull off. Apart from the word header it does no
+\ compilation itself, this is left for the interpreter to do. *;* checks
+\ for the magic number *:* left on the stack and throws an error if this
+\ is not found. It compiles an *exit* instruction into the dictionary as
 \ the final instruction for the word being defined and finally puts the
 \ interpreter back into command mode - to do this it needs to be an
 \ immediate word. These words also need set the last definition variable
-\ and ';' links the new word into the dictionary making it visible.
+\ and *;* links the new word into the dictionary making it visible.
 \ 
-\ 'create' and 'does>' are often used as pairs, 'create' can be used alone,
-\ but 'does>' should only be used on words that have been make with 'create'.
-\ 'create' defines a new word with a default action of pushes the address
+\ *create* and *does>* are often used as pairs, *create* can be used alone,
+\ but *does>* should only be used on words that have been make with *create*.
+\ *create* defines a new word with a default action of pushes the address
 \ of the next location available after the current definition, more memory
-\ can be allocated after this with 'allot', 'create' can therefore be used
+\ can be allocated after this with *allot*, *create* can therefore be used
 \ to make new data structures. However the default behavior is quite simple,
 \ it would be more useful if we could change it, or extend it. This is what
-\ 'does>' allows us to do. 
+\ *does>* allows us to do. 
 
 h: ?check ( magic-number -- : check for magic number on the stack )
    magic <> if $16 -throw exit then ;
@@ -2379,7 +2458,7 @@ h: find-cfa find-token cfa ;                         ( -- xt, <string> )
 : ' find-cfa state@ if postpone literal exit then ; immediate
 : [compile] find-cfa compile, ; immediate compile-only  ( --, <string> )
 : [char] char postpone literal ; immediate compile-only ( --, <string> )
-\ h: ?quit command? if $38 -throw exit then ;
+( h: ?quit command? if $38 -throw exit then ; )
 : ; ( ?quit ) ?check =exit , postpone [ fallthrough; immediate compile-only
 h: get-current! ?dup if get-current ! exit then ; ( -- wid )
 : : align here dup last-def ! ( "name", -- colon-sys )
@@ -2390,7 +2469,7 @@ h: get-current! ?dup if get-current ! exit then ; ( -- wid )
 h: here-0 here 0x0000 ;
 h: >mark here-0 postpone again ;
 : if here-0 postpone until ; immediate compile-only
-\ : unless ' 0= compile, postpone if ; immediate compile-only
+( : unless ' 0= compile, postpone if ; immediate compile-only )
 : then fallthrough; immediate compile-only
 h: >resolve here chars over @ or swap! ;
 : else >mark swap >resolve ; immediate compile-only
@@ -2398,7 +2477,7 @@ h: >resolve here chars over @ or swap! ;
 : repeat swap postpone again postpone then ; immediate compile-only
 h: last-cfa last-def @ cfa ;  ( -- u )
 : recurse last-cfa compile, ; immediate compile-only
-\ : tail last-cfa postpone again ; immediate compile-only
+( : tail last-cfa postpone again ; immediate compile-only )
 : create postpone : drop compile doVar get-current ! postpone [ ;
 : >body cell+ ; ( a -- a )
 h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
@@ -2410,8 +2489,7 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 : next compile doNext , ; immediate compile-only
 : aft drop >mark postpone begin swap ; immediate compile-only
 : hide find-token (smudge) ; ( --, <string> : hide word by name )
-\ : name? find-token nfa ;
-
+( : name? find-token nfa ; )
 
 \ : doer create =exit last-cfa ! =exit ,  ;
 \ : make ( "name1", "name2", -- : make name1 do name2 )
@@ -2462,9 +2540,9 @@ h: trace-execute vm-options ! >r ; ( u xt -- )
 h: find-empty-cell 0 fallthrough; ( a -- )
 h: find-cell >r begin dup@ r@ <> while cell+ repeat rdrop ; ( u a -- a )
 
-\ 'get-order' retrieves the current search order by pushing a list of
-\ 'wid' values onto the stack 'n' long which can be modified before being
-\ passed to 'set-order'.
+\ *get-order* retrieves the current search order by pushing a list of
+\ *wid* values onto the stack *n* long which can be modified before being
+\ passed to *set-order*.
 
 : get-order ( -- widn ... wid1 n : get the current search order )
   context
@@ -2473,15 +2551,15 @@ h: find-cell >r begin dup@ r@ <> while cell+ repeat rdrop ; ( u a -- a )
   context - chars dup>r 1- s>d if $32 -throw exit then
   for aft dup@ swap cell- then next @ r> ;
 
-\ 'xchange' is used to place the next few words into the root vocabulary,
+\ *xchange* is used to place the next few words into the root vocabulary,
 \ it will be set back to the default shortly.
 
 xchange _forth-wordlist root-voc
 : forth-wordlist _forth-wordlist ;
 
-\ 'set-order' does the opposite of 'get-order', it can be used to set
+\ *set-order* does the opposite of *get-order*, it can be used to set
 \ the current search order. It has a special case however, when the number
-\ of word lists is set to '-1' it loads the minimal word set, which consists
+\ of word lists is set to *-1* it loads the minimal word set, which consists
 \ of very few words, namely:
 \ 
 \      words forth set-order forth-wordlist
@@ -2491,12 +2569,12 @@ xchange _forth-wordlist root-voc
 \ words which consist of the minimal set of words to do a job, and once that
 \ has been achieved go back to the normal Forth environment.
 \ 
-\ 'set-order' also checks that the number of word lists is not too high, there
-\ should not be more than '#vocs' word lists given to 'set-order', and 
+\ *set-order* also checks that the number of word lists is not too high, there
+\ should not be more than *#vocs* word lists given to *set-order*, and 
 \ exception is thrown otherwise.
 \ 
-\ 'set-order' does not set the definitions word list however, that is the
-\ word list which new definitions are added to, 'definitions' and 'set-current'
+\ *set-order* does not set the definitions word list however, that is the
+\ word list which new definitions are added to, *definitions* and *set-current*
 \ can be used to do this.
 
 : set-order ( widn ... wid1 n -- : set the current search order )
@@ -2504,14 +2582,14 @@ xchange _forth-wordlist root-voc
   dup #vocs > if $31 -throw exit then
   context swap for aft tuck ! cell+ then next zero ;
 
-\ 'forth' loads the root vocabulary containing the minimal word set,
-\ and also loads the normal 'forth' vocabulary.
+\ *forth* loads the root vocabulary containing the minimal word set,
+\ and also loads the normal *forth* vocabulary.
 
 : forth root-voc forth-wordlist 2 set-order ; ( -- )
 
-\ 'words' is used to display all of the words defined in the dictionary in
-\ the current search order. '.words' handles a specific word list, and
-\ 'not-hidden?' looks at an individual words header to check whether a word
+\ *words* is used to display all of the words defined in the dictionary in
+\ the current search order. *.words* handles a specific word list, and
+\ *not-hidden?* looks at an individual words header to check whether a word
 \ is to be shown or now, a bit is set in the words name fields counted
 \ string byte, in the highest bit of the count byte, if the word is to be
 \ hidden or shown.
@@ -2524,28 +2602,28 @@ h: .words space
 : words
   get-order begin ?dup while swap dup cr u. colon @ .words 1- repeat ;
 
-\ 'xchange' is used to place words back into the forth word list again.
+\ *xchange* is used to place words back into the forth word list again.
 
 xchange root-voc _forth-wordlist
 
-\ The 'previous'/'also'/'only' mechanism for Forth word list manipulation
-\ are quite awkward, the only one word keeping is 'only' which is just
-\ a shortcut for '-1 set-order'. The more powerful words '-order' and '+order'
+\ The *previous*/*also*/*only* mechanism for Forth word list manipulation
+\ are quite awkward, the only one word keeping is *only* which is just
+\ a shortcut for '-1 set-order'. The more powerful words *-order* and *+order*
 \ are much easier to use.
 \ 
 \ Of note is the idiom 'wid -order wid +order' which reorders the search order
-\ so 'wid' now has a higher priority than the other word lists. This can be
-\ done before 'definitions' is used to make 'wid' the current definitions
+\ so *wid* now has a higher priority than the other word lists. This can be
+\ done before *definitions* is used to make *wid* the current definitions
 \ word list as well.
 \ 
 \ Another idiom is:
 \ 
 \	only forth definitions
 \ 
-\ Which restores the search order to the default and sets the 'forth-wordlist'
+\ Which restores the search order to the default and sets the *forth-wordlist*
 \ vocabulary as the one which new definitions are added to.
 \ 
-\ Anonymous word lists can be created with the 'anonymous' word, this is
+\ Anonymous word lists can be created with the *anonymous* word, this is
 \ useful to make programs which only a few words exported to another word
 \ list, making things less cluttered. 
 \ 
@@ -2560,17 +2638,17 @@ xchange root-voc _forth-wordlist
 \	: z x y cr ;
 \	only forth definitions
 \  
-\ In this example new words 'x', 'y' and 'reorder' are created and added
-\ to an anonymous wordlist, 'z' uses words 'x' and 'y' from this word this
+\ In this example new words *x*, *y* and *reorder* are created and added
+\ to an anonymous wordlist, *z* uses words *x* and *y* from this word this
 \ and then the words in the anonymous word lists are hidden, but not the
-\ newly defined word 'z', that is available in the default Forth word list.
+\ newly defined word *z*, that is available in the default Forth word list.
 \ 
 
-\ : previous get-order swap drop 1- set-order ; ( -- )
-\ : also get-order over swap 1+ set-order ;     ( wid -- )
+( : previous get-order swap drop 1- set-order ; ( -- )
+( : also get-order over swap 1+ set-order ;     ( wid -- )
 : only [-1] set-order ;                         ( -- )
-\ : order get-order for aft . then next cr ;    ( -- )
-\ : anonymous get-order 1+ here 1 cells allot swap set-order ; ( -- )
+( : order get-order for aft . then next cr ;    ( -- )
+( : anonymous get-order 1+ here 1 cells allot swap set-order ; ( -- )
 : definitions context @ set-current ;           ( -- )
 h: (order)                                      ( w wid*n n -- wid*n w n )
   dup if
@@ -2582,25 +2660,25 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 : -order get-order (order) nip set-order ;             ( wid -- )
 : +order dup>r -order get-order r> swap 1+ set-order ; ( wid -- )
 
-\ 'editor' is a word which loads the editor vocabulary, which will be
-\ defined later, it requires '+order' to work.
+\ *editor* is a word which loads the editor vocabulary, which will be
+\ defined later, it requires *+order* to work.
 \ 
 
 : editor editor-voc +order ;                   ( -- )
-\ : assembler root-voc assembler-voc 2 set-order ;     ( -- )
-\ : ;code assembler ; immediate                        ( -- )
-\ : code postpone : assembler ;                        ( -- )
+( : assembler root-voc assembler-voc 2 set-order ;     ( -- )
+( : ;code assembler ; immediate                        ( -- )
+( : code postpone : assembler ;                        ( -- )
 
-\ xchange _forth-wordlist assembler-voc
-\ : end-code forth postpone ; ; immediate ( -- )
-\ xchange assembler-voc _forth-wordlist
+( xchange _forth-wordlist assembler-voc )
+( : end-code forth postpone ; ; immediate ( -- )
+( xchange assembler-voc _forth-wordlist )
 
 \ 
 \ ## Block Word Set
 \ 
 \ The block word set abstracts out how access to mass storage works in just
-\ a handful of words. The main word is 'block', with the words 'update',
-\ 'flush' and the variable 'blk' also integral to the working of the block
+\ a handful of words. The main word is *block*, with the words *update*,
+\ *flush* and the variable *blk* also integral to the working of the block
 \ word set. All of the other words can be implemented upon these.
 \
 \ Block storage is an outdated, but simple, method of accessing
@@ -2611,24 +2689,24 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 \ originated on.
 \
 \ A 'Forth block' is 1024 byte long buffer which is backed by a mass
-\ storage device, which we will refer to as 'disk'. Very compact programs
+\ storage device, which we will refer to as *disk*. Very compact programs
 \ can be written that have their data stored persistently. Source can
 \ and data can be stored in blocks and evaluated, which will be described
 \ more in the 'Block editor' section of this document.
 \
-\ The 'block' word does most of the work. The way it is usually implemented
+\ The *block* word does most of the work. The way it is usually implemented
 \ is as follows:
 \
-\ 1. A user provides a block number to the 'block' word. The block
+\ 1. A user provides a block number to the *block* word. The block
 \ number is checked to make sure it is valid, and an exception is thrown
 \ if it is not.
 \ 2. If the block if already loaded into a block buffer from disk, the
 \ address of the memory it is loaded into is returned.
-\ 3. If it was not, then 'block' looks for a free block buffer, loads
+\ 3. If it was not, then *block* looks for a free block buffer, loads
 \ the 1024 byte section off disk into the block buffer and returns an
 \ address to that.
 \ 4. If there are no free block buffers then it looks for a block buffer
-\ that is marked as being dirty with 'update' (which marks the previously
+\ that is marked as being dirty with *update* (which marks the previously
 \ loaded block as being dirty when called), then transfers that dirty block
 \ to disk. Now that there is a free block buffer, it loads the data that
 \ the user wants off of disk and returns a pointer to that, as in the
@@ -2636,7 +2714,7 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 \ then any one of them could be reused - they have not been marked as being
 \ modified so their contents could be retrieved off of disk if needed.
 \ 5. Under all cases, before the address of the loaded block has been
-\ returned, the variable 'blk' is updated to contain the latest loaded
+\ returned, the variable *blk* is updated to contain the latest loaded
 \ block.
 \
 \ This word does a lot, but is quite simple to use. It implements a simple
@@ -2644,14 +2722,14 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 \ sections of memory from disk can be loaded into memory at the same time.
 \ The mechanism by which this happens is entirely hidden from the user.
 \
-\ This Forth implements 'block' in a slightly different way. The entire
+\ This Forth implements *block* in a slightly different way. The entire
 \ virtual machine image is loaded at start up, and can be saved back to
-\ disk (or small sections of it) with the "(save)" instruction. 'update'
+\ disk (or small sections of it) with the *(save)* instruction. *update*
 \ marks the entire image as needing to be saved back to disk, whilst
-\ 'flush' calls "(save)". 'block' then only has to check the block number
+\ *flush* calls *(save)*. *block* then only has to check the block number
 \ is within range, and return a pointer to the block number multiplied by
-\ the size of a block - so this means that this version of 'block' is just
-\ an index into main memory. This is similar to how 'colorForth' implements
+\ the size of a block - so this means that this version of *block* is just
+\ an index into main memory. This is similar to how *colorForth* implements
 \ its block word.
 \
 : update [-1] block-dirty ! ; ( -- )
@@ -2667,10 +2745,10 @@ h: +block blk-@ + ;           ( -- )
   $A lshift ( <-- b/buf * ) ;
 
 \ The block word set has the following additional words, which augment the
-\ set nicely, they are 'list', 'load' and 'thru'. The 'list' word is used
+\ set nicely, they are *list*, *load* and *thru*. The *list* word is used
 \ for displaying the contents of a block, it does this by splitting the
-\ block into 16 lines each, 64 characters long. 'load' evaluates a given
-\ block, and 'thru' evaluates a range of blocks.
+\ block into 16 lines each, 64 characters long. *load* evaluates a given
+\ block, and *thru* evaluates a range of blocks.
 \
 \ This is how source code was stored and evaluated during the microcomputer
 \ era, as opposed to storing the source in named byte stream oriented files
@@ -2681,7 +2759,7 @@ h: +block blk-@ + ;           ( -- )
 \ when editing blocks, both in how programs are split up, and how they are
 \ formatted.
 \
-\ A block shown with 'list' might look like the following:
+\ A block shown with *list* might look like the following:
 \
 \ 	   ----------------------------------------------------------------
 \ 	 0|( Simple Math Routines 31/12/1989 RJH 3/4                #20  ) |
@@ -2707,9 +2785,9 @@ h: +block blk-@ + ;           ( -- )
 \ the source in even numbered blocks, and the comments in the odd numbered
 \ blocks.
 \
-\ By storing a comment in the first line of a block a word called 'index'
+\ By storing a comment in the first line of a block a word called *index*
 \ could be used to make a table of contents all of the blocks available on
-\ disk, 'index' simply displays the first line of each block within a block
+\ disk, *index* simply displays the first line of each block within a block
 \ range.
 
 \ The common theme is that convention is key to successfully using blocks.
@@ -2718,7 +2796,7 @@ h: +block blk-@ + ;           ( -- )
 \ store their error messages. Instead of storing strings of error messages
 \ in memory (either in RAM or ROM) they were stored in block storage, with
 \ one error message per line. The error messages were stored in order, and
-\ a word 'message' is used to convert an error code like '-4' to its error
+\ a word *message* is used to convert an error code like *-4* to its error
 \ string (the numbers and what they mean are standardized, there is a table
 \ in the appendix), which was then printed out. The full list of the
 \ standardized error messages can be stored in four blocks, and form a neat
@@ -2731,12 +2809,12 @@ h: line swap block swap c/l* + c/l ;    ( k u -- a u )
 h: loadline line evaluate ;             ( k u -- )
 : load 0 l/b 1- for 2dup 2>r loadline 2r> 1+ next 2drop ; ( k -- )
 h: pipe [char] | emit ;                      ( -- )
-\ h: .line line -trailing $type ;       ( k u -- )
+( h: .line line -trailing $type ;       ( k u -- )
 h: .border 3 spaces c/l [char] - nchars cr ; ( -- )
 h: #line dup 2 u.r ;                    ( u -- u : print line number )
-\ : thru over- for dup load 1+ next drop ; ( k1 k2 -- )
+( : thru over- for dup load 1+ next drop ; ( k1 k2 -- )
 h: blank =bl fill ;                     ( b u -- )
-\ : message l/b extract .line cr ;      ( u -- )
+( : message l/b extract .line cr ;      ( u -- )
 h: retrieve block drop ;                ( k -- )
 : list                                  ( k -- )
   dup retrieve
@@ -2766,28 +2844,28 @@ h: retrieve block drop ;                ( k -- )
 \ The boot sequence is as follows:
 \
 \ 1. The virtual machine starts execution at address 0 which will be set
-\ to point to the word 'boot-sequence'.
-\ 2. The word 'boot-sequence' is executed, which will run the word 'cold'
+\ to point to the word *boot-sequence*.
+\ 2. The word *boot-sequence* is executed, which will run the word *cold*
 \ to perform the system setup.
-\ 3. The word 'cold' checks that the image length and CRC in the image header
+\ 3. The word *cold* checks that the image length and CRC in the image header
 \ match the values it calculates, zeros blocks of memory, and initializes the
 \ systems I/O.
-\ 4. 'boot-sequence' continues execution by executing the execution token
-\ stored in the variable '<boot>'. This is set to 'normal-running' by default.
-\ 5. 'normal-running' prints out the welcome message by calling the word 'hi',
-\ and then entering the Forth Read-Evaluate Loop, known as 'quit'. This should
+\ 4. *boot-sequence* continues execution by executing the execution token
+\ stored in the variable *<boot>*. This is set to *normal-running* by default.
+\ 5. *normal-running* prints out the welcome message by calling the word *hi*,
+\ and then entering the Forth Read-Evaluate Loop, known as *quit*. This should
 \ not normally return.
-\ 6. If the function returns, 'bye' is called, halting the virtual machine.
+\ 6. If the function returns, *bye* is called, halting the virtual machine.
 \
 \ The boot sequence is modifiable by the user by either writing an execution
-\ token to the '<boot>' variable, or by writing to a jump to a word into memory
+\ token to the *<boot>* variable, or by writing to a jump to a word into memory
 \ location zero, if the image is saved, the next time it is run execution will
 \ take place at the new location.
 \
-\ It should be noted that the self-check routine, 'bist', disables checking
+\ It should be noted that the self-check routine, *bist*, disables checking
 \ in generated images by manipulating the word header once the check has
 \ succeeded. This is because after the system boots up the image is going
-\ to change in RAM soon after 'cold' has finished, this could be organized
+\ to change in RAM soon after *cold* has finished, this could be organized
 \ better so only sections of memory that do not (or should not change) get
 \ checked, one way this could be achieved is by locating all variables
 \ in specific sections, and checking only code. This has the advantage that
@@ -2800,7 +2878,7 @@ h: retrieve block drop ;                ( k -- )
 \ only 6KiB in size, and only a few kilobytes are needed in RAM for a working
 \ forth image, perhaps as little as ~2-4 KiB.
 \
-\ A few other interesting things could be done during the execution of 'cold',
+\ A few other interesting things could be done during the execution of *cold*,
 \ the image could be compressed by the metacompiler and the boot sequence
 \ could decompress it (which would require the decompressor to be one of the
 \ first things to run). Experimenting with various schemes it appears
@@ -2811,21 +2889,21 @@ h: retrieve block drop ;                ( k -- )
 \
 \ Another possibility is to obfuscate the image by exclusive or'ing it with
 \ a value to frustrate the reserve engineering of binaries, or even to
-\ encrypt it and ask for the decryption key on startup.
+\ encrypt it and ask for the decryption key on startup. 
 \
 \ Obfuscation and compression are more difficult to implement than a simple
 \ CRC check and require a more careful organization and control of the
-\ boot sequence than is provided. It is possible to make 'turn-key'
-\ applications that start execution at an arbitrary point (call 'turn-key'
+\ boot sequence than is provided. It is possible to make *turn-key*
+\ applications that start execution at an arbitrary point (call *turn-key*
 \ because all the user has to do is 'turn the key' and the program is ready
 \ to go) by setting the boot variable to the desired word and saving the
-\ image with 'save'.
+\ image with *save*.
 \
 
 h: check-header? header-options @ first-bit 0= ; ( -- t )
 h: disable-check 1 header-options toggle ;       ( -- )
 
-\ 'bist' checks the length field in the header matches 'here' and that the
+\ *bist* checks the length field in the header matches *here* and that the
 \ CRC in the header matches the CRC it calculates in the image, it has to
 \ zero the CRC field out first.
 
@@ -2836,8 +2914,8 @@ h: bist ( -- u : built in self test )
   0 here crc xor if 3 exit then           ( check CRC )
   disable-check 0x0000 ;                  ( disable check, success )
 
-\ 'cold' performs the self check, and exits if it fails. It then
-\ goes on to zero memory, set the initial value of 'blk', set the I/O
+\ *cold* performs the self check, and exits if it fails. It then
+\ goes on to zero memory, set the initial value of *blk*, set the I/O
 \ vectors to sensible values, set the vocabularies to the default search
 \ order and reset the variable stack.
 
@@ -2849,7 +2927,7 @@ h: cold ( -- : performs a cold boot  )
    forth sp0 cells sp!
    <boot> @execute bye ;
 
-\ 'hi' prints out the welcome message,
+\ *hi* prints out the welcome message,
 
 h: hi hex cr ." eFORTH V " ver 0 u.r cr here . .free cr postpone [ ; ( -- )
 h: normal-running hi quit ;                 ( -- : boot word )
@@ -2857,13 +2935,13 @@ h: normal-running hi quit ;                 ( -- : boot word )
 \ 
 \ ## See : The Forth Disassembler
 \ 
-\ This section defines 'see', the Forth disassembler. This is meant only
+\ This section defines *see*, the Forth disassembler. This is meant only
 \ as a rough debugging tool and not meant to reproduce the exact source. The
 \ output format is not defined in any standard, it is just meant to be useful
 \ for debugging purposes and perhaps for programmers to quickly determine how
 \ a word works. 
 \ 
-\ There are many ways 'see' could be improved but each minor improvement
+\ There are many ways *see* could be improved but each minor improvement
 \ would make the disassembler more complicated and prone to breaking, the
 \ disassembler as it stands is probably the best trade-off in terms of
 \ complexity and utility. Despite it being small it is still quite useful and
@@ -2875,7 +2953,7 @@ h: normal-running hi quit ;                 ( -- : boot word )
 \ One of the most difficult thing is determining the end of a word, 
 \ the disassembler uses a crude method by disassembling everything from the
 \ start of the word definition in the dictionary to the start of the next
-\ one in the same word list - this means that ':noname' definitions (of which
+\ one in the same word list - this means that *:noname* definitions (of which
 \ the metacompiler makes many in the target) and words not in the same word
 \ list that are between the word to be disassembled and the next word in the
 \ same word as the word being disassembled will be disassembled in their
@@ -2883,17 +2961,17 @@ h: normal-running hi quit ;                 ( -- : boot word )
 \ as an aid and as not being definitive and absolutely correct.
 \ 
 \ Three words will be defined that do most of the complex work of the
-\ disassembler, they are 'validate', 'search-for-cfa' and 'name', which
+\ disassembler, they are *validate*, *search-for-cfa* and *name*, which
 \ should be understood together. To make a disassembler we will need a way
 \ to look up compiled calls to words and retrieve their name, this is what
-\ 'name' does.
+\ *name* does.
 \ 
-\ 'search-for-cfa' searches a given word list for a CFA (or a Code Field 
+\ *search-for-cfa* searches a given word list for a CFA (or a Code Field 
 \ Address, the address of the executable section of a Forth word), it does 
 \ this by following the dictionary linked list assuming that if a CFA points 
 \ in between the current word and the previous word in the list then this is 
-\ word that we are looking for. It uses 'validate' to attempt to check this,
-\ if we have found a candidate word address by calling the word 'cfa' on it,
+\ word that we are looking for. It uses *validate* to attempt to check this,
+\ if we have found a candidate word address by calling the word *cfa* on it,
 \ it should move to the same address we provided.
 
 h: validate tuck cfa <> if drop-0 exit then nfa ; ( cfa pwd -- nfa | 0 )
@@ -2946,20 +3024,20 @@ h: decompiler ( previous current -- : decompile starting at address )
 \     dup @ decompile cr cell+ 
 \  then next drop ;
 
-\ 'see' is the Forth disassembler, it takes a word and (attempts) to
+\ *see* is the Forth disassembler, it takes a word and (attempts) to
 \ turn it back into readable Forth source code. The disassembler is only
 \ a few hundred bytes in size, which is a testament to the brevity achievable
 \ with Forth.
 \
-\ If the word 'see' was good enough we could potentially dispense with the
+\ If the word *see* was good enough we could potentially dispense with the
 \ source code entirely: the entire dictionary could be disassembled and saved
 \ to disk, modified, then recompiled yielding a modified Forth. Although
 \ comments would not be present, meaning this would be more of an intellectual
 \ exercise than of any utility.
 \ 
 \ One way of improving the output would be to move the assembler in the
-\ metacompiler to the target image, the same assembler words like 'd-1' and
-\ '#t|n' could then be used to disassemble ALU instructions, which are
+\ metacompiler to the target image, the same assembler words like *d-1* and
+\ *#t|n* could then be used to disassemble ALU instructions, which are
 \ currently only displayed in their raw format.
 \ 
 
@@ -2973,11 +3051,11 @@ h: decompiler ( previous current -- : decompile starting at address )
       immediate?    if ."  immediate "    then cr ;
 
 \ A few useful utility words will be added next, which are not strictly
-\ necessary but are useful. Those are '.s' for examining the contents of the
-\ variable stack, and 'dump' for showing the contents of a section of memory
+\ necessary but are useful. Those are *.s* for examining the contents of the
+\ variable stack, and *dump* for showing the contents of a section of memory
 \
-\ The '.s' word must be careful not to alter that variable stack whilst
-\ trying to print it out. It uses the word 'pick' to achieve this, otherwise
+\ The *.s* word must be careful not to alter that variable stack whilst
+\ trying to print it out. It uses the word *pick* to achieve this, otherwise
 \ there is nothing special about this word, and it is very useful for
 \ debugging code interactively to see what its stack effects are.
 \
@@ -2986,14 +3064,14 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ is producing the correct assembly. It can also be used as a utility to
 \ export binary sections of memory as text.
 \
-\ The programmer might want to edit the 'dump' word to customize its output,
-\ the addition of the 'dc+' word is one way it could be extended, which is
-\ commented out below. Like 'dm+', 'dc+' operates on a single line to
-\ be displayed, however 'dc+' decompiles the memory into human readable
+\ The programmer might want to edit the *dump* word to customize its output,
+\ the addition of the *dc+* word is one way it could be extended, which is
+\ commented out below. Like *dm+*, *dc+* operates on a single line to
+\ be displayed, however *dc+* decompiles the memory into human readable
 \ instructions instead of numbers, unfortunately the lines it produces are
 \ too long.
 \
-\ Normally the word 'dump' outputs the memory contents in hexadecimal,
+\ Normally the word *dump* outputs the memory contents in hexadecimal,
 \ however a design decision was taken to output the contents of memory in
 \ what the current numeric output base is instead. This makes the word
 \ more flexible, more consistent and shorter, than it otherwise would be as
@@ -3002,7 +3080,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 
 : .s cr depth for aft r@ pick . then next ."  <sp" ;          ( -- )
 h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
-\ h: dc+ chars for aft dup@ space decompile cell+ then next ; ( a u -- a )
+( h: dc+ chars for aft dup@ space decompile cell+ then next ; ( a u -- a )
 
 : dump ( a u -- )
   $10 + \ align up by dump-width
@@ -3019,11 +3097,11 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
 
 \ The standard Forth dictionary is now complete, but the variables containing
 \ the word list need to be updated a final time. The next section implements
-\ the block editor, which is in the 'editor' word set. Their are two variables
-\ that need updating, '_forth-wordlist', a vocabulary we have already
-\ encountered. An 'current', which contains a pointer to a word list, this
-\ word list is the one new definitions (defined by ':', or 'create') are
-\ added to. It will be set to '_forth-wordlist' so new definitions are added
+\ the block editor, which is in the *editor* word set. Their are two variables
+\ that need updating, *_forth-wordlist*, a vocabulary we have already
+\ encountered. An *current*, which contains a pointer to a word list, this
+\ word list is the one new definitions (defined by *:*, or *create*) are
+\ added to. It will be set to *_forth-wordlist* so new definitions are added
 \ to the default vocabulary.
 
 [last]              [t] _forth-wordlist t!
@@ -3040,11 +3118,10 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
 \ Forth blocks used to be the canonical way of storing both source code and
 \ data within a Forth system, it is a simply way of abstracting out how mass
 \ storage works and worked well on the microcomputers available in the 1980s.
-\ With the rise of computers with a more capable operating system the Block
-\ Word Set (See <https://www.taygeta.com/forth/dpans7.htm>) fell out of
-\ favour, being replaced instead by the File Access Word Set
-\ (See <https://www.taygeta.com/forth/dpans11.htm>), allowing named files
-\ to be accessed as a byte stream.
+\ With the rise of computers with a more capable operating systems the Block
+\ [Block Word Set][] Word Set fell out of
+\ favour, being replaced instead by the [File Access Word Set][], allowing 
+\ named files to be accessed as a byte stream.
 \
 \ To keep things simple this editor uses the block word set and in typical
 \ Forth fashion simplifies the problem to the extreme, whilst also sacrificing
@@ -3068,10 +3145,10 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
 \ the results, the editor being presented more as a curiosity than anything
 \ else.
 \
-\ We have a way of loading and saving data from disks (the 'block', 'update'
-\ and 'flush' words) as well as a way of viewing the data  in a block (the
-\ 'list' word) and evaluating the text within a block (with the 'load' word).
-\ The variable 'blk' is also of use as it holds the latest block we have
+\ We have a way of loading and saving data from disks (the *block*, *update*
+\ and *flush* words) as well as a way of viewing the data  in a block (the
+\ *list* word) and evaluating the text within a block (with the *load* word).
+\ The variable *blk* is also of use as it holds the latest block we have
 \ retrieved from disk. By defining a new word set we can skip the part of
 \ reading in a parsing commands and numbers, we can use text interpreter and
 \ line oriented input to do the work for us, as discussed.
@@ -3079,9 +3156,9 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
 \ Only one extra word is actually need given the words we already have, one
 \ which can destructively replace a line starting at a given column in the
 \ currently loaded block. All of the other commands are simple derivations
-\ of existing words. This word is called 'ia', short for 'insert at', which
+\ of existing words. This word is called *ia*, short for 'insert at', which
 \ takes two numeric arguments (starting line as the first, and column as the
-\ second) and reads all text on the line after the 'ia' and places it at the
+\ second) and reads all text on the line after the *ia* and places it at the
 \ specified line/column.
 \
 \ The command description and their definitions are the best descriptions
@@ -3116,8 +3193,8 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
 \	| s                        | save contents                           |
 \	| q                        | unload block word set                   |
 \
-\ See: <http://retroforth.org/pages/?PortsOfRetroEditor> for the origin of
-\ this block editor, and for different implementations.
+\ This editor is based on block editor originally written for [Retro Forth][].
+\ 
 
 0 tlast meta!
 h: [block] blk-@ block ;       ( k -- a : loaded block address )
@@ -3135,14 +3212,14 @@ h: [line] [check] c/l* [block] + ; ( u -- a )
 : ia c/l* + [block] + source drop in@ + ( u u -- Insert At )
    swap source nip in@ - cmove postpone \ ;
 : i 0 swap ia ;                ( u -- : Insert line )
-\ : u update ;                 ( -- : set block set as dirty )
-\ : w words ;
-\ : yank pad c/l ;
-\ : c [line] yank >r swap r> cmove ;
-\ : y [line] yank cmove ;
-\ : ct swap y c ;
-\ : xa [line] c/l evaluate ;
-\ : sw 2dup y [line] swap [line] swap c/l cmove c ;
+( : u update ;                 ( -- : set block set as dirty ) 
+( : w words ; )
+( : yank pad c/l ; )
+( : c [line] yank >r swap r> cmove ; )
+( : y [line] yank cmove ; )
+( : ct swap y c ; )
+( : xa [line] c/l evaluate ; )
+( : sw 2dup y [line] swap [line] swap c/l cmove c ; )
 [last] [t] editor-voc t! 0 tlast meta!
 
 \ 
@@ -3160,7 +3237,7 @@ checksum $C tcells t! \ Calculate image CRC
 finished
 bye
 
-# APPENDIX
+# Appendix
 
 ## The Virtual Machine
 
@@ -3210,7 +3287,7 @@ The first six locations are used for:
 The eForth image maps things in the following way. The variable stack starts 
 at the beginning of block 17 and grows upwards, the return stack starts at 
 the end of block 63 and grows downward. The trap handler is set to a call
-a word called '-throw', defined as ": -throw negate throw ;". The virtual
+a word called *-throw*, defined as ": -throw negate throw ;". The virtual
 machine image size is assumed to be the maximum allowable value of "$8000".
 The virtual machine memory size is specified in cells, not bytes, "$8000" is
 the maximum number of cells that a 16-bit value can address if the lowest bit
@@ -3269,7 +3346,7 @@ some operations trap on error (U/MOD, /MOD).
 	|  3  | T@       | Load from address    |
 	|  4  | NtoT     | Store to address     |
 	|  5  | T+N      | Double cell addition |
-	|  6  | T\*N     | Double cell multiply |
+	|  6  | T*N      | Double cell multiply |
 	|  7  | T&N      | Bitwise AND          |
 	|  8  | TorN     | Bitwise OR           |
 	|  9  | T^N      | Bitwise XOR          |
@@ -3277,8 +3354,8 @@ some operations trap on error (U/MOD, /MOD).
 	| 11  | T--      | Decrement            |
 	| 12  | T=0      | Equal to zero        |
 	| 13  | T=N      | Equality test        |
-	| 14  | Nu&lt;T  | Unsigned comparison  |
-	| 15  | N&lt;T   | Signed comparison    |
+	| 14  | Nu<T     | Unsigned comparison  |
+	| 15  | N<T      | Signed comparison    |
 	| 16  | NrshiftT | Logical Right Shift  |
 	| 17  | NlshiftT | Logical Left Shift   |
 	| 18  | SP@      | Depth of stack       |
@@ -3304,9 +3381,9 @@ would be difficult to achieve in hardware is easy enough to do in software.
 	| over   | N        | T2N |     |     |     |     | +1  |
 	| invert | ~T       |     |     |     |     |     |     |
 	| um+    | T+N      |     |     |     |     |     |     |
-	| \+     | T+N      |     |     | N2T |     |     | -1  |
-	| um\*   | T\*N     |     |     |     |     |     |     |
-	| \*     | T\*N     |     |     | N2T |     |     | -1  |
+	| +      | T+N      |     |     | N2T |     |     | -1  |
+	| um*    | T*N      |     |     |     |     |     |     |
+	| *      | T*N      |     |     | N2T |     |     | -1  |
 	| swap   | N        | T2N |     |     |     |     |     |
 	| nip    | T        |     |     |     |     |     | -1  |
 	| drop   | N        |     |     |     |     |     | -1  |
@@ -3319,8 +3396,8 @@ would be difficult to achieve in hardware is easy enough to do in software.
 	| rshift | NrshiftT |     |     |     |     |     | -1  |
 	| lshift | NlshiftT |     |     |     |     |     | -1  |
 	| =      | T=N      |     |     |     |     |     | -1  |
-	| u&lt;  | Nu&lt;T  |     |     |     |     |     | -1  |
-	| &lt;   | N&lt;T   |     |     |     |     |     | -1  |
+	| u<     | Nu<T     |     |     |     |     |     | -1  |
+	| <      | N<       |     |     |     |     |     | -1  |
 	| and    | T&N      |     |     |     |     |     | -1  |
 	| xor    | T^N      |     |     |     |     |     | -1  |
 	| or     | T|N      |     |     |     |     |     | -1  |
@@ -3632,6 +3709,245 @@ This is a list of Error codes, not all of which are used by the application.
 	}
 	#endif
 
+## ANSI Terminal Escape Sequence Word Set
+
+The following word set implements [ANSI escape codes][].
+
+	variable <page>
+	variable <at-xy>
+
+	: page <page> @ execute ;   ( -- : page screen )
+	: at-xy <at-xy> @ execute ; ( x y -- : set cursor position )
+
+	: CSI $1b emit [char] [ emit ; 
+	: 10u. base @ >r decimal 0 <# #s #> type r> base ! ; ( u -- )
+	: ansi swap CSI 10u. emit ; ( n c -- )
+	: (at-xy) CSI 10u. $3b emit 10u. [char] H emit ; ( x y -- )
+	: (page) 2 [char] J ansi 1 1 at-xy ; ( -- )
+	: sgr [char] m ansi ; ( -- )
+
+	1 constant red 2 constant green 4 constant blue
+
+	: color $1e + sgr ;
+
+	' (at-xy) <at-xy> !
+	' (page)  <page>  !
+
+Usage is quite simple:
+
+	red color sgr  ( set terminal text color to red )
+	page           ( clear screen, set cursor to position 1,1 )
+	$8 $4 at-xy    ( set cursor to position column 8, row 4 )
+	0 sgr          ( reset terminal attributes, color goes back to normal )
+
+Go online for more examples.
+
+## Sokoban
+
+This is a game of [Sokoban][], to play, type:
+
+	cat sokoban.fth /dev/stdin | ./embed eforth.blk new.blk
+
+On the command line. Four maps are provided, more can be found online at
+<https://github.com/begoon/sokoban-maps>, where the four maps were found.
+
+
+	0 <ok> !
+	only forth definitions hex
+	\ NB. 'blk' has the last block retrieved by 'block', not 'load' in this Forth
+
+	variable sokoban-wordlist
+	sokoban-wordlist +order definitions
+
+	\ @todo change character set
+	$20    constant maze
+	char X constant wall
+	char * constant boulder
+	char . constant off
+	char & constant on
+	char @ constant player
+	char ~ constant player+ ( player + off pad )
+	$10    constant l/b     ( lines   per block )
+	$40    constant c/b     ( columns per block )
+	     7 constant bell    ( bell character )
+
+	variable position  ( current player position )
+	variable moves     ( moves made by player )
+
+	( used to store rule being processed )
+	create rule 3 c, 0 c, 0 c, 0 c, 
+
+	: n1+ swap 1+ swap ; ( n n -- n n )
+	: match              ( a a -- f )
+	  n1+ ( replace with umin of both counts? )
+	  count 
+	  for aft  
+	    count rot count rot <> if 2drop rdrop 0 exit then
+	  then next 2drop -1 ;
+
+	: beep bell emit ; ( -- )
+	: ?apply           ( a a a -- a, R: ? -- ?| )
+	  >r over swap match if drop r> rdrop exit then rdrop ;
+
+	: apply ( a -- a )
+	 $" @ "  $"  @"  ?apply 
+	 $" @."  $"  ~"  ?apply
+	 $" @* " $"  @*" ?apply
+	 $" @*." $"  @&" ?apply
+	 $" @&." $"  ~&" ?apply
+	 $" @& " $"  ~*" ?apply
+	 $" ~ "  $" .@"  ?apply
+	 $" ~."  $" .~"  ?apply
+	 $" ~* " $" .@*" ?apply
+	 $" ~*." $" .@&" ?apply
+	 $" ~&." $" .~&" ?apply
+	 $" ~& " $" .~*" ?apply beep ;
+
+	: pack ( c0...cn b n -- )
+	  2dup swap c! for aft 1+ tuck c! then next drop ; 
+
+	: locate ( b u c -- u f )
+	  >r
+	  begin
+	    ?dup
+	  while
+	    1- 2dup + c@ r@ = if nip rdrop -1 exit then
+	  repeat
+	  rdrop
+	  drop
+	  0 0 ; 
+
+	: 2* 1 lshift ; ( u -- )
+	: relative swap c/b * + + ( $3ff and ) ; ( +x +y pos -- pos )
+	: +position position @ relative ; ( +x +y -- pos )
+	: double 2* swap 2* swap ;  ( u u -- u u )
+	: arena blk @ block b/buf ; ( -- b u )
+	: >arena arena drop + ;     ( pos -- a )
+	: fetch                     ( +x +y -- a a a )
+	  2dup   +position >arena >r
+	  double +position >arena r> swap
+	  position @ >arena -rot ;
+	: rule@ fetch c@ rot c@ rot c@ rot ; ( +x +y -- c c c )
+	: 3reverse -rot swap ;               ( 1 2 3 -- 3 2 1 )
+	: rule! rule@ 3reverse rule 3 pack ; ( +x +y -- )
+	: think 2dup rule! rule apply >r fetch r> ; ( +x +y --a a a a )
+	: count! count rot c! ;              ( a a -- )
+
+	\ 'act' could be made to be more elegant, but it works, it 
+	\ handles rules of length 2 and length 3
+	: act ( a a a a -- )
+	  count swap >r 2 = 
+	  if 
+	     drop swap r> count! count! 
+	  else 
+	     3reverse r> count! count! count! 
+	  then drop ;
+
+	: #boulders ( -- n )
+	   0 arena 
+	   for aft 
+	     dup c@ boulder = if n1+ then 
+	     1+ 
+	   then next drop ; 
+	: .boulders  ." BOLDERS: " #boulders u. cr ; ( -- )
+	: .moves    ." MOVES: " moves    @ u. cr ; ( -- )
+	: .help     ." WASD - MOVEMENT" cr ." H    - HELP" cr ; ( -- )
+	: .maze blk @ list ;                  ( -- )
+	: show ( page cr ) .maze .boulders .moves .help ; ( -- )
+	: solved? #boulders 0= ;               ( -- )
+	: finished? solved? if 1 throw then ; ( -- )
+	: instructions ;                      ( -- )
+	: where >r arena r> locate ;          ( c -- u f )
+	: player? player where 0= if drop player+ where else -1 then ; 
+	: player! player? 0= throw position ! ; ( -- )
+	: start player! 0 moves ! ;           ( -- )
+	: .winner show cr ." SOLVED!" cr ;    ( -- )
+	: .quit cr ." Quitter!" cr ;          ( -- )
+	: finish 1 = if .winner exit then .quit ; ( n -- )
+	: rules think act player! ;           ( +x +y -- )
+	: +move 1 moves +! ;                  ( -- )
+	: ?ignore over <> if rdrop then ;     ( c1 c2 --, R: x -- | x )
+	: left  [char] a ?ignore -1  0 rules +move ; ( c -- c )
+	: right [char] d ?ignore  1  0 rules +move ; ( c -- c )
+	: up    [char] w ?ignore  0 -1 rules +move ; ( c -- c )
+	: down  [char] s ?ignore  0  1 rules +move ; ( c -- c )
+	: help  [char] h ?ignore instructions ; ( c -- c )
+	: end  [char] q ?ignore drop 2 throw ; ( c -- | c, R ? -- | ? )
+	: default drop ;  ( c -- )
+	: command up down left right help end default finished? ;
+	: maze! block drop ; ( k -- )
+	: input key ;        ( -- c )
+
+	sokoban-wordlist -order definitions
+	sokoban-wordlist +order
+
+	: sokoban ( k -- )
+	  maze! start 
+	  begin 
+	    show input ' command catch ?dup 
+	  until finish ;
+
+	$18 maze!
+	only forth definitions
+
+	editor decimal z blk @
+	 1 i            XXXXX             
+	 2 i            X   X             
+	 3 i            X*  X             
+	 4 i          XXX  *XXX           
+	 5 i          X  *  * X           
+	 6 i        XXX X XXX X     XXXXXX
+	 7 i        X   X XXX XXXXXXX  ..X
+	 8 i        X *  *             ..X
+	 9 i        XXXXX XXXX X@XXXX  ..X
+	10 i            X      XXX  XXXXXX
+	11 i            XXXXXXXX          
+	12 i        
+	dup 1+ l z
+	 1 i       XXXXXXXXXXXX  
+	 2 i       X..  X     XXX
+	 3 i       X..  X *  *  X
+	 4 i       X..  X*XXXX  X
+	 5 i       X..    @ XX  X
+	 6 i       X..  X X  * XX
+	 7 i       XXXXXX XX* * X
+	 8 i         X *  * * * X
+	 9 i         X    X     X
+	10 i         XXXXXXXXXXXX
+	11 i       
+	dup 1+ l z
+	 1 i               XXXXXXXX 
+	 2 i               X     @X 
+	 3 i               X *X* XX 
+	 4 i               X *  *X  
+	 5 i               XX* * X  
+	 6 i       XXXXXXXXX * X XXX
+	 7 i       X....  XX *  *  X
+	 8 i       XX...    *  *   X
+	 9 i       X....  XXXXXXXXXX
+	10 i       XXXXXXXX         
+	dup 1+ l z
+	 1 i                     XXXXXXXX
+	 2 i                     X  ....X
+	 3 i          XXXXXXXXXXXX  ....X
+	 4 i          X    X  * *   ....X
+	 5 i          X ***X*  * X  ....X
+	 6 i          X  *     * X  ....X
+	 7 i          X ** X* * *XXXXXXXX
+	 8 i       XXXX  * X     X       
+	 9 i       X   X XXXXXXXXX       
+	10 i       X    *  XX            
+	11 i       X **X** @X            
+	12 i       X   X   XX            
+	13 i       XXXXXXXXX             
+	drop
+	q hex 
+
+	.( Type '# sokoban' to play, where '#' is a block number ) cr
+	.( For example "$18 sokoban" ) cr
+
+Follow the on screen instructions to play a game.
+
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html
@@ -3646,6 +3962,7 @@ This is a list of Error codes, not all of which are used by the application.
 [meta.fth]: meta.fth
 [DOS]: https://en.wikipedia.org/wiki/DOS
 [8086]: https://en.wikipedia.org/wiki/Intel_8086
+[LZW]: https://www.cs.duke.edu/csed/curious/compression/lzw.html
 [LZSS]: https://en.wikipedia.org/wiki/Lempel%E2%80%93Ziv%E2%80%93Storer%E2%80%93Szymanski
 [lzss.c]: https://oku.edu.mie-u.ac.jp/~okumura/compression/lzss.c
 [Run Length Encoding]: https://en.wikipedia.org/wiki/Run-length_encoding
@@ -3656,5 +3973,18 @@ This is a list of Error codes, not all of which are used by the application.
 [Cross Compiler]: https://en.wikipedia.org/wiki/Cross_compiler
 [eForth written for the J1]: https://github.com/samawati/j1eforth
 [CPU written in VHDL]: https://github.com/howerj/forth-cpu
+[ANS Forth standard]: https://www.complang.tuwien.ac.at/forth/dpans-html/dpansa9.htm
+[Base-36]: https://en.wikipedia.org/wiki/Base36
+[Base-64]: https://en.wikipedia.org/wiki/Base64
+[ASCII]: https://en.wikipedia.org/wiki/ASCII
+[strcmp]: http://www.cplusplus.com/reference/cstring/strcmp/
+[Jones Forth]: https://rwmj.wordpress.com/2010/08/07/jonesforth-git-repository/
+[Subroutine Threaded]: https://en.wikipedia.org/wiki/Threaded_code
+[UTF-8]: https://en.wikipedia.org/wiki/UTF-8
+[Block Word Set]: https://www.taygeta.com/forth/dpans7.htm
+[File Access Word Set]: https://www.taygeta.com/forth/dpans11.htm
+[Retro Forth]: http://retroforth.org/pages/?PortsOfRetroEditor
+[ANSI escape codes]: https://en.wikipedia.org/wiki/ANSI_escape_code
+[Sokoban]: https://en.wikipedia.org/wiki/Sokoban
 
 <style type="text/css">body{margin:40px auto;max-width:850px;line-height:1.6;font-size:16px;color:#444;padding:0 10px}h1,h2,h3{line-height:1.2}table {width: 100%; border-collapse: collapse;}table, th, td{border: 1px solid black;}code { color: #091992; } </style>

@@ -111,34 +111,6 @@ more +order definitions
 \   compile (loop) dup , compile (unloop) cell- here 1 rshift swap ! ; 
 \     compile-only  immediate
 
-\ ## Terminal Handling
-
-variable <page>
-variable <at-xy>
-
-: not-implemented -$f throw ;
-' not-implemented <page>  !
-' not-implemented <at-xy> !
-
-: page <page> @ execute ;   ( -- : page screen )
-: at-xy <at-xy> @ execute ; ( x y -- : set cursor position )
-
-: CSI $1b emit [char] [ emit ; 
-: 10u. base @ >r decimal 0 <# #s #> type r> base ! ; ( u -- )
-: ansi swap CSI 10u. emit ; ( n c -- )
-: (at-xy) CSI 10u. $3b emit 10u. [char] H emit ; ( x y -- )
-: (page) 2 [char] J ansi 1 1 at-xy ; ( -- )
-: sgr [char] m ansi ; ( -- )
-
-1 constant red 2 constant green 4 constant blue
-
-: color $1e + sgr ;
-
-
-' (at-xy) <at-xy> !
-' (page)  <page>  !
-
-
 \ ## Dynamic Memory Allocation
 \ alloc.fth
 \  Dynamic Memory Allocation package

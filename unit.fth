@@ -29,6 +29,7 @@
 \ '}T' is reached so any exceptions can be caught and dealt with.
 \
 
+
 \ A few generic helper words will be built, to check if a word is defined, or
 \ not, and to conditionally execute a line.
 : undefined? token find nip 0= ; ( "name", -- f: Is word not in search order? )
@@ -670,7 +671,7 @@ hex
         one f+ fsq r> + ;
 : fexp  x4 f* exp ;
 : get   bl word dup 1+ c@ [char] - = tuck -
-        0 0 rot ( convert drop ) >number 2drop -+ ;
+        0 0 rot ( convert drop ) count >number nip 0<> throw -+ ;
 : e     f get >r r@ abs 13301 4004 */mod
         >r float 4004 float f/ exp r> +
         r> 0< if f/ else f* then ;
@@ -689,13 +690,13 @@ decimal
 20 float f. cr
 20 float 3 float f- f. cr
 25 float f2/ f2/ f. cr
-\ 12 float fsq f. cr
+12 float fsq f. cr
 2 float 3 float f+ f. cr
 2 float 4 float f* f. cr
 400.0 f 2 float f/ f. cr
 10.3 f f. cr
 6 float f. cr
--12.34 f f. cr
+-12.34 f e. cr
 2 float 4 float exp f. cr
 save
 

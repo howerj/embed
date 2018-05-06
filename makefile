@@ -46,9 +46,6 @@ run: ${FORTH} ${EFORTH}
 cross-run: cross
 	${DF}${FORTH} ${META1} ${TEMP}
 
-cross-tests: cross unit.fth
-	${DF}${FORTH} ${META1} ${TEMP} unit.fth
-
 tests: ${FORTH} ${META1} unit.fth
 	${DF}${FORTH} ${META1} ${TEMP} unit.fth
 

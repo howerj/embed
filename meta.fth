@@ -576,7 +576,7 @@ a: return ( -- : Compile a return into the target )
 : next tdoNext fetch-xt [a] call t, update-fence ; ( a -- )
 : exit exit, ;                               ( -- )
 : ' [t] literal ;                            ( "name", -- )
-\ @bug maximum string length is 32 bytes, not 255 as it should be.
+\ @bug maximum string length is 64 bytes, not 255 as it should be.
 : ." tdoPrintString fetch-xt [a] call $literal ; ( "string", -- )
 : $" tdoStringLit   fetch-xt [a] call $literal ; ( "string", -- )
 
@@ -1100,12 +1100,12 @@ h: d0= or 0= ;                         ( d -- t )
 h: dnegate invert >r invert 1 um+ r> + ; ( d -- d )
 h: d+  >r swap >r um+ r> + r> + ;      ( d d -- d )
 ( : 2swap >r -rot r> -rot ; ( n1 n2 n3 n4 -- n3 n4 n1 n2 )
-\ : d< rot   
-\     2dup
-\     > if = nip nip if 0 exit then [-1] exit then 2drop u< ; ( d -- f )
-( : d>  2swap d< ;                      ( d -- t )
-( : du> 2swap du< ;                     ( d -- t )
-( : d= rot xor -rot xor xor 0= ;      ( d d -- t )
+( : d< rot   )
+(     2dup   )
+(     > if = nip nip if 0 exit then [-1] exit then 2drop u< ; ( d -- f )
+( : d>  2swap d< ;                     ( d -- t )
+( : du> 2swap du< ;                    ( d -- t )
+( : d=  rot = -rot = and ;            ( d d -- t )
 ( : d- dnegate d+ ;                   ( d d -- d )
 ( : dabs  s>d if dnegate exit then ;  ( d -- ud )
 ( : even first-bit 0= ;               ( u -- t )
@@ -1546,7 +1546,7 @@ h: radix base@ dup 2 - $22 u> if decimal $28 -throw exit then ; ( -- u )
 \ they do not propagate.
 
 : hold  hld @ 1- dup hld ! c! fallthrough;             ( c -- )
-h: ?hold pad $100 - hld @ u> if $11 -throw exit then ; ( -- )
+h: ?hold pad $80 - hld @ u> if $11 -throw exit then ; ( -- )
 h: extract dup>r um/mod rxchg um/mod r> rot ;          ( ud ud -- ud u )
 h: digit 9 over < 7 and + [char] 0 + ;                 ( u -- c )
 
@@ -1669,7 +1669,7 @@ h: down cell negate and ; ( a -- a : align down )
 : pack$ ( b u a -- a ) \ null fill
   aligned dup>r over
   dup down 
-  - over+ zero 2dup c! 1+ swap cmove r> ;
+  - over+ zero 2dup c! 1+ swap ( 2dup 0 fill ) cmove r> ;
 
 : =string ( a1 u2 a1 u2 -- t : string equality )
   >r swap r> ( a1 a2 u1 u2 )
@@ -2046,7 +2046,7 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
 h: negative? ( b u -- b u t : is >number negative? )
    string@ [char] - = if +string [-1] exit then 0x0000 ;
 
-h: base? ( b u -- )
+h: base? ( b u -- b u )
   string@ [char] $ = if +string hex     exit then ( $hex )  
   string@ [char] # = if +string decimal exit then ; ( #decimal )
 
@@ -2068,7 +2068,7 @@ h: number? ( b u -- d f : is number? )
   base?
   0 -rot 0 -rot 
   >number
-  string@ [char] . = if +string
+  string@ [char] . = over 0<> and if +string
     dup>r >number nip if 0 rdrop else r> dpl ! [-1] then 
   else 
     nip 0= 

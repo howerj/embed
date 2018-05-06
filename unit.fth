@@ -129,6 +129,18 @@ only forth definitions test +order
 hide test
 only forth definitions
 
+: +- 0< if negate then ; ( n n -- n : copy sign )
+
+: sm/rem ( dl dh nn -- rem quo: symmetric division )
+  over >r >r          ( dl dh nn -- dl dh,      R: -- dh nn )
+  dabs r@ abs um/mod  ( dl dh    -- rem quo,    R: dh nn -- dh nn )
+  r> r@ xor +- swap r> +- swap ;
+
+: m* 2dup xor 0< >r abs swap abs um* r> if dnegate then ; ( n n -- d )
+
+: */mod ( a b c -- rem a*b/c : use double precision intermediate value )
+    >r m* r> sm/rem ;
+
 \ We can define some more functions to test to make sure the arithmetic
 \ functions, control structures and recursion works correctly, it is
 \ also handy to have these functions documented somewhere in case they come
@@ -137,7 +149,7 @@ only forth definitions
 : permutations over swap - factorial swap factorial swap / ; ( u1 u2 -- u )
 : combinations dup dup permutations >r permutations r> / ;   ( u1 u2 -- u )
 : gcd dup if tuck mod recurse exit then drop ;               ( u1 u2 -- u )
-: lcm 2dup gcd / * ;                                         ( u1 u2 -- u )
+: lcm 2dup gcd / * ; \ Least Common Multiple                 ( u1 u2 -- u )
 : square dup * ;                                             ( u -- u )
 : limit rot min max ;                                        ( u hi lo -- u )
 : sum 1- 0 $7fff limit for aft + then next ;                 ( a0...an n -- n )
@@ -159,7 +171,7 @@ only forth definitions
   dup 0= if -b throw then ( logarithm of zero is an error )
   0 swap
   begin
-    swap 1+ swap rdup r> / dup 0= ( keep dividing until 'u' is 0 )
+    swap 1+ swap r@ / dup 0= ( keep dividing until 'u' is 0 )
   until
   drop 1- rdrop ;
 
@@ -265,13 +277,133 @@ only forth definitions
 \ : -m/mod over 0< if dup    >r +       r> then u/mod ;         ( d +n - r q )
 \ :  m/     dup 0< if negate >r dnegate r> then -m/mod swap drop ; ( d n - q )
 
-.( BEGIN FORTH TEST SUITE ) cr
-.( BASE to decimal ) cr
+\ ========================= FLOATING POINT CODE ===============================
+\ This floating point library has been adapted from one found in
+\ Forth Dimensions Vol.2, No.4 1986, it should be free to use so long as the
+\ following copyright is left in the code:
+\ 
+\ FORTH-83 FLOATING POINT.
+\	  ----------------------------------
+\	  COPYRIGHT 1985 BY ROBERT F. ILLYES
+\
+\		PO BOX 2516, STA. A
+\		CHAMPAIGN, IL 61820
+\		PHONE: 217/826-2734 
+\
+hex
+
+: zero  over 0= if drop 0 then ;
+: fnegate $8000 xor zero ;                  ( f -- f )
+: fabs  $7fff and ;                         ( f -- f )
+: norm  >r 2dup or
+        if begin s>d invert
+           while d2* r> 1- >r
+           repeat swap 0< - ?dup
+           if r> else $8000 r> 1+ then
+        else r> drop then ;
+
+: f2*   1+ zero ;                          ( f -- f )
+: f*    rot + $4000 - >r um* r> norm ;     ( f f -- f )
+: fsq   2dup f* ;                          ( f -- f )
+: f2/   1- zero ;                          ( f -- f )
+: um/   dup >r um/mod swap r> over 2* 1+ u< swap 0< or - ;
+: f/    rot swap - $4000 + >r
+        0 -rot 2dup u<
+        if   um/ r> zero
+        else >r d2/ fabs r> um/ r> 1+
+        then ;
+
+: lalign $20 min for aft d2/ then next ;
+: ralign 1- ?dup if lalign then 1 0 d+ d2/ ;
+: fsign fabs over 0< if >r dnegate r> $8000 or then ;
+
+: f+    rot 2dup >r >r fabs swap fabs -
+        dup if s>d
+                if   rot swap  negate
+                     r> r> swap >r >r
+                then 0 swap ralign
+        then swap 0 r> r@ xor 0<
+        if   r@ 0< if 2swap then d-
+             r> fsign rot swap norm
+        else d+ if 1+ 2/ $8000 or r> 1+
+                else r> then then ;
+
+: f@ 2@ ;              ( a -- f )
+: f! 2! ;              ( f a -- )
+: falign align ;       ( -- )
+: fdup 2dup ;          ( f -- f f )
+: fswap 2swap ;        ( f1 f2 -- f2 f1 )
+: fover 2over ;        ( f1 f2 -- f1 f2 f1 )
+: fdrop 2drop ;        ( f -- )
+: f- fnegate f+ ;      ( f1 f2 -- t )
+: f< f- 0< nip ;       ( f1 f2 -- t )
+: f> fswap f< ;        ( f1 f2 -- t )
+
+( floating point input/output ) 
 decimal
 
-.s
+create precision 3 , 
+          .001 , ,        .010 , ,
+          .100 , ,       1.000 , ,
+        10.000 , ,     100.000 , ,
+      1000.000 , ,   10000.000 , ,
+    100000.000 , , 1000000.000 , ,
+
+: tens 2* cells  [ precision cell+ ] literal + 2@ ;     
+hex
+: set-precision dup 0 $8 within if precision ! exit then -$2B throw ; ( +n -- )
+: shifts fabs $4010 - s>d invert if -$2B throw then negate ;
+: f#    base @ $a <> if -$28 throw then
+	>r precision @ tens drop um* r> shifts
+        ralign precision @ ?dup if for aft # then next
+        [char] . hold then #s rot sign ;
+
+: f.    tuck <# f# #> type space ;
+: d>f $4020 fsign norm ;
+: point dpl @ ;
+: f     d>f point tens d>f f/ ;    ( d -- f )
+: fconstant f 2constant ;          ( "name" , f --, Run Time: -- f )
+: s>f   s>d d>f ;                  ( n -- f )
+: -+    drop swap 0< if negate then ;
+: fix   tuck 0 swap shifts ralign -+ ;
+: f>s   tuck 0 swap shifts lalign -+ ; ( f -- n )
+
+
+1.      fconstant one decimal
+34.6680 fconstant x1
+-57828. fconstant x2
+2001.18 fconstant x3
+1.4427  fconstant x4
+
+: exp   2dup f>s dup >r s>f f-
+        f2* x2 2over fsq x3 f+ f/
+        2over f2/ f-     x1 f+ f/
+        one f+ fsq r> + ;
+: fexp  x4 f* exp ;
+: get   bl word dup 1+ c@ [char] - = tuck -
+        0 0 rot ( convert drop ) count >number nip 0<> throw -+ ;
+: e     f get >r r@ abs 13301 4004 */mod
+        >r s>f 4004 s>f f/ exp r> +
+        r> 0< if f/ else f* then ;
+
+: e.    tuck fabs 16384 tuck -
+        4004 13301 */mod >r
+        s>f 4004 s>f f/ exp f*
+        2dup one f<
+        if 10 s>f f* r> 1- >r then
+        <# r@ abs 0 #s r> sign 2drop
+        [char] e hold f# #>     type space ;
+
+\ ========================= FLOATING POINT CODE ===============================
+
+
+.( BEGIN FORTH TEST SUITE ) cr
+.( DECIMAL BASE ) cr
+decimal
+
+
 T{  1. ->  1 0 }T
-\ T{ -2. -> -2 -1 }T
+\ T{ -2. -> .s -2 -1 }T
 \ T{ : RDL1 6. ; RDL1 -> 6 0 }T
 \ T{ : RDL2 -4. ; RDL2 -> -4 -1 }T
 
@@ -429,7 +561,6 @@ T{ s3 -123 <#> =string ->  0 }T
 T{ s3   99 <#> =string ->  0 }T
 
 hide s1 hide s2 hide s3
-hide <#>
 
 T{ 0 ?dup -> 0 }T
 T{ 3 ?dup -> 3 3 }T
@@ -479,7 +610,6 @@ T{ $ffff     1 um* -> $ffff     0 }T
 T{ $ffff     2 um* -> $fffe     1 }T
 T{ $1004  $100 um* ->  $400   $10 }T
 T{     3     4 um* ->    $c     0 }T
-
 
 T{     1     1   < ->  0 }T
 T{     1     2   < -> -1 }T
@@ -566,19 +696,6 @@ defined? d< ?\ T{  0 -1  0  1 d< -> -1 }T
 defined? d< ?\ T{ $ffff -1  0  1 d< -> -1 }T
 defined? d< ?\ T{ $ffff -1  0  -1 d< -> 0 }T
 
-: +- 0< if negate then ; ( n n -- n : copy sign )
-
-: sm/rem ( dl dh nn -- rem quo: symmetric division )
-  over >r >r          ( dl dh nn -- dl dh,      R: -- dh nn )
-  dabs r@ abs um/mod  ( dl dh    -- rem quo,    R: dh nn -- dh nn )
-  r> r@ xor +- swap r> +- swap ;
-
-
-: m* 2dup xor 0< >r abs swap abs um* r> if dnegate then ; ( n n -- d )
-
-: */mod ( a b c -- rem a*b/c : use double precision intermediate value )
-    >r m* r> sm/rem ;
-
 $FFFF constant min-int 
 $7fff constant max-int
 $FFFF constant 1s
@@ -614,122 +731,6 @@ T{ min-int max-int m* min-int sm/rem ->  0 max-int }T
 T{ min-int max-int m* max-int sm/rem ->  0 min-int }T
 T{ max-int max-int m* max-int sm/rem ->  0 max-int }T
 
-\ ========================= FLOATING POINT CODE ===============================
-\ This floating point library has been adapted from one found in
-\ Forth Dimensions Vol.2, No.4 1986, it should be free to use so long as the
-\ following copyright is left in the code:
-\ 
-\ FORTH-83 FLOATING POINT.
-\	  ----------------------------------
-\	  COPYRIGHT 1985 BY ROBERT F. ILLYES
-\
-\		PO BOX 2516, STA. A
-\		CHAMPAIGN, IL 61820
-\		PHONE: 217/826-2734 
-\
-hex
-
-: zero  over 0= if drop 0 then ;
-: fnegate $8000 xor zero ;                  ( f -- f )
-: fabs  $7fff and ;                         ( f -- f )
-: norm  >r 2dup or
-        if begin s>d invert
-           while d2* r> 1- >r
-           repeat swap 0< - ?dup
-           if r> else $8000 r> 1+ then
-        else r> drop then ;
-
-: f2*   1+ zero ;                          ( f -- f )
-: f*    rot + $4000 - >r um* r> norm ;     ( f f -- f )
-: fsq   2dup f* ;                          ( f -- f )
-: f2/   1- zero ;                          ( f -- f )
-: um/   dup >r um/mod swap r> over 2* 1+ u< swap 0< or - ;
-: f/    rot swap - $4000 + >r
-        0 -rot 2dup u<
-        if   um/ r> zero
-        else >r d2/ fabs r> um/ r> 1+
-        then ;
-
-: lalign $20 min for aft d2/ then next ;
-: ralign 1- ?dup if lalign then 1 0 d+ d2/ ;
-: fsign fabs over 0< if >r dnegate r> $8000 or then ;
-
-: f+    rot 2dup >r >r fabs swap fabs -
-        dup if s>d
-                if   rot swap  negate
-                     r> r> swap >r >r
-                then 0 swap ralign
-        then swap 0 r> r@ xor 0<
-        if   r@ 0< if 2swap then d-
-             r> fsign rot swap norm
-        else d+ if 1+ 2/ $8000 or r> 1+
-                else r> then then ;
-
-: f@ 2@ ;              ( a -- f )
-: f! 2! ;              ( f a -- )
-: falign align ;       ( -- )
-: fdup 2dup ;          ( f -- f f )
-: fswap 2swap ;        ( f1 f2 -- f2 f1 )
-: fover 2over ;        ( f1 f2 -- f1 f2 f1 )
-: fdrop 2drop ;        ( f -- )
-: f- fnegate f+ ;      ( f1 f2 -- t )
-: f< f- 0< swap drop ; ( f1 f2 -- t )
-: f> fswap f< ;        ( f1 f2 -- t )
-
-( floating point input/output ) 
-decimal
-
-create precision 3 , 
-            1. , ,         10. , ,
-          100. , ,       1000. , ,
-        10000. , ,     100000. , ,
-      1000000. , ,   10000000. , ,
-    100000000. , , 1000000000. , ,
-
-: tens 2* cells  [ precision cell+ ] literal + 2@ ;     
-hex
-: set-precision dup 0 $b within if precision ! exit then -$2B throw ; ( +n -- )
-: shifts fabs $4010 - s>d invert if -$2B throw then negate ;
-: f#    base @ >r decimal >r precision @ tens drop um* r> shifts
-        ralign precision @ ?dup if for aft # then next
-        [char] . hold then #s rot sign r> base ! ;
-: f.    tuck <# f# #> type space ;
-: d>f $4020 fsign norm ;
-: point dpl @ ;
-: f     d>f point tens d>f f/ ;    ( d -- f )
-: fconstant f 2constant ;          ( "name" , f --, Run Time: -- f )
-: s>f   s>d d>f ;                  ( n -- f )
-: -+    drop swap 0< if negate then ;
-: fix   tuck 0 swap shifts ralign -+ ;
-: f>s   tuck 0 swap shifts lalign -+ ; ( f -- n )
-
-
-1.      fconstant one decimal
-34.6680 fconstant x1
--57828. fconstant x2
-2001.18 fconstant x3
-1.4427  fconstant x4
-
-: exp   2dup f>s dup >r s>f f-
-        f2* x2 2over fsq x3 f+ f/
-        2over f2/ f-     x1 f+ f/
-        one f+ fsq r> + ;
-: fexp  x4 f* exp ;
-: get   bl word dup 1+ c@ [char] - = tuck -
-        0 0 rot ( convert drop ) count >number nip 0<> throw -+ ;
-: e     f get >r r@ abs 13301 4004 */mod
-        >r s>f 4004 s>f f/ exp r> +
-        r> 0< if f/ else f* then ;
-
-: e.    tuck fabs 16384 tuck -
-        4004 13301 */mod >r
-        s>f 4004 s>f f/ exp f*
-        2dup one f<
-        if 10 s>f f* r> 1- >r then
-        <# r@ abs 0 #s r> sign 2drop
-        [char] e hold f# #>     type space ;
-
-\ ========================= FLOATING POINT CODE ===============================
 decimal
 
 3 set-precision
@@ -737,16 +738,26 @@ decimal
 20 s>f 3 s>f f- f. cr
 25 s>f f2/ f2/ f. cr
 12 s>f fsq f. cr
+
+
 2 s>f 3 s>f f+ f. cr
 2 s>f 4 s>f f* f. cr
 400.0 f 2 s>f f/ f. cr
 10.3 f f. cr
 6 s>f f. cr
 -12.34 f e. cr
-2 s>f 4 s>f exp f. cr
-
 -1 s>f 2 s>f f< . cr
 2 s>f 1 s>f f< . cr
+9 s>f exp f. cr
+
+T{ -1  s>f f>s       -> -1 }T
+T{ 123 s>f f>s       -> 123 }T
+T{ 12  s>f 13 s>f f< -> -1 }T
+T{ -4  s>f -9 s>f f< ->  0 }T
+T{ 12  s>f fsq f>s   -> 144 }T
+T{ 400 s>f 2 s>f f/ f>s -> 200 }T
+T{ 3.0 f 9.00 f f+ f>s -> 12 }T
+\ T{ 3.0 f 9. f f+ f>s -> 12 }T
 
 save
 

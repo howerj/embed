@@ -81,9 +81,9 @@
 \ to execute Forth primitives directly. The CPU and Forth interpreter
 \ themselves have their own sources, which all makes for a confusing pedigree.
 \ The CPU, called the H2, was derived from a well known Forth CPU written
-\ in Verilog, called the [J1 CPU][], and the Forth running on the H2 comes 
+\ in [Verilog][], called the [J1 CPU][], and the Forth running on the H2 comes 
 \ from an adaption of [eForth written for the J1][]  and 
-\ from 'The Zen of eForth' by C. H. Ting.
+\ from 'The Zen of eForth' by C. H. Ting. 
 \
 \ Instead of a metacompiler written in Forth a cross compiler for a Forth like
 \ language was made, which could create an image readable by both the
@@ -95,7 +95,8 @@
 \ machine, a binary image containing a Forth interpreter, and this metacompiler
 \ with the meta-compiled Forth. These changes and the discarding of the cross
 \ compiler written in C can be seen in the Git repository this project comes
-\ in (<https://github.com/howerj/embed>).
+\ in (<https://github.com/howerj/embed>). The VM here is no longer compatible
+\ with the [H2 CPU][] it was derived from.
 \
 \ The project, documentation and Forth images are under an [MIT license][].
 \
@@ -250,6 +251,8 @@ $4400 constant (sp0)   ( start of variable stack )
    ." SAVING... " save-hex ." DONE! " cr
    ." STACK> " .s cr ;
 
+\ ### The Assembler
+
 : [a] ( "name" -- : find word and compile an assembler word )
   token assembler.1 search-wordlist 0= abort" [a]? "
   cfa compile, ; immediate
@@ -308,8 +311,8 @@ a: #rp!    $1500 a; ( set return stack depth )
 a: #save   $1600 a; ( Save memory disk: n = start, T = end, T' = error )
 a: #tx     $1700 a; ( Transmit Byte: t = byte, T' = error )
 a: #rx     $1800 a; ( Block until byte received, T = byte/error )
-a: #u/mod  $1900 a; ( Remainder/Divide: )
-a: #/mod   $1A00 a; ( Signed Remainder/Divide: )
+a: #um/mod $1900 a; ( Remainder/Divide: Double Cell )
+a: #/mod   $1A00 a; ( Signed Remainder/Divide: Single Cell )
 a: #bye    $1B00 a; ( Exit Interpreter )
 
 \ The Stack Delta Operations occur after the ALU operations have been executed.
@@ -335,7 +338,7 @@ a: t->n    $0080 or a; ( Set Next on Variable Stack to Top on Variable Stack )
 \ comprise of an ALU operation, stack effects and register move bits. Function
 \ returns are part of the ALU operation instruction set.
 
-: ?set dup $E000 and abort" argument too large " ;
+: ?set dup $E000 and abort" argument too large " ; ( u -- )
 a: branch  2/ ?set [a] #branch  or t, a; ( a -- : an Unconditional branch )
 a: ?branch 2/ ?set [a] #?branch or t, a; ( a -- : Conditional branch )
 a: call    2/ ?set [a] #call    or t, a; ( a -- : Function call )
@@ -351,6 +354,8 @@ a: literal ( n -- : compile a number into target )
 a: return ( -- : Compile a return into the target )
    [a] #t [a] r->pc [a] r-1 [a] alu a;
 
+\ ### Peep hole Optimizer
+\ 
 \ The following words implement a primitive peephole optimizer, which is not
 \ the only optimization done, but is the major one. It performs tail call
 \ optimizations and merges the return instruction with the previous instruction
@@ -401,6 +406,10 @@ a: return ( -- : Compile a return into the target )
   [a] return ;
 : exit, exit-optimize update-fence ;            ( -- )
 
+\ ### Meta-Compiler Defining Words and Control Structures
+\ 
+\
+\
 \ *compile-only* and *immediate* set bits in the latest defined word for
 \ making a word a "compile only" word (one which can only be executed from
 \ within a word definition) and "immediate" respectively. None of these
@@ -474,10 +483,23 @@ a: return ( -- : Compile a return into the target )
 \ *t;* does everything *fallthrough;* does except it also compiles an exit
 \ into the dictionary, which is how a normal word definition is terminated.
 \
+\ The words *[* and *]* could be said to change the state of the meta-compiler,
+\ even though the meta-compiler is not effected by the *state* variable. A
+\ possible improvement to the meta-compiler and to the eForth image it
+\ generates would be to vector words like *quit* so the [Outer Interpreter][]
+\ could be replaced by the meta-compiler, or at least words like *interpret*
+\ could be vectored. Another improvement would be to load and unload the
+\ meta-compilers vocabularies when the new definitions of *:* and *;* are
+\ encountered. There are man possibilities, however the improvements given
+\ by them would be minor, using the meta-compiler is mostly like writing normal
+\ Forth.
+\ 
+: literal [a] literal ;       ( u --  )
+: [ ' literal   <literal> ! ; ( -- )
+: ] ' (literal) <literal> ! ; ( -- )
 
-: literal [a] literal ;                      ( u -- )
 : h: ( -- : create a word with no name in the target dictionary )
- ' literal <literal> !
+ [compile] [
  $F00D mcreate there , update-fence does> @ [a] call ;
 
 \ *t:* does everything *h:* does but also compiles a header for that word
@@ -486,9 +508,9 @@ a: return ( -- : Compile a return into the target )
 : t: ( "name", -- : creates a word in the target dictionary )
   lookahead thead h: ;
 
-\ @warning: Only use *fallthrough* to fallthrough to words defined with *h:*.
+\ @warning: Only use *fallthrough* to fall-through to words defined with *h:*.
 : fallthrough;
-  ' (literal) <literal> !
+  [compile] ]
   $F00D <> if source type cr 1 abort" unstructured! " then ;
 : t; fallthrough; optimize if exit, else [a] return then ;
 
@@ -545,6 +567,10 @@ a: return ( -- : Compile a return into the target )
   token target.1 search-wordlist 0= abort" [t]? "
   cfa >body @ ;
 
+: [f] ( "name", -- execute word in host Forth vocabulary )
+  token forth-wordlist search-wordlist 0= abort" [f]?"
+  cfa execute ;
+
 \ @warning only use *[v]* on variables, not *tlocations*
 : [v] [t] =cell + ; ( "name", -- a )
 
@@ -556,9 +582,13 @@ a: return ( -- : Compile a return into the target )
   [last] [t] t! [t] t@ tlast meta! ;
 
 \ These words implement the basic control structures needed to make
-\ applications in the meta-compiled program, they are no immediate words
+\ applications in the meta-compiled program, there are no immediate words
 \ and they do not need to be, *t:* and *t;* do not change the interpreter
 \ state, once the actual metacompilation begins everything is command mode.
+\
+\ 'postpone' is useful to make sure that a reference to the target definition
+\ is definitely called.
+\
 
 : begin  there update-fence ;                ( -- a )
 : until  [a] ?branch ;                       ( a -- )
@@ -576,6 +606,7 @@ a: return ( -- : Compile a return into the target )
 : next tdoNext fetch-xt [a] call t, update-fence ; ( a -- )
 : exit exit, ;                               ( -- )
 : ' [t] literal ;                            ( "name", -- )
+
 \ @bug maximum string length is 64 bytes, not 255 as it should be.
 : ." tdoPrintString fetch-xt [a] call $literal ; ( "string", -- )
 : $" tdoStringLit   fetch-xt [a] call $literal ; ( "string", -- )
@@ -618,7 +649,7 @@ a: return ( -- : Compile a return into the target )
 : rx?     ]asm  #rx      t->n   d+1   alu asm[ ;
 : tx!     ]asm  #tx      n->t   d-1   alu asm[ ;
 : (save)  ]asm  #save    d-1    alu asm[ ;
-: um/mod  ]asm  #u/mod   t->n   alu asm[ ;
+: um/mod  ]asm  #um/mod  t->n   alu asm[ ;
 : /mod    ]asm  #/mod    t->n   alu asm[ ;
 : /       ]asm  #/mod    d-1    alu asm[ ;
 : mod     ]asm  #/mod    n->t   d-1   alu asm[ ;
@@ -2044,7 +2075,7 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
 \	  [char] # ' decimal base-match drop ;
 
 h: negative? ( b u -- b u t : is >number negative? )
-   string@ [char] - = if +string [-1] exit then 0x0000 ;
+  string@ [char] - = if +string [-1] exit then 0x0000 ;
 
 h: base? ( b u -- b u )
   string@ [char] $ = if +string hex     exit then ( $hex )  
@@ -2348,7 +2379,7 @@ h: eval ( -- )
 \ processes any errors that occur, if any.
 
 ( : @echo source type cr ; ( -- : can be used to monitor input )
-: quit preset [ begin query ( @echo ) ' eval catch ?error again ; ( -- )
+: quit preset postpone [ begin query ( @echo ) ' eval catch ?error again ; 
 
 \ *evaluate* is used to evaluate a string of text as if it were typed in by
 \ the programmer. It takes an address and its length, this is used in the
@@ -2484,7 +2515,7 @@ h: find-cfa find-token cfa ;                         ( -- xt, <string> )
 : ; ( ?quit ) ?check =exit , postpone [ fallthrough; immediate compile-only
 h: get-current! ?dup if get-current ! exit then ; ( -- wid )
 : : align here dup last-def ! ( "name", -- colon-sys )
-    last , token ?nul ?unique count+ cp! magic ] ;
+  last , token ?nul ?unique count+ cp! magic postpone ] ; ( NB. need postpone!)
 : begin here  ; immediate compile-only      ( -- a )
 : until chars $2000 or , ; immediate compile-only  ( a -- )
 : again chars , ; immediate compile-only ( a -- )
@@ -2506,7 +2537,7 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
 : does> compile doDoes nop ; immediate compile-only
 : variable create 0 , ;
 : constant create ' doConst make-callable here cell- ! , ;
-: :noname here-0 magic ] ;
+: :noname here-0 magic postpone ] ; ( NB. need postpone! )
 : for =>r , here ; immediate compile-only
 : next compile doNext , ; immediate compile-only
 : aft drop >mark postpone begin swap ; immediate compile-only
@@ -2758,7 +2789,7 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 \ originated on.
 \
 \ A 'Forth block' is 1024 byte long buffer which is backed by a mass
-\ storage device, which we will refer to as *disk*. Very compact programs
+\ storage device, which we will refer to as 'disk'. Very compact programs
 \ can be written that have their data stored persistently. Source can
 \ and data can be stored in blocks and evaluated, which will be described
 \ more in the 'Block editor' section of this document.
@@ -2798,7 +2829,7 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 \ *flush* calls *(save)*. *block* then only has to check the block number
 \ is within range, and return a pointer to the block number multiplied by
 \ the size of a block - so this means that this version of *block* is just
-\ an index into main memory. This is similar to how *colorForth* implements
+\ an index into main memory. This is similar to how [colorForth][] implements
 \ its block word.
 \
 : update [-1] block-dirty ! ; ( -- )
@@ -2812,6 +2843,8 @@ h: +block blk-@ + ;           ( -- )
   dup $3F u> if $23 -throw exit then
   dup blk !
   $A lshift ( <-- b/buf * ) ;
+
+( : dblock if $23 -throw exit then block ; ( ud -- )
 
 \ The block word set has the following additional words, which augment the
 \ set nicely, they are *list*, *load* and *thru*. The *list* word is used
@@ -2895,11 +2928,14 @@ h: retrieve block drop ;                ( k -- )
     2dup #line pipe line $type pipe cr 1+
   repeat .border 2drop ;
 
-\ t: index ( k1 k2 -- : show titles for block k1 to k2 )
-\  over- cr
-\  for
-\    dup 5u.r space pipe space dup 0 .line cr 1+
-\  next drop ;
+( : index ( k1 k2 -- : show titles for block k1 to k2 )
+(  over- cr )
+(  for      )
+(    dup 5u.r space pipe space dup 0 .line cr 1+ )
+(  next drop ; )
+
+( : --> blk-@ 1+ load ; immediate )
+
 
 \ 
 \ ## Booting
@@ -3305,8 +3341,8 @@ there [t] cp t!
 [t] cold 2/ 0 t!                 ( set starting word )
 [t] normal-running [v] <boot> t!
 
-there    $D tcells t! \ Set Length First!
-checksum $E tcells t! \ Calculate image CRC
+there    [t] header-length t! \ Set Length First!
+checksum [t] header-crc t!    \ Calculate image CRC
 
 finished
 bye
@@ -3413,7 +3449,7 @@ A quick overview:
 ### ALU Operations
 
 The ALU can be programmed to do the following operations on an ALU instruction,
-some operations trap on error (U/MOD, /MOD).
+some operations trap on error (UM/MOD, /MOD).
 
 	|  #  | Mnemonic | Description          |
 	| --- | -------- | -------------------- |
@@ -4117,7 +4153,9 @@ Run in the same way sokoban.fth.
 ## Floating Point Arithmetic
 
 Floating point implementation, and adapted version can be found in the
-unit tests file.
+unit tests file. It is believed that this can be used freely so long as
+the copyright notice is left intact, similar to the [MIT][] license - although
+do not hold me to that.
 
 	Vierte Dimension Vol.2, No.4 1986
 
@@ -4605,7 +4643,8 @@ unit tests file.
 		<# R@ ABS 0 #S R> SIGN 2DROP
 		"E HOLD F# #>     TYPE SPACE ;
 
-This code was found at: <ftp://ftp.taygeta.com/pub/Forth/>.
+The code for the floating point library was found at:
+<ftp://ftp.taygeta.com/pub/Forth/>.
 
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
@@ -4650,5 +4689,8 @@ This code was found at: <ftp://ftp.taygeta.com/pub/Forth/>.
 [HTML]: https://en.wikipedia.org/wiki/HTML
 [meta.fth]: https://github.com/howerj/embed/blob/master/meta.fth
 [Forth]: https://en.wikipedia.org/wiki/Forth_(programming_language)
+[colorForth]: https://en.wikipedia.org/wiki/ColorForth
+[Verilog]: https://en.wikipedia.org/wiki/Verilog
+[Outer Interpreter]: http://www.forth.org/svfig/Len/Quitloop.htm
 
 <style type="text/css">body{margin:40px auto;max-width:850px;line-height:1.6;font-size:16px;color:#444;padding:0 10px}h1,h2,h3{line-height:1.2}table {width: 100%; border-collapse: collapse;}table, th, td{border: 1px solid black;}code { color: #091992; } </style>

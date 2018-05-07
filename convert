@@ -1,5 +1,6 @@
 #!/usr/bin/awk -f
 # Convert specially formatted Forth program into Markdown
+# It would be nice to write this in Forth, but it's pretty smol
 BEGIN { lines = 1; state = 0 }
 (!/^\\/ && !/^[ \t]*$/) && !ended { if(!state) { print "\n" } printf "\t%04u| %s\n", lines++, $0; state = 1; }
 ( /^\\/ || /^[ \t]$/) && !ended { 

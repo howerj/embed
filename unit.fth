@@ -33,6 +33,7 @@
 
 \ A few generic helper words will be built, to check if a word is defined, or
 \ not, and to conditionally execute a line.
+
 : undefined? token find nip 0= ; ( "name", -- f: Is word not in search order? )
 : defined? undefined? 0= ;       ( "name", -- f: Is word in search order? )
 : ?\ 0= if [compile] \ then ;    ( f --, <string>| : conditional compilation )
@@ -56,6 +57,8 @@ undefined? 1+!  ?\ : 1+! 1 swap +! ;
 \ : d+ rot + -rot um+ rot + ;
 : d- dnegate d+ ;
 : d= rot = -rot = and ;
+: d0= or 0= ;
+: d0<> d0= 0= ;
 : 2swap >r -rot r> -rot ;
 : s>d  dup 0< ;                ( n -- d )
 : dabs s>d if dnegate then ;   ( d -- ud )
@@ -63,80 +66,31 @@ undefined? 1+!  ?\ : 1+! 1 swap +! ;
   >r >r 2dup r> swap >r swap r> r> -rot ;
 : 2, , , ;
 : 2constant create 2, does> 2@ ;
-
-variable test
-test +order definitions hex
-
-variable total    ( total number of tests )
-variable passed   ( number of tests that passed )
-variable vsp      ( stack depth at execution of '->' )
-variable vsp0     ( stack depth at execution of 'T{' )
-variable n        ( temporary store for 'equal' )
-
-: quine source type cr ;                 ( -- : print out current input line )
-: ndrop for aft drop then next ;         ( a0...an n -- )
-: ndisplay for aft . then next ;         ( a0...an n -- )
-: empty-stacks depth ndrop ;             ( a0...an -- )
-: .pass   ."   ok: " space quine ;       ( -- )
-: .failed ." fail: " space quine ;       ( -- )
-: pass passed 1+! ;                      ( -- )
-: fail empty-stacks -b throw ;           ( -- )
-
-\ 'equal' is the most complex word in this test bench, it tests whether two
-\ groups of numbers of the same length are equal, the length of the numbers
-\ is specified by the first argument to 'equal'.
-: equal ( a0...an b0...bn n -- a0...an b0...bn n f )
-  dup n !
-  for aft
-    r@ pick r@ n @ 1+ + pick xor if rdrop n @ 0 exit then
-  then next n @ -1 ;
-
-\ '?stacks' is given two numbers representing stack depths, if they are
-\ not equal it prints out an error message, and calls 'abort'.
-: ?stacks ( u u -- )
-  2dup xor
-  if
-    .failed ." Too Few/Many Arguments Provided" cr
-    ." Expected:  " u. cr
-    ." Got: "       u. cr
-    ." Full Stack:" .s cr
-    fail exit
-  else 2drop then ;
-
-\ 'equal?' takes two lists of numbers of the same length and checks if they
-\ are equal, if they are not then an error message is printed and 'abort'
-\ is called.
-: ?equal ( a0...an b0...bn n -- )
-  dup >r
-  equal nip 0= if
-    .failed ." Argument Value Mismatch" cr
-    ." Expected:  " r@ ndisplay cr
-    ." Got: "       r@ ndisplay cr
-    fail exit
-  then r> 2* ndrop ;
-
-only forth definitions test +order
-
-\ @todo update forth syntax highlighting file for 'T{' and '}T'
-\ in the <https://github.com/howerj/forth.vim> project
-
-: }T depth vsp0 @ - vsp @ 2* ?stacks vsp @ ?equal pass .pass ;
-: -> depth vsp0 @ - vsp ! ;
-: T{ depth vsp0 ! total 1+! ;
-: statistics total @ passed @ ;
-: throws? [compile] ' catch >r empty-stacks r> ; ( "name" -- n  )
-
-hide test
-only forth definitions
-
+: 2variable create 0 , 0 , ; \ does> ;
+: 2literal swap [compile] literal [compile] literal ; immediate
 : +- 0< if negate then ; ( n n -- n : copy sign )
+: >< dup 8 rshift swap 8 lshift or ; ( u -- u : byte swap )
+: m* 2dup xor 0< >r abs swap abs um* r> if dnegate then ; ( n n -- d )
+: nand and invert ; ( u u -- u )
+: nor  and invert ; ( u u -- u )
+
+\ @warning This version of *marker* comes with caveats, if you are going
+\ to use it do not change the change the vocabulary list or use *definitions*
+\ if you do not know what you are doing. This version of marker is 
+\ non-compliant with the Forth DPANs standard, but it is still useful. It
+\ does not restore all the loaded word-lists at the time marker is set, or
+\ other word-lists that might exist.
+\
+: marker ( "name", -- : create an eraser )
+  here >r get-current dup @ r> 
+  create , 2, 
+  does> dup cell+ 2@ swap ! @ here - allot ;
 
 : sm/rem ( dl dh nn -- rem quo: symmetric division )
   over >r >r          ( dl dh nn -- dl dh,      R: -- dh nn )
   dabs r@ abs um/mod  ( dl dh    -- rem quo,    R: dh nn -- dh nn )
   r> r@ xor +- swap r> +- swap ;
 
-: m* 2dup xor 0< >r abs swap abs um* r> if dnegate then ; ( n n -- d )
 
 : */mod ( a b c -- rem a*b/c : use double precision intermediate value )
     >r m* r> sm/rem ;
@@ -154,6 +108,39 @@ only forth definitions
 : limit rot min max ;                                        ( u hi lo -- u )
 : sum 1- 0 $7fff limit for aft + then next ;                 ( a0...an n -- n )
 
+\ *merge* takes two word lists and appends 'wid1' to 'wid2. Most of the
+\ complexity is down to the fact that words in this eForth implementation
+\ store word related information in the PWD field (which points to the
+\ previous word). This needs masking off when traversing the list and
+\ preserving when modifying it.
+\
+: >@ $3fff and ;     ( a -- a : address with attribute bits masked off )
+: >attr $C000 and ;  ( a -- u : get attribute bits from an address )
+: link! dup @ >attr rot >@ or swap ! ; ( u a -- ) 
+: link >@ @ >@ ;
+: merge swap @ swap begin link dup link 0= until link! ; ( wid1 wid2 -- )
+hide >@ hide link hide >attr hide link!
+
+\ This virtual machine has no concept of time, however with some manual input 
+\ from the user and the awesome power of a busy waiting loop it is possible
+\ to define a system that can be calibrated so that the word *ms* waits for
+\ approximately one millisecond. To do this, run the word *calibrate* and
+\ start a stop watch at the same time, stop it when *calibrate* prints '0'.
+\ You can use this number to work out a correct number to store in the double
+\ cell value *ms0*. On my machine '$780.' (running at 2.4GHz) gives a time of 
+\ '1 minute, 0.1 seconds', another gave '1 minute, 0 seconds', to increase 
+\ the precision of this calibration run it for longer and do multiple 
+\ calibrations, and average the results. The correct timing of this depends 
+\ on the accuracy of your calibration, but also the machines speed this is 
+\ running under and the load it is under.
+\
+2variable ms0 $780. ms0 2!
+: 1ms ms0 2@ begin 2dup d0<> while 1 s>d d- repeat 2drop ;
+: ms for 1ms next ;
+: 1s 999 ms ;       ( delay for approximately 1 second )
+: calibrate ." START TIMER" cr 59 for 1s r@ . cr next ." DONE" cr ;
+hide 1ms hide 1s
+
 \ From: https://en.wikipedia.org/wiki/Integer_square_root
 \ This function computes the integer square root of a number.
 : sqrt ( n -- u : integer square root )
@@ -168,7 +155,7 @@ only forth definitions
 
 : log ( u base -- u : compute the integer logarithm of u in 'base' )
   >r
-  dup 0= if -b throw then ( logarithm of zero is an error )
+  dup 0= if -$b throw then ( logarithm of zero is an error )
   0 swap
   begin
     swap 1+ swap r@ / dup 0= ( keep dividing until 'u' is 0 )
@@ -292,6 +279,16 @@ only forth definitions
 \
 hex
 
+: f@ 2@ ;              ( a -- f )
+: f! 2! ;              ( f a -- )
+: falign align ;       ( -- )
+: faligned aligned ;   ( a -- a )
+: fdepth depth ;       ( -- u )
+: fdup 2dup ;          ( f -- f f )
+: fswap 2swap ;        ( f1 f2 -- f2 f1 )
+: fover 2over ;        ( f1 f2 -- f1 f2 f1 )
+: fdrop 2drop ;        ( f -- )
+: fnip fswap fdrop ;   ( f1 f2 -- f2 )
 : zero  over 0= if drop 0 then ;
 : fnegate $8000 xor zero ;                  ( f -- f )
 : fabs  $7fff and ;                         ( f -- f )
@@ -304,7 +301,7 @@ hex
 
 : f2*   1+ zero ;                          ( f -- f )
 : f*    rot + $4000 - >r um* r> norm ;     ( f f -- f )
-: fsq   2dup f* ;                          ( f -- f )
+: fsq   fdup f* ;                          ( f -- f )
 : f2/   1- zero ;                          ( f -- f )
 : um/   dup >r um/mod swap r> over 2* 1+ u< swap 0< or - ;
 : f/    rot swap - $4000 + >r
@@ -328,16 +325,12 @@ hex
         else d+ if 1+ 2/ $8000 or r> 1+
                 else r> then then ;
 
-: f@ 2@ ;              ( a -- f )
-: f! 2! ;              ( f a -- )
-: falign align ;       ( -- )
-: fdup 2dup ;          ( f -- f f )
-: fswap 2swap ;        ( f1 f2 -- f2 f1 )
-: fover 2over ;        ( f1 f2 -- f1 f2 f1 )
-: fdrop 2drop ;        ( f -- )
 : f- fnegate f+ ;      ( f1 f2 -- t )
 : f< f- 0< nip ;       ( f1 f2 -- t )
 : f> fswap f< ;        ( f1 f2 -- t )
+: f2dup fover fover ;  ( f1 f2 -- f1 f2 f1 f2 )
+: fmin f2dup f< if fdrop exit then fnip ; ( f1 f2 -- f )
+: fmax f2dup f> if fdrop exit then fnip ; ( f1 f2 -- f )
 
 ( floating point input/output ) 
 decimal
@@ -349,9 +342,11 @@ create precision 3 ,
       1000.000 , ,   10000.000 , ,
     100000.000 , , 1000000.000 , ,
 
+: floats 2* cells ;   ( u -- u )
+: float+ 1 floats + ; ( a -- a )
 : tens 2* cells  [ precision cell+ ] literal + 2@ ;     
-hex
-: set-precision dup 0 $8 within if precision ! exit then -$2B throw ; ( +n -- )
+
+: set-precision dup 0 $5 within if precision ! exit then -$2B throw ; ( +n -- )
 : shifts fabs $4010 - s>d invert if -$2B throw then negate ;
 : f#    base @ $a <> if -$28 throw then
 	>r precision @ tens drop um* r> shifts
@@ -360,26 +355,23 @@ hex
 
 : f.    tuck <# f# #> type space ;
 : d>f $4020 fsign norm ;
-: point dpl @ ;
-: f     d>f point tens d>f f/ ;    ( d -- f )
+: f     d>f dpl @ tens d>f f/ ;    ( d -- f )
 : fconstant f 2constant ;          ( "name" , f --, Run Time: -- f )
+: fliteral  f [compile] 2literal ; immediate ( f --, Run Time: -- f )
 : s>f   s>d d>f ;                  ( n -- f )
 : -+    drop swap 0< if negate then ;
 : fix   tuck 0 swap shifts ralign -+ ;
 : f>s   tuck 0 swap shifts lalign -+ ; ( f -- n )
 
+1.      fconstant one 
 
-1.      fconstant one decimal
-34.6680 fconstant x1
--57828. fconstant x2
-2001.18 fconstant x3
-1.4427  fconstant x4
+: f0<  [ 0. ] fliteral f< ;       ( f     -- t )
 
-: exp   2dup f>s dup >r s>f f-
-        f2* x2 2over fsq x3 f+ f/
-        2over f2/ f-     x1 f+ f/
+: exp   2dup f>s dup >r s>f f-     ( f -- f : raise 2.0 to the power of 'f' )
+        f2* [ -57828. ] fliteral 2over fsq [ 2001.18 ] fliteral f+ f/
+        2over f2/ f- [ 34.6680 ] fliteral f+ f/
         one f+ fsq r> + ;
-: fexp  x4 f* exp ;
+: fexp  [ 1.4427 ] fliteral f* exp ; ( f -- f : raise e to the power of 'f' )
 : get   bl word dup 1+ c@ [char] - = tuck -
         0 0 rot ( convert drop ) count >number nip 0<> throw -+ ;
 : e     f get >r r@ abs 13301 4004 */mod
@@ -394,11 +386,166 @@ hex
         <# r@ abs 0 #s r> sign 2drop
         [char] e hold f# #>     type space ;
 
+: fexpm1 fexp one f- ;                      ( f -- f : e raised to 'f' less 1 )
+: fsinh fexpm1 fdup fdup one f+ f/ f+ f2/ ; ( f -- fsinh : hyperbolic sine )
+: fcosh fexp   fdup one fswap f/ f+ f2/ ;   ( f -- fcosh : hyperbolic cosine )
+: fsincosh fdup fsinh fswap fcosh ;         ( f -- sinh cosh )
+: ftanh fsincosh f/ ;                       ( f -- ftanh : hyperbolic tangent )
+
+\ : fln one f- flnp1 ;
+
+3.14159265 fconstant pi
+1.57079632 fconstant pi/2
+6.28318530 fconstant 2pi
+\ 2.71828    fconstant euler
+
+\ : >deg [ pi f2* ] 2literal f/ [   360. ] fliteral f* ; ( rad -- deg )
+\ : >rad [   360. ] fliteral f/ [ pi f2* ] 2literal f* ; ( deg -- rad )
+
+: fpow ( f u -- f : raise 'f' to an integer power )
+	?dup 0= if fdrop one exit then
+	>r fdup r> 1- for aft fover f* then next fnip ;
+
+\ https://stackoverflow.com/questions/9799041/
+\ https://en.wikipedia.org/wiki/Taylor_series
+
+: floor  f>s s>f ; ( f -- f )
+: fround fix s>f ; ( f -- f )
+
+: ftuck fover fswap ;
+\ : fmod ftuck f/ fdup floor f- f* ;
+
+\ : fmod f2dup f/ floor f* f- ;
+\ 
+\ : quadrant 2pi fmod fdup pi   f> 1 and >r 
+\             pi fmod      pi/2 f> 2 and r> or ;
+\     
+\ 
+\ : quads 
+\  [ 0. ] fliteral 
+\  begin
+\    fdup 2pi f<
+\  while
+\    fdup fdup f. [char] : emit quadrant . cr
+\    [ 0.2 ] fliteral f+
+\  repeat fdrop ;
+
+\ : fcos
+\    one  ( rads -- f )
+\    fover    fsq [   2. ] fliteral f/ f-
+\    fover 4 fpow [  24. ] fliteral f/ f+
+\    fswap 6 fpow [ 720. ] fliteral f/ f- ;
+\ 
+\ : fsin
+\   fabs fdup 2pi fmod quadrant >r 2pi fmod
+\   fdup ( rads -- f )
+\   fdup  3 fpow [    6. ] fliteral f/ f- 
+\   fover 5 fpow [  120. ] fliteral f/ f+ 
+\   fswap 7 fpow [ 5040. ] fliteral f/ f- 
+\ 
+\    r> dup >r 1 and if [char] X emit then
+\           r> 2 and if [char] Y emit then ; 
+\ 
+\ 
+\ : .q f. ." <-> " source type cr ;
+\ 
+\ 0. f         fsin .q
+\ pi 0.25 f f* fsin .q
+\ pi/2         fsin .q
+\ pi 0.75 f f* fsin .q
+\ pi           fsin .q
+\ 2pi          fsin .q
+\ 
+\ 
+\ : fsincos fdup fsin fswap fcos ; ( rads -- sin cos )
+\ : ftan fsincos f/ ;              ( rads -- tan )
+\ 
+
+hide norm hide zero hide tens hide ralign hide lalign
+hide   -+ hide  one hide fpow hide fix
+
 \ ========================= FLOATING POINT CODE ===============================
 
+\ ========================= UNIT TEST FRAMEWORK ===============================
+.( BEGIN TEST SUITE DEFINITIONS ) here . cr
+.( SET MARKER 'XXX' ) cr
+marker xxx
+
+variable test
+test +order definitions hex
+
+variable total    ( total number of tests )
+variable passed   ( number of tests that passed )
+variable vsp      ( stack depth at execution of '->' )
+variable vsp0     ( stack depth at execution of 'T{' )
+variable n        ( temporary store for 'equal' )
+variable verbose  ( verbosity level of the tests )
+
+1 verbose !
+
+: quine source type cr ;                 ( -- : print out current input line )
+: ndrop for aft drop then next ;         ( a0...an n -- )
+: ndisplay for aft . then next ;         ( a0...an n -- )
+: empty-stacks depth ndrop ;             ( a0...an -- )
+: .pass   verbose @ 1 > if ."   ok: " space quine then ; ( -- )
+: .failed verbose @ 0 > if ." fail: " space quine then ; ( -- )
+: pass passed 1+! ;                      ( -- )
+: fail empty-stacks -b throw ;           ( -- )
+
+\ 'equal' is the most complex word in this test bench, it tests whether two
+\ groups of numbers of the same length are equal, the length of the numbers
+\ is specified by the first argument to 'equal'.
+: equal ( a0...an b0...bn n -- a0...an b0...bn n f )
+  dup n !
+  for aft
+    r@ pick r@ n @ 1+ + pick xor if rdrop n @ 0 exit then
+  then next n @ -1 ;
+
+\ '?stacks' is given two numbers representing stack depths, if they are
+\ not equal it prints out an error message, and calls 'abort'.
+: ?stacks ( u u -- )
+  2dup xor
+  if
+    .failed ." Too Few/Many Arguments Provided" cr
+    ." Expected:  " u. cr
+    ." Got: "       u. cr
+    ." Full Stack:" .s cr
+    fail exit
+  else 2drop then ;
+
+\ 'equal?' takes two lists of numbers of the same length and checks if they
+\ are equal, if they are not then an error message is printed and 'abort'
+\ is called.
+: ?equal ( a0...an b0...bn n -- )
+  dup >r
+  equal nip 0= if
+    .failed ." Argument Value Mismatch" cr
+    ." Expected:  " r@ ndisplay cr
+    ." Got: "       r@ ndisplay cr
+    fail exit
+  then r> 2* ndrop ;
+
+only forth definitions test +order
+
+\ @todo update forth syntax highlighting file for 'T{' and '}T'
+\ in the <https://github.com/howerj/forth.vim> project
+
+: }T depth vsp0 @ - vsp @ 2* ?stacks vsp @ ?equal pass .pass ;
+: -> depth vsp0 @ - vsp ! ;
+: T{ depth vsp0 ! total 1+! ;
+: statistics total @ passed @ ;
+: throws? [compile] ' catch >r empty-stacks r> ; ( "name" -- n  )
+
+: logger( verbose @ 1 > if .( cr exit then [compile] (  ;
+: logger\ verbose @ 1 > if exit then [compile] \ ;
+
+hide test hide n
+only forth definitions
+
+\ ========================= UNIT TEST FRAMEWORK ===============================
 
 .( BEGIN FORTH TEST SUITE ) cr
-.( DECIMAL BASE ) cr
+logger( DECIMAL BASE )
 decimal
 
 
@@ -459,7 +606,7 @@ T{ $0040 first-bit  -> $40 }T
 T{ $8040 first-bit  -> $8000 }T
 T{ $0005 first-bit  -> $0004 }T
 
-.( BINARY BASE ) cr
+logger( BINARY BASE )
 binary
 
 T{ 0    gray-encode ->    0 }T
@@ -496,7 +643,7 @@ T{ 1011 gray-decode -> 1101 }T
 T{ 1001 gray-decode -> 1110 }T
 T{ 1000 gray-decode -> 1111 }T
 
-.( DECIMAL BASE ) cr
+logger( DECIMAL BASE )
 decimal
 T{ 50 25 gcd -> 25 }T
 T{ 13 23 gcd -> 1 }T
@@ -535,18 +682,21 @@ T{ 1   0 throws? / -> -10 }T
 T{ -10 0 throws? / -> -10 }T
 T{ 2 2   throws? / -> 0 }T
 
-.( hex mode ) cr
+logger( HEXADECIMAL BASE )
 hex
+
+marker string-tests
 
 : s1 $" xxx"   count ;
 : s2 $" hello" count ;
 : s3 $" 123"   count ;
 : <#> 0 <# #s #> ; ( n -- b u )
 
-.( Test Strings: ) cr
-.( s1:  ) space s1 type cr
-.( s2:  ) space s2 type cr
-.( s3:  ) space s3 type cr
+logger( Test Strings: )
+logger\ .( s1:  ) space s1 type cr
+logger\ .( s2:  ) space s2 type cr
+logger\ .( s3:  ) space s3 type cr
+
 
 T{ s1 crc -> $C35A }T
 T{ s2 crc -> $D26E }T
@@ -560,7 +710,7 @@ T{ s3  123 <#> =string -> -1 }T
 T{ s3 -123 <#> =string ->  0 }T
 T{ s3   99 <#> =string ->  0 }T
 
-hide s1 hide s2 hide s3
+string-tests
 
 T{ 0 ?dup -> 0 }T
 T{ 3 ?dup -> 3 3 }T
@@ -571,11 +721,14 @@ T{ 1 2 3 -rot -> 3 1 2 }T
 T{ 2 3 ' + execute -> 5 }T
 T{ : test-1 [ $5 $3 * ] literal ; test-1 -> $f }T
 
-.( Defined variable 'x' ) cr
+marker variable-test
+
+logger( Defined variable 'x' ) 
 variable x
 T{ 9 x  ! x @ ->  9 }T
 T{ 1 x +! x @ -> $a }T
-hide x
+
+variable-test
 
 T{     0 invert -> -1 }T
 T{    -1 invert -> 0 }T
@@ -655,22 +808,31 @@ T{ 50 10 /mod ->  0  5 }T
 T{ -4 3  /mod -> -1 -1 }T
 T{ -8 3  /mod -> -2 -2 }T
 
-.( Created word 'y' 0 , 0 , ) cr
+T{     0 ><   -> 0     }T
+T{    -1 ><   -> -1    }T
+T{ $0001 ><   -> $0100 }T
+T{ $cafe ><   -> $feca }T
+T{ $1234 ><   -> $3412 }T
+
+marker definition-test
+
+logger( Created word 'y' 0 , 0 , )
 create y 0 , 0 ,
 T{ 4 5 y 2! -> }T
 T{ y 2@ -> 4 5 }T
-hide y
 
 : e1 $" 2 5 + " count ;
 : e2 $" 4 0 / " count ;
 : e3 $" : z [ 4 dup * ] literal ; " count ;
-.( e1: ) space e1 type cr
-.( e2: ) space e2 type cr
-.( e3: ) space e3 type cr
+logger\ .( e1: ) space e1 type cr
+logger\ .( e2: ) space e2 type cr
+logger\ .( e3: ) space e3 type cr
 T{ e1 evaluate -> 7 }T
 T{ e2 throws? evaluate -> $a negate }T
 T{ e3 evaluate z -> $10 }T
-hide e1 hide e2 hide e3 hide z
+
+definition-test
+
 
 T{ here 4 , @ -> 4 }T
 T{ here 0 , here swap cell+ = -> -1 }T
@@ -731,6 +893,9 @@ T{ min-int max-int m* min-int sm/rem ->  0 max-int }T
 T{ min-int max-int m* max-int sm/rem ->  0 min-int }T
 T{ max-int max-int m* max-int sm/rem ->  0 max-int }T
 
+T{ :noname 2 6 + ; execute -> 8 }T
+
+
 decimal
 
 3 set-precision
@@ -759,20 +924,29 @@ T{ 400 s>f 2 s>f f/ f>s -> 200 }T
 T{ 3.0 f 9.00 f f+ f>s -> 12 }T
 \ T{ 3.0 f 9. f f+ f>s -> 12 }T
 
-save
-
 \  T{ random random <> -> -1 }T
 
 .( TESTS COMPLETE ) cr
 decimal
 .( passed: ) statistics u. space .( / ) 0 u.r cr
 .( here:   ) here . cr
-statistics  = ?\ .( [ALL PASSED] ) cr     bye
 statistics <> ?\ .( [FAILED]     ) cr   abort
+statistics  = ?\ .( [ALL PASSED] ) cr   
 
+.( CALLING MARKER 'XXX' ) cr
+xxx
+
+.( SAVING NEW IMAGE ) cr
+save
+
+.( FINISHED TESTS ) cr
 bye
-( More Test Code )
+\ ========================= END OF TESTS ======================================
 
+
+
+
+\ ========================= DYNAMIC MEMORY ALLOCATION =========================
 \ ## Dynamic Memory Allocation
 \ alloc.fth
 \  Dynamic Memory Allocation package

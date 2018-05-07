@@ -153,9 +153,9 @@ finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp;
 int main(int argc, char **argv)
 {
 	forth_t *h = embed_new();
-	if(argc < 2 || argc > 4)
-		embed_die("usage: %s in.blk [out.blk] [file.fth]", argv[0]);
-	if(embed_load(h, argv[1]) < 0)
+	if(argc > 4)
+		embed_die("usage: %s [in.blk] [out.blk] [file.fth]", argv[0]);
+	if(embed_load(h, argc < 2 ? "eforth.blk" : argv[1]) < 0)
 		embed_die("embed: load failed");
 	FILE *in = argc <= 3 ? stdin : embed_fopen_or_die(argv[3], "rb");
 	if(embed_forth(h, in, stdout, argc < 3 ? NULL : argv[2]))

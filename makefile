@@ -1,4 +1,4 @@
-CFLAGS= -O2 -std=c99 -g -Wall -Wextra
+CFLAGS= -O2 -std=c99 -g -Wall -Wextra -fwrapv
 CC=gcc
 EXE=
 DF=
@@ -6,6 +6,7 @@ EFORTH=eforth.blk
 META1=meta1.blk
 META2=meta2.blk
 TEMP=tmp.blk
+UNIT=unit.blk
 TARGET=embed
 CMP=cmp
 RM=rm -fv
@@ -40,14 +41,16 @@ cross: ${META1}
 
 double-cross: ${META2}
 
-run: ${FORTH} ${EFORTH}
-	${DF}${FORTH} ${EFORTH} ${TEMP}
+run: cross
+	${DF}${FORTH} ${META1}
 
-cross-run: cross
-	${DF}${FORTH} ${META1} ${TEMP}
+tests: ${UNIT}
+	
+${UNIT}: ${FORTH} ${META1} unit.fth
+	${DF}${FORTH} ${META1} ${UNIT} unit.fth
 
-tests: ${FORTH} ${META1} unit.fth
-	${DF}${FORTH} ${META1} ${TEMP} unit.fth
+floats: ${UNIT}
+	${DF}${FORTH} $<
 
 libembed.a: embed.o
 	ar rcs $@ $<
@@ -67,5 +70,6 @@ view: meta.pdf
 docs: meta.pdf meta.htm
 
 clean:
-	${RM} ${FORTH} ${META1} ${META2} ${TEMP} *.o *.a *.pdf *.htm
+	${RM} ${FORTH} ${META1} ${META2} ${TEMP} ${UNIT} 
+	${RM} *.o *.a *.pdf *.htm
 

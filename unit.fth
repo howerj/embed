@@ -34,6 +34,9 @@
 \ A few generic helper words will be built, to check if a word is defined, or
 \ not, and to conditionally execute a line.
 
+\ Create anonymous namespace:
+: anonymous get-order 1+ here 1 cells allot swap set-order ;
+
 : undefined? token find nip 0= ; ( "name", -- f: Is word not in search order? )
 : defined? undefined? 0= ;       ( "name", -- f: Is word in search order? )
 : ?\ 0= if [compile] \ then ;    ( f --, <string>| : conditional compilation )
@@ -269,6 +272,42 @@ hide 1ms hide 1s
 \ : -m/mod over 0< if dup    >r +       r> then u/mod ;         ( d +n - r q )
 \ :  m/     dup 0< if negate >r dnegate r> then -m/mod swap drop ; ( d n - q )
 
+
+\ ========================= CORDIC CODE =======================================
+
+anonymous definitions
+create lookup ( 16 values )
+$3243 , $1DAC , $0FAD , $07F5 , $03FE , $01FF , $00FF , $007F ,
+$003F , $001F , $000F , $0007 , $0003 , $0001 , $0000 , $0000 ,
+
+$26DD constant cordic_1K $6487 constant pi/2
+
+variable tx 0 tx ! variable ty 0 ty ! variable tz 0 tz !
+variable x  0  x ! variable y  0  y ! variable z  0  z !
+variable d  0  d ! variable k  0  k !
+
+forth-wordlist set-current
+
+( CORDIC: valid in range -pi/2 to pi/2, arguments are in fixed )
+( point format with 1 = 16384, angle is given in radians.  )
+: cordic ( angle -- sine cosine )
+  z ! cordic_1K x ! 0 y ! 0 k !
+  $10 begin ?dup while
+    z @ 0< d !
+    x @ y @ k @ arshift d @ xor d @ - - tx !
+    y @ x @ k @ arshift d @ xor d @ - + ty !
+    z @ k @ cells lookup + @ d @ xor d @ - - tz !
+    tx @ x ! ty @ y ! tz @ z !
+    k 1+!
+    1-
+  repeat y @ x @ ;
+: sin cordic drop ;
+: cos cordic nip ;
+
+only forth definitions
+
+\ ========================= CORDIC CODE =======================================
+
 \ ========================= FLOATING POINT CODE ===============================
 \ This floating point library has been adapted from one found in
 \ Forth Dimensions Vol.2, No.4 1986, it should be free to use so long as the
@@ -282,7 +321,18 @@ hide 1ms hide 1s
 \	      CHAMPAIGN, IL 61820
 \	      PHONE: 217/826-2734 
 \
+only forth definitions
+variable float-voc
 
+: zero  over 0= if drop 0 then ;
+: norm  >r 2dup or
+        if begin s>d invert
+           while d2* r> 1- >r
+           repeat swap 0< - ?dup
+           if r> else $8000 r> 1+ then
+        else r> drop then ;
+: lalign $20 min for aft d2/ then next ;
+: ralign 1- ?dup if lalign then 1 0 d+ d2/ ;
 
 : f@ 2@ ;              ( a -- f )
 : f! 2! ;              ( f a -- )
@@ -294,15 +344,9 @@ hide 1ms hide 1s
 : fover 2over ;        ( f1 f2 -- f1 f2 f1 )
 : fdrop 2drop ;        ( f -- )
 : fnip fswap fdrop ;   ( f1 f2 -- f2 )
-: zero  over 0= if drop 0 then ;
 : fnegate $8000 xor zero ;                  ( f -- f )
 : fabs  $7fff and ;                         ( f -- f )
-: norm  >r 2dup or
-        if begin s>d invert
-           while d2* r> 1- >r
-           repeat swap 0< - ?dup
-           if r> else $8000 r> 1+ then
-        else r> drop then ;
+: fsign fabs over 0< if >r dnegate r> $8000 or then ;
 
 : f2*   1+ zero ;                          ( f -- f )
 : f*    rot + $4000 - >r um* r> norm ;     ( f f -- f )
@@ -315,9 +359,6 @@ hide 1ms hide 1s
         else >r d2/ fabs r> um/ r> 1+
         then ;
 
-: lalign $20 min for aft d2/ then next ;
-: ralign 1- ?dup if lalign then 1 0 d+ d2/ ;
-: fsign fabs over 0< if >r dnegate r> $8000 or then ;
 
 : f+    rot 2dup >r >r fabs swap fabs -
         dup if s>d
@@ -407,34 +448,78 @@ create precision 3 ,
 \ : >deg [ pi f2* ] 2literal f/ [   360. ] fliteral f* ; ( rad -- deg )
 \ : >rad [   360. ] fliteral f/ [ pi f2* ] 2literal f* ; ( deg -- rad )
 
-: fpow ( f u -- f : raise 'f' to an integer power )
-	?dup 0= if fdrop one exit then
-	>r fdup r> 1- for aft fover f* then next fnip ;
+: floor  f>s s>f ; ( f -- f )
+: fround fix s>f ; ( f -- f )
+: ftuck fover fswap ; ( f1 f2 -- f2 f1 f2 )
+
+anonymous definitions
+
+: fmod f2dup f/ floor f* f- ;
+: >cordic     [ 16384. ] fliteral f* f>s ;   ( f -- n )
+: cordic> s>f [ 16384. ] fliteral f/ ;       ( n -- f )
+: quadrant fdup                   f0< 4 and >r
+           fabs 2pi fmod fdup pi   f< 1 and >r 
+                 pi fmod      pi/2 f> 2 and r> r> or or ;
+: >sin dup 3 and >r 4 and if fnegate r> -1 >r >r else r> 0 >r >r  then
+          r@ 3 = r@ 2 = or if fnegate one f+ then
+          r@ 0 = r@ 2 = or if fnegate then 
+          rdrop r> if fnegate then ;
+
+: >cos 3 and >r
+         r@ 3 = r@ 2 = or if fnegate one f+ then
+         r@ 0 = r@ 3 = or if fnegate then 
+         rdrop ;
+
+: (fsincos) pi/2 fmod >cordic cordic >r cordic> r> cordic> ; 
+
+forth-wordlist set-current
+
+\ @warning fsincos still needs a lot of work, and simplifying
+: fsincos 2pi fmod fdup quadrant >r (fsincos) r@ >cos fswap r> >sin fswap ;
+: fsin fsincos fdrop ; ( rads -- sin )
+: fcos fsincos fnip  ; ( rads -- cos )
+
+only forth definitions
+   
+\ : fpow ( f u -- f : raise 'f' to an integer power )
+\	?dup 0= if fdrop one exit then
+\	>r fdup r> 1- for aft fover f* then next fnip ;
 
 \ https://stackoverflow.com/questions/9799041/
 \ https://en.wikipedia.org/wiki/Taylor_series
 
-: floor  f>s s>f ; ( f -- f )
-: fround fix s>f ; ( f -- f )
 
-: ftuck fover fswap ;
-\ : fmod ftuck f/ fdup floor f- f* ;
-
-\ : fmod f2dup f/ floor f* f- ;
+\ : .q e. ." <-> " source type cr ;
+\ 0. f         fsin .q
+\ pi 0.25 f f* fsin .q
+\ pi/2         fsin .q
+\ pi           fsin .q
 \ 
-\ : quadrant 2pi fmod fdup pi   f> 1 and >r 
-\             pi fmod      pi/2 f> 2 and r> or ;
+\ 0. f         fcos .q
+\ pi 0.25 f f* fcos .q
+\ pi/2         fcos .q
+\ 
+\ : sins
+\   2pi fnegate
+\   begin
+\     fdup 2pi f<
+\   while
+\     fdup fdup f. [char] , emit space fsincos fswap e. [char] , emit e. 10 emit
+\     [ 2pi 50. f f/ ] 2literal f+
+\   repeat fdrop ;
+\ 
+
 \     
 \ 
 \ : quads 
-\  [ 0. ] fliteral 
-\  begin
-\    fdup 2pi f<
-\  while
-\    fdup fdup f. [char] : emit quadrant . cr
-\    [ 0.2 ] fliteral f+
-\  repeat fdrop ;
-
+\   [ 0. ] fliteral 
+\   begin
+\     fdup 2pi f<
+\   while
+\     fdup fdup f. [char] : emit quadrant . cr
+\     [ 2pi 50. f f/ ] 2literal f+
+\   repeat fdrop ;
+\ 
 \ : fcos
 \    one  ( rads -- f )
 \    fover    fsq [   2. ] fliteral f/ f-
@@ -467,7 +552,7 @@ create precision 3 ,
 \ 
 
 hide norm hide zero hide tens hide ralign hide lalign
-hide   -+ hide  one hide fpow hide fix
+hide   -+ hide  one hide fix
 
 \ ========================= FLOATING POINT CODE ===============================
 
@@ -710,8 +795,8 @@ T{ s1 s1 compare 0= -> -1 }T
 T{ s2 s2 compare 0= -> -1 }T
 
 .( COMPARE ) cr
-s4 s5 compare . space source type cr
-s5 s4 compare . space source type cr
+\ s4 s5 compare . space source type cr
+\ s5 s4 compare . space source type cr
 
 T{ s3  123 <#> compare 0= -> -1 }T
 T{ s3 -123 <#> compare 0= ->  0 }T
@@ -905,22 +990,22 @@ T{ :noname 2 6 + ; execute -> 8 }T
 
 decimal
 
-3 set-precision
-20 s>f f. cr
-20 s>f 3 s>f f- f. cr
-25 s>f f2/ f2/ f. cr
-12 s>f fsq f. cr
-
-
-2 s>f 3 s>f f+ f. cr
-2 s>f 4 s>f f* f. cr
-400.0 f 2 s>f f/ f. cr
-10.3 f f. cr
-6 s>f f. cr
--12.34 f e. cr
--1 s>f 2 s>f f< . cr
-2 s>f 1 s>f f< . cr
-9 s>f exp f. cr
+\ 3 set-precision
+\ 20 s>f f. cr
+\ 20 s>f 3 s>f f- f. cr
+\ 25 s>f f2/ f2/ f. cr
+\ 12 s>f fsq f. cr
+\ 
+\ 
+\ 2 s>f 3 s>f f+ f. cr
+\ 2 s>f 4 s>f f* f. cr
+\ 400.0 f 2 s>f f/ f. cr
+\ 10.3 f f. cr
+\ 6 s>f f. cr
+\ -12.34 f e. cr
+\ -1 s>f 2 s>f f< . cr
+\ 2 s>f 1 s>f f< . cr
+\ 9 s>f exp f. cr
 
 T{ -1  s>f f>s       -> -1 }T
 T{ 123 s>f f>s       -> 123 }T

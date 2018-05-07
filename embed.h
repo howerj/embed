@@ -2,17 +2,14 @@
  *  @brief     Embed Forth Virtual Machine Library Interface
  *  @copyright Richard James Howe (2017,2018)
  *  @license   MIT */
-
 #ifndef EMBED_H
 #define EMBED_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 #include <stdio.h>
 #include <stdint.h>
-
 struct forth_t;                 /**< Forth Virtual Machine State */
 typedef struct forth_t forth_t; /**< Forth Virtual Machine State Type Define */
 
@@ -31,3 +28,4 @@ char     *embed_get_core(forth_t *h);                                      /**< 
 }
 #endif
 #endif /* EMBED_H */
+

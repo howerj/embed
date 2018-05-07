@@ -71,8 +71,12 @@ undefined? 1+!  ?\ : 1+! 1 swap +! ;
 : +- 0< if negate then ; ( n n -- n : copy sign )
 : >< dup 8 rshift swap 8 lshift or ; ( u -- u : byte swap )
 : m* 2dup xor 0< >r abs swap abs um* r> if dnegate then ; ( n n -- d )
-: nand and invert ; ( u u -- u )
-: nor  and invert ; ( u u -- u )
+: nand and invert ;  ( u u -- u )
+: nor  and invert ;  ( u u -- u )
+: @bits swap @ and ; ( a u -- u )
+: ascii state @ if [compile] [char] else char then ;
+
+
 
 \ @warning This version of *marker* comes with caveats, if you are going
 \ to use it do not change the change the vocabulary list or use *definitions*
@@ -114,6 +118,7 @@ undefined? 1+!  ?\ : 1+! 1 swap +! ;
 \ previous word). This needs masking off when traversing the list and
 \ preserving when modifying it.
 \
+
 : >@ $3fff and ;     ( a -- a : address with attribute bits masked off )
 : >attr $C000 and ;  ( a -- u : get attribute bits from an address )
 : link! dup @ >attr rot >@ or swap ! ; ( u a -- ) 
@@ -269,15 +274,15 @@ hide 1ms hide 1s
 \ Forth Dimensions Vol.2, No.4 1986, it should be free to use so long as the
 \ following copyright is left in the code:
 \ 
-\ FORTH-83 FLOATING POINT.
-\	  ----------------------------------
-\	  COPYRIGHT 1985 BY ROBERT F. ILLYES
+\	     FORTH-83 FLOATING POINT.
+\	----------------------------------
+\	COPYRIGHT 1985 BY ROBERT F. ILLYES
 \
-\		PO BOX 2516, STA. A
-\		CHAMPAIGN, IL 61820
-\		PHONE: 217/826-2734 
+\	      PO BOX 2516, STA. A
+\	      CHAMPAIGN, IL 61820
+\	      PHONE: 217/826-2734 
 \
-hex
+
 
 : f@ 2@ ;              ( a -- f )
 : f! 2! ;              ( f a -- )
@@ -363,7 +368,7 @@ create precision 3 ,
 : fix   tuck 0 swap shifts ralign -+ ;
 : f>s   tuck 0 swap shifts lalign -+ ; ( f -- n )
 
-1.      fconstant one 
+1. fconstant one 
 
 : f0<  [ 0. ] fliteral f< ;       ( f     -- t )
 
@@ -472,7 +477,7 @@ hide   -+ hide  one hide fpow hide fix
 marker xxx
 
 variable test
-test +order definitions hex
+test +order definitions 
 
 variable total    ( total number of tests )
 variable passed   ( number of tests that passed )
@@ -490,7 +495,7 @@ variable verbose  ( verbosity level of the tests )
 : .pass   verbose @ 1 > if ."   ok: " space quine then ; ( -- )
 : .failed verbose @ 0 > if ." fail: " space quine then ; ( -- )
 : pass passed 1+! ;                      ( -- )
-: fail empty-stacks -b throw ;           ( -- )
+: fail empty-stacks -$b throw ;           ( -- )
 
 \ 'equal' is the most complex word in this test bench, it tests whether two
 \ groups of numbers of the same length are equal, the length of the numbers
@@ -682,14 +687,13 @@ T{ 1   0 throws? / -> -10 }T
 T{ -10 0 throws? / -> -10 }T
 T{ 2 2   throws? / -> 0 }T
 
-logger( HEXADECIMAL BASE )
-hex
-
 marker string-tests
 
 : s1 $" xxx"   count ;
 : s2 $" hello" count ;
 : s3 $" 123"   count ;
+: s4 $" aBc"   count ;
+: s5 $" abc"   count ;
 : <#> 0 <# #s #> ; ( n -- b u )
 
 logger( Test Strings: )
@@ -697,19 +701,22 @@ logger\ .( s1:  ) space s1 type cr
 logger\ .( s2:  ) space s2 type cr
 logger\ .( s3:  ) space s3 type cr
 
-
 T{ s1 crc -> $C35A }T
 T{ s2 crc -> $D26E }T
 
-T{ s1 s1 =string -> -1 }T
-T{ s1 s2 =string ->  0 }T
-T{ s2 s1 =string ->  0 }T
-T{ s2 s2 =string -> -1 }T
+T{ s1 s2 compare 0= ->  0 }T
+T{ s2 s1 compare 0= ->  0 }T
+T{ s1 s1 compare 0= -> -1 }T
+T{ s2 s2 compare 0= -> -1 }T
 
-T{ s3  123 <#> =string -> -1 }T
-T{ s3 -123 <#> =string ->  0 }T
-T{ s3   99 <#> =string ->  0 }T
+.( COMPARE ) cr
+s4 s5 compare . space source type cr
+s5 s4 compare . space source type cr
 
+T{ s3  123 <#> compare 0= -> -1 }T
+T{ s3 -123 <#> compare 0= ->  0 }T
+T{ s3   99 <#> compare 0= ->  0 }T
+ 
 string-tests
 
 T{ 0 ?dup -> 0 }T

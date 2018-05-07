@@ -11,7 +11,7 @@ TARGET=embed
 CMP=cmp
 RM=rm -fv
 
-.PHONY: all clean run cross cross-run double-cross default tests docs
+.PHONY: all clean run cross double-cross default tests docs view
 
 default: all
 
@@ -40,6 +40,7 @@ ${META2}: ${FORTH} ${META1} meta.fth
 cross: ${META1}
 
 double-cross: ${META2}
+	${CMP} ${META1} ${META2}
 
 run: cross
 	${DF}${FORTH} ${META1}

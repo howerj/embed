@@ -223,8 +223,8 @@ $4400 constant (sp0)   ( start of variable stack )
     ?dup
   while
     dup
-    nfa count type space dup ( <- @warning should use target nfa! )
-    cfa tbody @ u. cr        ( <- @warning should use target cfa! )
+    nfa count type space dup
+    cfa >body @ u. cr
     $3FFF and @
   repeat ;
 : display ( -- : display metacompilation and target information )
@@ -723,7 +723,7 @@ $1A   constant header-length  ( location of length in header )
 $1C   constant header-crc     ( location of CRC in header )
 $22   constant header-options ( location of options bits in header )
 
-target.1 +order         ( Add target word dictionary to search order )
+target.1         +order ( Add target word dictionary to search order )
 meta -order meta +order ( Reorder so *meta* has a higher priority )
 forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 
@@ -1011,11 +1011,15 @@ $ffff    tvariable dpl   ( number of places after fraction )
 \ The following execution vectors would/will be added if there is enough
 \ space, it is very useful to have hooks into the system to change how
 \ the interpreter behaviour works. Being able to change how the Forth
-\ interpreter handles number parsing allows the processing of double or
-\ floating point numbers in a system that could otherwise not handle them.
+\ interpreter handles number parsing, for example, allows the processing of 
+\ double or floating point numbers in a system that could otherwise not 
+\ handle them.
+\ 
 
 ( 0        tvariable <error>      ( execution vector for interpreter error )
 ( 0        tvariable <interpret>  ( execution vector for interpreter )
+( 0        tvariable <quit>       ( execution vector for quit )
+( 0        tvariable <eval>       ( execution vector for eval )
 ( 0        tvariable <abort>      ( execution vector for abort handler )
 ( 0        tvariable <at-xy>      ( execution vector for at-xy )
 ( 0        tvariable <page>       ( execution vector for page )
@@ -1086,6 +1090,7 @@ h: base! base ! ;            ( u -- )
 \ *cell+* require a reason for such a simple word (they embody a concept or
 \ they help hide implementation details).
 
+h: ?exit if rdrop exit then ; ( u --, R: xt -- xt| : conditional return )
 : 2drop drop drop ;         ( n n -- )
 : 1+ 1 + ;                  ( n -- n : increment a value  )
 : negate invert 1+ ;        ( n -- n : negate a number )
@@ -1101,7 +1106,6 @@ h: cell- cell - ;           ( a -- a : adjust address to previous cell )
 : ?dup dup if dup exit then ; ( n -- 0 | n n : duplicate non zero value )
 : >  swap  < ;              ( n1 n2 -- t : signed greater than, n1 > n2 )
 : u> swap u< ;              ( u1 u2 -- t : unsigned greater than, u1 > u2 )
-h: u>= u< invert ;          ( u1 u2 -- t : unsigned greater/equal )
 :  <>  = invert ;           ( n n -- t : not equal )
 : 0<> 0= invert ;           ( n n -- t : not equal  to zero )
 : 0> 0 > ;                  ( n -- t : greater than zero? )
@@ -1308,10 +1312,10 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
 : crc ( b u -- u : calculate ccitt-ffff CRC )
   [-1] ( -1 = 0xffff ) >r
   begin
-    dup
+    ?dup
   while
    string@ r> swap ccitt >r +string
-  repeat 2drop r> ;
+  repeat r> nip ;
 
 ( : random ( -- u : pseudo random number )
 (  seed @ 0= seed toggle seed @ 0 ccitt dup seed ! ; )
@@ -1413,7 +1417,7 @@ h: $type [-1] typist ;                   ( b u --  )
 \ respectively.
 
 : cmove for aft >r dup c@ r@ c! 1+ r> 1+ then next 2drop ; ( b b u -- )
-: fill swap for swap aft 2dup c! 1+ then next 2drop ; ( b u c -- )
+: fill  swap for swap aft 2dup c! 1+ then next 2drop ;     ( b u c -- )
 
 \ 
 \ ### Exception Handling
@@ -1485,17 +1489,16 @@ h: $type [-1] typist ;                   ( b u --  )
 h: -throw negate throw ;  ( u -- : negate and throw )
 [t] -throw 2/ 4 tcells t!
 
-\ *?ndepth* throws an exception if a certain number of items on the stack
+\ *?depth* throws an exception if a certain number of items on the stack
 \ do not exist. It is possible to use this primitive to implement some basic
 \ checks to make sure that words are passed the correct number of arguments.
 \
-\ By using *?ndepth* strategically it is possible to catch errors quite
+\ By using *?depth* strategically it is possible to catch errors quite
 \ quickly with minimal overhead in speed and size by selecting only a few
 \ words to put depth checking in.
 
 h: 1depth 1 fallthrough; ( ??? -- : check depth is at least one )
-h: ?ndepth depth 1- u> if 4 -throw exit then ; ( ??? n -- check depth )
-h: 2depth 2 ?ndepth ;    ( ??? -- :  check depth is at least two )
+h: ?depth depth < ?exit 4 -throw ; ( ??? n -- check depth )
 
 \ 
 \ ## Numeric Output
@@ -1577,7 +1580,7 @@ h: radix base@ dup 2 - $22 u> if decimal $28 -throw exit then ; ( -- u )
 \ they do not propagate.
 
 : hold  hld @ 1- dup hld ! c! fallthrough;             ( c -- )
-h: ?hold pad $80 - hld @ u> if $11 -throw exit then ; ( -- )
+h: ?hold hld @ pad $80 - u> ?exit $11 -throw ; ( -- )
 h: extract dup>r um/mod rxchg um/mod r> rot ;          ( ud ud -- ud u )
 h: digit 9 over < 7 and + [char] 0 + ;                 ( u -- c )
 
@@ -1600,20 +1603,20 @@ h: digit 9 over < 7 and + [char] 0 + ;                 ( u -- c )
 \ like *.*, or *u.r*.
 \
 
-: #> 2drop hld @ pad over- ;              ( w -- b u )
-: # 2depth 0 base@ extract digit hold ;   ( d -- d )
-: #s begin # 2dup d0= until ;             ( d -- 0 )
-: <# pad hld ! ;                          ( -- )
+: #> 2drop hld @ pad over- ;                ( w -- b u )
+: #  2 ?depth 0 base@ extract digit hold ;  ( d -- d )
+: #s begin # 2dup d0= until ;               ( d -- 0 )
+: <# pad hld ! ;                            ( -- )
 
 \ *sign* is used with the Pictured Numeric Output words to add a sign character
-\ if the number is negative, *str* is then defined to convert a number in any
+\ if the number is negative, *(.)* is then defined to convert a number in any
 \ base to its signed representation, in actual use however we will only use
-\ *str* for base 10 numeric output, we usually do not want to print the sign
+\ *(.)* for base 10 numeric output, we usually do not want to print the sign
 \ of a number when operating with a non-decimal base.
 \
 
 : sign  0< if [char] - hold exit then ;     ( n -- )
-h: str ( n -- b u : convert a signed integer to a numeric string )
+h: (.) ( n -- b u : convert a signed integer to a numeric string )
   dup>r abs 0 <# #s r> sign #> ;
 
 \ *.r*, *u.r* are used as the basis of further words with a more controlled
@@ -1631,9 +1634,9 @@ h: (u.) 0 <# #s #> ;             ( u -- b u : turn *u* into number string )
 : u.r >r (u.) r> fallthrough;    ( u +n -- : print u right justified by +n)
 h: adjust over- spaces type ;    ( b n n -- )
 h: 5u.r 5 u.r ;                  ( u -- )
-( :  .r >r str r> adjust ;       ( n n -- : print n, right justified by +n )
+( :  .r >r (.)( r> adjust ;       ( n n -- : print n, right justified by +n )
 : u.  (u.) space type ;          ( u -- : print unsigned number )
-:  .  radix $A xor if u. exit then str space type ; ( n -- print number )
+:  .  radix $A xor if u. exit then (.) space type ; ( n -- print number )
 ( : >base swap base @ >r base ! execute r> base ! ; )
 ( : d. $a  '  . >base ; )
 ( : h. $10 ' u. >base ; )
@@ -1702,15 +1705,15 @@ h: down cell negate and ; ( a -- a : align down )
   dup down 
   - over+ zero 2dup c! 1+ swap ( 2dup 0 fill ) cmove r> ;
 
-: =string ( a1 u2 a1 u2 -- t : string equality )
-  >r swap r> ( a1 a2 u1 u2 )
-  over-xor if drop 2drop-0 exit then
+: compare ( a1 u2 a1 u2 -- n : string equality )
+  rot
+  over- ?dup if >r 2drop r> nip exit then
   for ( a1 a2 )
     aft
-      count >r swap count r> xor
-      if rdrop 2drop-0 exit then
+      count rot count rot - ?dup
+      if nip nip rdrop exit then
     then
-  next 2drop [-1] ;
+  next 2drop-0 ;
 
 \ *^h* and *ktap* are commented out as they are not needed, they deal with
 \ line based input, some sections of *tap* and *accept* are commented out
@@ -1792,7 +1795,8 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ needed. *expect* and *query* both call *accept* this way. *query* uses the
 \ systems input buffer and stores the result in a know location so that the
 \ rest of the interpreter can use the results. *expect* gets a buffer from the
-\ use and stores the length of the resulting string in *span*.
+\ user and stores the length of the resulting string in *span*.
+\ 
 
 : expect <expect> @execute span ! drop ;                     ( b u -- )
 : query tib tib-length <expect> @execute #tib ! drop-0 in! ; ( -- )
@@ -1973,7 +1977,7 @@ h: searcher ( a wid -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word in a WID )
   begin
     dup
   while
-    dup nfa count r@ count =string
+    dup nfa count r@ count compare 0=
     if ( found! )
       rdrop
       dup immediate? 1 or negate exit
@@ -2016,7 +2020,7 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
 \ whether or not the conversion was successful. An ASCII character set is
 \ assumed.
 
-: digit? ( c base -- u f )
+h: digit? ( c base -- u f )
   >r [char] 0 - 9 over <
   if 
     7 - 
@@ -2051,61 +2055,28 @@ h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
     +string dup0=                         ( advance string and test for end )
   until ;
 
-\ *negative?* and *base?* should be thought of as working in conjunction
-\ with *>number* only. Numbers can have certain prefixes which change the
-\ interpretation of the number, for example a prefix of *-* means the number
-\ is negative, a *$* prefix means the number is hexadecimal regardless of the
-\ current input base, and a *#* prefix (which is a less common prefix) means
-\ the number is decimal. *negative?* handles the negative case, and could
-\ potentially be used as standalone word, however using *base?* comes with
-\ caveats, it changes the current base if one of the base changing prefixes
-\ is encountered, *>number* is careful to restore the base back to what it
-\ was when it uses *base?*.
-\
-
-\	h: ?exit if rdrop then ;
-\	
-\	h: negative? ( b u -- b u t : is >number negative? )
-\	  [char] - ' nop fallthrough;
-\	h: base-match ( b u c xt -- b u t )
-\	   2>r string@ r> = if +string r> execute [-1] exit then rdrop 0x0000 ;
-\	
-\	h: base? ( b u -- b u  ) 
-\	  [char] $ ' hex     base-match ?exit
-\	  [char] # ' decimal base-match drop ;
-
-h: negative? ( b u -- b u t : is >number negative? )
-  string@ [char] - = if +string [-1] exit then 0x0000 ;
-
-h: base? ( b u -- b u )
-  string@ [char] $ = if +string hex     exit then ( $hex )  
-  string@ [char] # = if +string decimal exit then ; ( #decimal )
-
 \ *>number* is a generic word, but awkward to use,  *number?* does some
 \ processing of the results to *>number* and handles other input processing
 \ expected for numbers. For example numbers can be prefixed by *$* to specify
-\ they are in hex, or *#* for decimal, regardless of the current base. The
+\ they are in hex, regardless of the current base. The
 \ decimal point is handled for double cell input. The minus sign, *-*, can
-\ be used as a prefix for all of these different formats to specify that
-\ the number is negative. The negative prefix must come before any base
-\ specifier. *dpl* is used to store where the decimal place occurred in the
-\ input.
+\ be used as a prefix for any base specifier to indicate the number is negative
+\ The negative prefix must come before any base specifier. *dpl* is used to 
+\ store where the decimal place occurred in the input.
 \
 
-h: number? ( b u -- d f : is number? )
+h: number? ( a u -- d -1 | a u 0 )
   [-1] dpl !
-  radix     >r
-  negative? >r
-  base?
-  0 -rot 0 -rot 
-  >number
-  string@ [char] . = over 0<> and if +string
-    dup>r >number nip if 0 rdrop else r> dpl ! [-1] then 
-  else 
-    nip 0= 
-  then
-  r> if >r dnegate r> then
-  r> base! ; 
+  base@ >r
+  string@ [char] - = dup>r if     +string then
+  string@ [char] $ =       if hex +string then
+  2>r 0 dup 2r> 
+  begin 
+    >number dup
+  while string@ [char] . xor
+    if rot-drop rot r> 2drop-0 r> base! exit then 
+    1- dpl ! 1+ dpl @
+  repeat 2drop r> if dnegate then r> base! [-1] ;
 
 \ 
 \ ## Parsing
@@ -2308,10 +2279,10 @@ h: .string do$ print ; ( -- : print string  )
 [t] .string        tdoPrintString meta!
 [t] string-literal tdoStringLit   meta!
 
-h: parse-string [char] " word count+ cp! ; ( -- )
 ( <string>, --, Run: -- b )
-: $"  compile string-literal parse-string ; immediate compile-only
-: ."  compile .string parse-string ; immediate compile-only ( <string>, -- )
+: $" compile string-literal fallthrough; immediate compile-only
+h: parse-string [char] " word count+ cp! ; ( ccc" -- )
+: ." compile .string parse-string ; immediate compile-only ( <string>, -- )
 : abort [-1] [-1] yield? ;                                     ( -- )
 h: ?abort swap if print cr abort then drop ;                   ( u a -- )
 h: (abort) do$ ?abort ;                                        ( -- )
@@ -2365,12 +2336,12 @@ h: ?error ( n -- : perform actions on error )
 
 h: (ok) command? if ."  ok  " cr exit then ;  ( -- )
 ( : ok <ok> @execute ; )
-h: ?depth sp@ sp0 u< if 4 -throw exit then ;  ( u -- : depth check )
+
 h: eval ( -- )
   begin
     token dup c@
   while
-    interpret ?depth
+    interpret 0 ?depth
   repeat drop <ok> @execute ;
 
 \ *quit* can now be defined, it sets up the input line variables, sets the
@@ -2392,8 +2363,8 @@ h: eval ( -- )
 \ re-thrown after the input is restored.
 \
 
-h: get-input source in@ source-id <ok> @ ;    ( -- n1...n5 )
-h: set-input <ok> ! id ! in! #tib 2! ;   ( n1...n5 -- )
+h: get-input source in@ source-id <ok> @ ; ( -- n1...n5 )
+h: set-input <ok> ! id ! in! #tib 2! ;     ( n1...n5 -- )
 : evaluate ( a u -- )
   get-input 2>r 2>r >r
   0 [-1] 0 set-input
@@ -2494,19 +2465,19 @@ h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) <ok> ! ;
 \ *does>* allows us to do. 
 
 h: ?check ( magic-number -- : check for magic number on the stack )
-   magic <> if $16 -throw exit then ;
+   magic = ?exit $16 -throw ;
 h: ?unique ( a -- a : print a message if a word definition is not unique )
-  dup last @ searcher
+  dup get-current searcher 
   if
     ( source type )
     space
     2drop last-def @ nfa print  ."  redefined " cr exit
   then ;
 h: ?nul ( b -- : check for zero length strings )
-   count 0= if $A -throw exit then 1- ;
+   dup c@ 0<> ?exit $A -throw ;
 
 h: find-token token find fallthrough; ( -- pwd,  <string> )
-h: ?not-found 0= if not-found exit then ; ( t -- )
+h: ?not-found 0<> ?exit not-found ; ( t -- )
 h: find-cfa find-token cfa ;                         ( -- xt, <string> )
 : ' find-cfa state@ if postpone literal exit then ; immediate
 : [compile] find-cfa compile, ; immediate compile-only  ( --, <string> )
@@ -2836,7 +2807,7 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 h: blk-@ blk @ ;              ( -- k : retrieve current loaded block )
 h: +block blk-@ + ;           ( -- )
 : save 0 here (save) throw ;  ( -- : save blocks )
-: flush block-dirty @ if 0 [-1] (save) throw exit then ; ( -- )
+: flush block-dirty @ 0= ?exit 0 [-1] (save) throw ; ( -- )
 
 : block ( k -- a )
   1depth
@@ -2915,7 +2886,7 @@ h: pipe [char] | emit ;                      ( -- )
 h: .border 3 spaces c/l [char] - nchars cr ; ( -- )
 h: #line dup 2 u.r ;                    ( u -- u : print line number )
 ( : thru over- for dup load 1+ next drop ; ( k1 k2 -- )
-h: blank =bl fill ;                     ( b u -- )
+
 ( : message l/b extract .line cr ;      ( u -- )
 h: retrieve block drop ;                ( k -- )
 : list                                  ( k -- )
@@ -3026,10 +2997,11 @@ h: bist ( -- u : built in self test )
 
 h: cold ( -- : performs a cold boot  )
    bist ?dup if negate dup yield? exit then
-\  $10 retrieve x 
+\  $10 retrieve z 
    $10 block b/buf 0 fill
    $12 retrieve io!
-   forth sp0 cells sp!
+   forth 
+   sp0 cells sp!
    ( rp0 cells rp! )
    <boot> @execute bye ;
 
@@ -3039,6 +3011,16 @@ h: cold ( -- : performs a cold boot  )
 \ *normal-running* is the boot word, that is *<boot>* is set to.
 \
 
+( h: author   $" Richard James Howe" ; )
+( h: project  $" eForth Interpreter and Metacompiler" ; )
+( h: site     $" https://github.com/howerj/embed" ; )
+( h: license  $" MIT https://opensource.org/licenses/MIT" ; )
+( : welcome  )
+(    ." PROJECT: " project print cr )
+(    ." AUTHOR:  " author  print cr )
+(    ." SITE:    " site    print cr )
+(    ." LICENSE: " license print cr ; )
+ 
 h: hi hex cr ." eFORTH v" ver 0 u.r cr decimal here . .free cr ;       ( -- )
 h: normal-running hi quit ;                                ( -- : boot word )
 
@@ -3188,7 +3170,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ the current output base would have to be saved and then restored.
 \
 
-: .s cr depth for aft r@ pick . then next ."  <sp" ;          ( -- )
+: .s depth for aft r@ pick . then next ."  <sp" cr ;     ( -- )
 h: dm+ chars for aft dup@ space 5u.r cell+ then next ;   ( a u -- a )
 ( h: dc+ chars for aft dup@ space decompile cell+ then next ; ( a u -- a )
 
@@ -3229,9 +3211,9 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;   ( a u -- a )
 \ data within a Forth system, it is a simply way of abstracting out how mass
 \ storage works and worked well on the microcomputers available in the 1980s.
 \ With the rise of computers with a more capable operating systems the Block
-\ [Block Word Set][] Word Set fell out of
-\ favour, being replaced instead by the [File Access Word Set][], allowing 
-\ named files to be accessed as a byte stream.
+\ [Block Word Set][] Word Set fell out of favor, being replaced instead by 
+\ the [File Access Word Set][], allowing named files to be accessed as a 
+\ byte stream.
 \
 \ To keep things simple this editor uses the block word set and in typical
 \ Forth fashion simplifies the problem to the extreme, whilst also sacrificing
@@ -3295,11 +3277,11 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;   ( a u -- a )
 \	| ------------------------ | --------------------------------------- |
 \	| editor                   | add the editor word set to search order |
 \	| $20 l v                  | load block $20 (hex) and display it     |
-\	| x                        | blank block $20                         |
+\	| z                        | blank block $20                         |
 \	| 0 i .( Hello, World ) cr | Put ".( Hello, World ) cr" on line 0    |
 \	| 1 i 2 2 + . cr           | Put "2 2 + . cr" on line 1              |
 \	| v                        | list block $20 again                    |
-\	| x                        | evaluate block $20                      |
+\	| z                        | evaluate block $20                      |
 \	| s                        | save contents                           |
 \	| q                        | unload block word set                   |
 \
@@ -3308,14 +3290,15 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;   ( a u -- a )
 
 0 tlast meta!
 h: [block] blk-@ block ;       ( k -- a : loaded block address )
-h: [check] dup b/buf c/l/ u>= if $18 -throw exit then ;
+h: [check] dup b/buf c/l/ u< ?exit $18 -throw ;
 h: [line] [check] c/l* [block] + ; ( u -- a )
 : l retrieve ;                 ( k -- : Load a block )
 : v blk-@ list ;               ( -- : View current block )
 : n   1  +block l v ;          ( -- : load and list Next block )
 : p [-1] +block l v ;          ( -- : load and list Previous block )
+: z [block] b/buf fallthrough; ( -- : Zero/blank loaded block )
+h: blank =bl fill ;            ( b u -- : fill section of memory with spaces )
 : k [line] c/l blank ;         ( u -- : delete/Kill line )
-: z [block] b/buf blank ;      ( -- : Zero/blank loaded block )
 : s update flush ;             ( -- : Save changes to disk )
 : q editor-voc -order ;        ( -- : Quit editor )
 : x q blk-@ load editor ;      ( -- : eXecute/evaluate block )
@@ -4646,6 +4629,77 @@ do not hold me to that.
 The code for the floating point library was found at:
 <ftp://ftp.taygeta.com/pub/Forth/>.
 
+## LOCATE facility
+
+Some Forths provide a word called *locate* which allows you to look up where
+a word defined in source. This one looks through a given block to find a space
+delimited word, and if found it returns a boolean indicating whether it found
+it and on which line number it found it. It could easily be adapted to search
+through a list of blocks (which would be more useful). *locate* is an example
+of using block storage as a primitive database, it could be used for other
+purposes as well, for example finding users or looking up values in a list of
+things.
+
+
+	$40 constant c/l
+	$10 constant l/b
+
+	: =string compare 0= ;
+	: line c/l * blk @ block + c/l ;                     ( u -- a u )
+	: locate-line                                        ( a -- f )
+	    begin 
+	       bl word dup c@ 
+	    while 
+	      over count rot count 
+	      =string if drop -1 exit then
+	    repeat 2drop 0 ;
+
+	: redirect ( a u -- )
+	  get-input >r >r >r >r >r
+	  line 0 -1 0 set-input 
+	  ' locate-line catch
+	  r> r> r> r> r> set-input throw ;
+
+	: (locate) ( a --, locate counted string 'a' current in 'blk' )
+	    0 l/b 1- for 
+	      2dup redirect if nip -1 rdrop exit then
+	    1+ next 2drop 0 ; ( k -- )
+
+	: locate ( "name", k -- u t )
+	    block drop bl word count pad pack$ (locate) ;
+
+	: found ." FOUND BLK:" blk @ u. ."  LINE:" dup u. cr line type cr ; ( u -- )
+	: not-found drop ." NOT FOUND" cr ; ( u --  )
+	: .locate locate if found exit then not-found ; ( "name", k -- )
+
+	hide line
+	hide redirect
+	hide (locate)
+	hide locate-line
+	hide found
+	hide not-found
+
+	editor $18 l z
+	0 i  HELLO ...
+	1 i     
+	2 i  
+	3 i   ... WORLD HOW ARE YOU
+	4 i     X      Y
+	v
+	q
+
+	$18 .locate WORLD ( <- found, line 3 )
+	$18 .locate YOU   ( <- found, line 3 )
+	$18 .locate $$$   ( <- not-found )
+	$18 .locate HELLO ( <- found, line 0 )
+	$18 .locate Y     ( <- found, line 4 )
+
+The way this word set works is similar to how the *load* word works, it
+redirects the parser to parse out space delimited words line by line from a
+block, but instead of evaluating the line it does a string comparison on each
+space delimited word. We could simplify this if the *eval* keyword was 
+vectored, or even better if *interpret* was. For that matter, it would help
+if a number of input words were vectored.
 
 [H2 CPU]: https://github.com/howerj/forth-cpu
 [J1 CPU]: http://excamera.com/sphinx/fpga-j1.html

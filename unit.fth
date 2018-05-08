@@ -113,7 +113,7 @@ undefined? 1+!  ?\ : 1+! 1 swap +! ;
 : lcm 2dup gcd / * ; \ Least Common Multiple                 ( u1 u2 -- u )
 : square dup * ;                                             ( u -- u )
 : limit rot min max ;                                        ( u hi lo -- u )
-: sum 1- 0 $7fff limit for aft + then next ;                 ( a0...an n -- n )
+: sum 1- 0 $7FFF limit for aft + then next ;                 ( a0...an n -- n )
 
 \ *merge* takes two word lists and appends 'wid1' to 'wid2. Most of the
 \ complexity is down to the fact that words in this eForth implementation
@@ -122,7 +122,7 @@ undefined? 1+!  ?\ : 1+! 1 swap +! ;
 \ preserving when modifying it.
 \
 
-: >@ $3fff and ;     ( a -- a : address with attribute bits masked off )
+: >@ $3FFF and ;     ( a -- a : address with attribute bits masked off )
 : >attr $C000 and ;  ( a -- u : get attribute bits from an address )
 : link! dup @ >attr rot >@ or swap ! ; ( u a -- ) 
 : link >@ @ >@ ;
@@ -152,7 +152,7 @@ hide 1ms hide 1s
 \ From: https://en.wikipedia.org/wiki/Integer_square_root
 \ This function computes the integer square root of a number.
 : sqrt ( n -- u : integer square root )
-  s>d  if -$b throw then ( does not work for signed values )
+  s>d  if -$B throw then ( does not work for signed values )
   dup 2 < if exit then      ( return 0 or 1 )
   dup                       ( u u )
   2 rshift recurse 2*       ( u sc : 'sc' == unsigned small candidate )
@@ -163,7 +163,7 @@ hide 1ms hide 1s
 
 : log ( u base -- u : compute the integer logarithm of u in 'base' )
   >r
-  dup 0= if -$b throw then ( logarithm of zero is an error )
+  dup 0= if -$B throw then ( logarithm of zero is an error )
   0 swap
   begin
     swap 1+ swap r@ / dup 0= ( keep dividing until 'u' is 0 )
@@ -176,8 +176,8 @@ hide 1ms hide 1s
 : count-bits ( number -- bits )
   dup $5555 and swap 1 rshift $5555 and +
   dup $3333 and swap 2 rshift $3333 and +
-  dup $0f0f and swap 4 rshift $0f0f and +
-  $ff mod ;
+  dup $0F0F and swap 4 rshift $0F0F and +
+  $FF mod ;
 
 \ http://forth.sourceforge.net/algorithm/firstbit/index.html
 : first-bit ( number -- first-bit )
@@ -220,7 +220,7 @@ hide 1ms hide 1s
 
 \ : ?exit if rdrop exit then ;
 
-\ $fffe constant rp0
+\ $FFFE constant rp0
 \ : rdepth rp0 rp@ - chars ;
 \ \ @todo 'rpick' picks the wrong way around
 \ : rpick cells cell+ rp0 swap - @ ; 
@@ -272,6 +272,11 @@ hide 1ms hide 1s
 \ : -m/mod over 0< if dup    >r +       r> then u/mod ;         ( d +n - r q )
 \ :  m/     dup 0< if negate >r dnegate r> then -m/mod swap drop ; ( d n - q )
 
+\ From comp.lang.forth:
+\ : du/mod ( ud1 ud2 -- udrem udquot )  \ b/d = bits/double
+\   0 0 2rot b/d 0 do 2 pick over 2>r d2* 2swap d2* r>
+\  0< 1 and m+ 2dup 7 pick 7 pick du< 0= r> 0< or if 5 pick
+\  5 pick d- 2swap 1 m+ else 2swap then loop 2rot 2drop ; 
 
 \ ========================= CORDIC CODE =======================================
 
@@ -301,8 +306,8 @@ forth-wordlist set-current
     k 1+!
     1-
   repeat y @ x @ ;
-: sin cordic drop ;
-: cos cordic nip ;
+: sin cordic drop ; ( rad/16384 -- sin : fixed-point sine )
+: cos cordic nip ;  ( rad/16384 -- cos : fixed-point cosine )
 
 only forth definitions
 
@@ -345,7 +350,7 @@ variable float-voc
 : fdrop 2drop ;        ( f -- )
 : fnip fswap fdrop ;   ( f1 f2 -- f2 )
 : fnegate $8000 xor zero ;                  ( f -- f )
-: fabs  $7fff and ;                         ( f -- f )
+: fabs  $7FFF and ;                         ( f -- f )
 : fsign fabs over 0< if >r dnegate r> $8000 or then ;
 
 : f2*   1+ zero ;                          ( f -- f )
@@ -358,7 +363,6 @@ variable float-voc
         if   um/ r> zero
         else >r d2/ fabs r> um/ r> 1+
         then ;
-
 
 : f+    rot 2dup >r >r fabs swap fabs -
         dup if s>d
@@ -394,7 +398,7 @@ create precision 3 ,
 
 : set-precision dup 0 $5 within if precision ! exit then -$2B throw ; ( +n -- )
 : shifts fabs $4010 - s>d invert if -$2B throw then negate ;
-: f#    base @ $a <> if -$28 throw then
+: f#    base @ $A <> if -$28 throw then
 	>r precision @ tens drop um* r> shifts
         ralign precision @ ?dup if for aft # then next
         [char] . hold then #s rot sign ;
@@ -580,7 +584,7 @@ variable verbose  ( verbosity level of the tests )
 : .pass   verbose @ 1 > if ."   ok: " space quine then ; ( -- )
 : .failed verbose @ 0 > if ." fail: " space quine then ; ( -- )
 : pass passed 1+! ;                      ( -- )
-: fail empty-stacks -$b throw ;           ( -- )
+: fail empty-stacks -$B throw ;           ( -- )
 
 \ 'equal' is the most complex word in this test bench, it tests whether two
 \ groups of numbers of the same length are equal, the length of the numbers
@@ -652,7 +656,7 @@ T{  2 2 +        ->  4 }T
 T{  3 2 4 within -> -1 }T
 T{  2 2 4 within -> -1 }T
 T{  4 2 4 within ->  0 }T
-T{ 98 4 min      ->  4 }T
+T{ 98  4 min     ->  4 }T
 T{  1  5 min     ->  1 }T
 T{ -1  5 min     -> -1 }T
 T{ -6  0 min     -> -6 }T
@@ -683,9 +687,9 @@ T{ 8 log2 -> 3 }T
 T{ 4 log2 -> 2 }T
 T{ 2 log2 -> 1 }T
 T{ 1 log2 -> 0 }T
-T{ $ffff count-bits -> $10 }T
-T{ $ff0f count-bits -> $C }T
-T{ $f0ff count-bits -> $C }T
+T{ $FFFF count-bits -> $10 }T
+T{ $FF0F count-bits -> $C }T
+T{ $F0FF count-bits -> $C }T
 T{ $0001 count-bits -> $1 }T
 T{ $0000 count-bits -> $0 }T
 T{ $0002 count-bits -> $1 }T
@@ -811,50 +815,50 @@ T{ 1 2 3  rot -> 2 3 1 }T
 T{ 1 2 3 -rot -> 3 1 2 }T
 
 T{ 2 3 ' + execute -> 5 }T
-T{ : test-1 [ $5 $3 * ] literal ; test-1 -> $f }T
+T{ : test-1 [ $5 $3 * ] literal ; test-1 -> $F }T
 
 marker variable-test
 
 logger( Defined variable 'x' ) 
 variable x
 T{ 9 x  ! x @ ->  9 }T
-T{ 1 x +! x @ -> $a }T
+T{ 1 x +! x @ -> $A }T
 
 variable-test
 
 T{     0 invert -> -1 }T
 T{    -1 invert -> 0 }T
-T{       $5555 invert -> $aaaa }T
+T{ $5555 invert -> $AAAA }T
 
 T{     0     0 and ->     0 }T
 T{     0    -1 and ->     0 }T
 T{    -1     0 and ->     0 }T
 T{    -1    -1 and ->    -1 }T
-T{ $fa50 $05af and -> $0000 }T
-T{ $fa50 $fa00 and -> $fa00 }T
+T{ $FA50 $05AF and -> $0000 }T
+T{ $FA50 $FA00 and -> $FA00 }T
 
 T{     0     0  or ->     0 }T
 T{     0    -1  or ->    -1 }T
 T{    -1     0  or ->    -1 }T
 T{    -1    -1  or ->    -1 }T
-T{ $fa50 $05af  or -> $ffff }T
-T{ $fa50 $fa00  or -> $fa50 }T
+T{ $FA50 $05AF  or -> $FFFF }T
+T{ $FA50 $FA00  or -> $FA50 }T
 
 T{     0     0 xor ->     0 }T
 T{     0    -1 xor ->    -1 }T
 T{    -1     0 xor ->    -1 }T
 T{    -1    -1 xor ->     0 }T
-T{ $fa50 $05af xor -> $ffff }T
-T{ $fa50 $fa00 xor -> $0050 }T
+T{ $FA50 $05AF xor -> $FFFF }T
+T{ $FA50 $FA00 xor -> $0050 }T
 
-T{ $ffff     1 um+ -> 0 1  }T
-T{ $40   $ffff um+ -> $3f 1  }T
+T{ $FFFF     1 um+ -> 0 1  }T
+T{ $40   $FFFF um+ -> $3F 1  }T
 T{ 4         5 um+ -> 9 0  }T
 
-T{ $ffff     1 um* -> $ffff     0 }T
-T{ $ffff     2 um* -> $fffe     1 }T
+T{ $FFFF     1 um* -> $FFFF     0 }T
+T{ $FFFF     2 um* -> $FFFE     1 }T
 T{ $1004  $100 um* ->  $400   $10 }T
-T{     3     4 um* ->    $c     0 }T
+T{     3     4 um* ->    $C     0 }T
 
 T{     1     1   < ->  0 }T
 T{     1     2   < -> -1 }T
@@ -903,7 +907,7 @@ T{ -8 3  /mod -> -2 -2 }T
 T{     0 ><   -> 0     }T
 T{    -1 ><   -> -1    }T
 T{ $0001 ><   -> $0100 }T
-T{ $cafe ><   -> $feca }T
+T{ $CAFE ><   -> $FECA }T
 T{ $1234 ><   -> $3412 }T
 
 marker definition-test
@@ -920,7 +924,7 @@ logger\ .( e1: ) space e1 type cr
 logger\ .( e2: ) space e2 type cr
 logger\ .( e3: ) space e3 type cr
 T{ e1 evaluate -> 7 }T
-T{ e2 throws? evaluate -> $a negate }T
+T{ e2 throws? evaluate -> $A negate }T
 T{ e3 evaluate z -> $10 }T
 
 definition-test
@@ -936,8 +940,8 @@ T{ char 1     -> $31 }T
 T{ char g     -> $67 }T
 T{ char ghijk -> $67 }T
 
-T{ #vocs 8 min -> 8 }T    \ minimum number of vocabularies is 8
-T{ b/buf      -> $400 }T  \ b/buf should always be 1024
+T{ #vocs 8 min -> 8 }T     \ minimum number of vocabularies is 8
+T{ b/buf       -> $400 }T  \ b/buf should always be 1024
 defined? sp@ ?\ T{ sp@ 2 3 4 sp@ nip nip nip - abs chars -> 4 }T
 T{ here 4 allot -4 allot here = -> -1 }T
 
@@ -947,11 +951,11 @@ defined? d< ?\ T{  0  0  1  0 d< -> -1 }T
 defined? d< ?\ T{  0 -1  0  0 d< -> -1 }T
 defined? d< ?\ T{  0 -1  0 -1 d< ->  0 }T
 defined? d< ?\ T{  0 -1  0  1 d< -> -1 }T
-defined? d< ?\ T{ $ffff -1  0  1 d< -> -1 }T
-defined? d< ?\ T{ $ffff -1  0  -1 d< -> 0 }T
+defined? d< ?\ T{ $FFFF -1  0  1 d< -> -1 }T
+defined? d< ?\ T{ $FFFF -1  0  -1 d< -> 0 }T
 
 $FFFF constant min-int 
-$7fff constant max-int
+$7FFF constant max-int
 $FFFF constant 1s
 
 T{       0 s>d              1 sm/rem ->  0       0 }T
@@ -1028,7 +1032,7 @@ statistics  = ?\ .( [ALL PASSED] ) cr
 .( CALLING MARKER 'XXX' ) cr
 xxx
 
-.( SAVING NEW IMAGE ) cr
+.( SAVING NEW IMAGE [SIZE:) here u. .( ] ) cr
 save
 
 .( FINISHED TESTS ) cr

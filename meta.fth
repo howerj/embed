@@ -236,9 +236,9 @@ $4400 constant (sp0)   ( start of variable stack )
     ." TARGET DICTIONARY: " cr
     locations
   then
-  ." HOST: "       here        . cr
-  ." TARGET: "     there       . cr
-  ." HEADER: "     #target $30 dump cr ;
+  ." HOST:   "  here        . cr
+  ." TARGET: "  there       . cr
+  ." HEADER: "  #target $30 dump cr ;
 
 : checksum #target there crc ; ( -- u : calculate CRC of target image )
 
@@ -508,11 +508,23 @@ a: return ( -- : Compile a return into the target )
 : t: ( "name", -- : creates a word in the target dictionary )
   lookahead thead h: ;
 
+: ?unstructured $F00D <> if source type cr 1 abort" unstructured! " then ;
 \ @warning: Only use *fallthrough* to fall-through to words defined with *h:*.
-: fallthrough;
-  [compile] ]
-  $F00D <> if source type cr 1 abort" unstructured! " then ;
+
+: fallthrough; [compile] ] ?unstructured ; ( u -- )
 : t; fallthrough; optimize if exit, else [a] return then ;
+
+\ *;;* is used to do the same thing as 'fallthrough; h: <name>' in slightly
+\ different way.
+\
+\	: a b h: cd c d ;; ( define 'a', a normal word, and 'cd' )
+\ 	: cde cd e ;       ( use 'cd', and also do 'e' )
+\ 
+\ This is still used for code sharing allowing the tail end of a word to be 
+\ used within a definition. 
+\
+
+: ;; t; ?unstructured ;
 
 \ *fetch-xt* is used to check that a variable contains a valid execution token,
 \ to implement certain functionality we will need to refer to functions yet
@@ -859,7 +871,7 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ *forth-wordlist* and in the assembly search order.
 \
 
-( : nop      nop      ; ( -- : do nothing )
+( : nop    nop      ; ( -- : do nothing )
 : dup      dup      ; ( n -- n n : duplicate value on top of stack )
 : over     over     ; ( n1 n2 -- n1 n2 n1 : duplicate second value on stack )
 : invert   invert   ; ( u -- u : bitwise invert of value on top of stack )
@@ -1003,7 +1015,7 @@ $400     tconstant b/buf ( size of a block )
 0        tvariable blk   ( current blk loaded, set in *cold* )
 #version constant  ver   ( eForth version )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
-$ffff    tvariable dpl   ( number of places after fraction )
+$FFFF    tvariable dpl   ( number of places after fraction )
 0        tvariable <literal> ( holds execution vector for literal )
 0        tvariable <boot>  ( -- : execute program at startup )
 0        tvariable <ok>
@@ -1076,10 +1088,8 @@ h: drop-0 drop fallthrough;  ( n -- 0 )
 h: 0x0000 $0000 ;            ( -- $0000 : space/optimization, push $0000 )
 h: state@ state @ ;          ( -- u )
 h: first-bit 1 and ;         ( u -- u )
-h: in! >in ! ;               ( u -- )
 h: in@ >in @ ;               ( -- u )
 h: base@ base @ ;            ( -- u )
-h: base! base ! ;            ( u -- )
 
 \ Now the implementation of the Forth interpreter without the apologies
 \ for the words in the prior section. This group of words implement some
@@ -1114,9 +1124,9 @@ h: cell- cell - ;           ( a -- a : adjust address to previous cell )
 : tuck swap over ;          ( n1 n2 -- n2 n1 n2 )
 : +! tuck @ +  fallthrough; ( n a -- : increment value at *a* by *n* )
 h: swap! swap ! ;           ( a u -- )
-h: zero  0 swap! ;          ( a -- : zero value at address )
-: 1+!   1  swap +! ;        ( a -- : increment value at address by 1 )
-: 1-! [-1] swap +! ;        ( a -- : decrement value at address by 1 )
+h: zero 0 swap! ;           ( a -- : zero value at address )
+: 1+!   1  h: s+! swap +! ;; ( a -- : increment value at address by 1 )
+: 1-! [-1] s+! ;        ( a -- : decrement value at address by 1 )
 : 2! ( d a -- ) tuck ! cell+ ! ;      ( n n a -- )
 : 2@ ( a -- d ) dup cell+ @ swap @ ;  ( a -- n n )
 : get-current current @ ;             ( -- wid )
@@ -1536,9 +1546,10 @@ h: ?depth depth < ?exit 4 -throw ; ( ??? n -- check depth )
 \ then base is set back to its default, decimal, and an exception is thrown.
 \
 
-: decimal  $A base! ;                      ( -- )
+: decimal  $A fallthrough;  ( -- : set base to decimal )
+h: base! base ! ;           ( u -- : set base )
 : hex     $10 base! ;                      ( -- )
-h: radix base@ dup 2 - $22 u> if decimal $28 -throw exit then ; ( -- u )
+h: radix base@ dup 2 - $23 u< ?exit decimal $28 -throw ; ( -- u )
 
 \ *digit* converts a number to its character representation, but it only
 \ deals with numbers less than 36, it does no checking for the output base,
@@ -1635,8 +1646,8 @@ h: (u.) 0 <# #s #> ;             ( u -- b u : turn *u* into number string )
 h: adjust over- spaces type ;    ( b n n -- )
 h: 5u.r 5 u.r ;                  ( u -- )
 ( :  .r >r (.)( r> adjust ;       ( n n -- : print n, right justified by +n )
-: u.  (u.) space type ;          ( u -- : print unsigned number )
-:  .  radix $A xor if u. exit then (.) space type ; ( n -- print number )
+: u.  (u.) h: blt space type ;;          ( u -- : print unsigned number )
+:  .  radix $A xor if u. exit then (.) blt ; ( n -- print number )
 ( : >base swap base @ >r base ! execute r> base ! ; )
 ( : d. $a  '  . >base ; )
 ( : h. $10 ' u. >base ; )
@@ -1656,8 +1667,7 @@ h: 5u.r 5 u.r ;                  ( u -- )
 \ be defined which prints out the amount of space left in memory for programs
 \
 
-h: unused $4000 here - ;         ( -- u : unused program space )
-h: .free unused u. ;             ( -- : print unused program space )
+h: .free $4000 here - u. ;  ( -- : print unused program space )
 
 \ 
 \ ### String Handling and Input
@@ -1711,7 +1721,7 @@ h: down cell negate and ; ( a -- a : align down )
   for ( a1 a2 )
     aft
       count rot count rot - ?dup
-      if nip nip rdrop exit then
+      if rdrop nip nip exit then
     then
   next 2drop-0 ;
 
@@ -1799,7 +1809,8 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ 
 
 : expect <expect> @execute span ! drop ;                     ( b u -- )
-: query tib tib-length <expect> @execute #tib ! drop-0 in! ; ( -- )
+: query tib tib-length <expect> @execute #tib ! drop-0 fallthrough;
+h: in! >in ! ; ( u -- )
 
 \ *query* stores its results in the Terminal Input Buffer (TIB), which is way
 \ the word *tib* gets its name. The TIB is a simple data structure which
@@ -1948,7 +1959,6 @@ h: .id dup nfa print space ;          ( pwd -- pwd : print out a word )
 h: immediate? $4000 fallthrough;  ( pwd -- t : is word immediate? )
 h: set? swap @ and 0<> ;          ( a u -- t : it any of 'u' set? )
 h: compile-only? 0x8000 set? ;    ( pwd -- t : is word compile only? )
-
 h: inline? inline-start inline-end within ; ( pwd -- t : is word inline? )
 
 \ Now we know the structure of the dictionary we can define some words that
@@ -2024,7 +2034,7 @@ h: digit? ( c base -- u f )
   >r [char] 0 - 9 over <
   if 
     7 - 
-    =bl invert and ( handle lower case, as well as upper case )
+    \ =bl invert and ( handle lower case, @todo fix this )
     dup $A < or 
   then dup r> u< ;
 
@@ -2065,6 +2075,8 @@ h: digit? ( c base -- u f )
 \ store where the decimal place occurred in the input.
 \
 
+( $2e tvariable fsp )
+
 h: number? ( a u -- d -1 | a u 0 )
   [-1] dpl !
   base@ >r
@@ -2073,7 +2085,7 @@ h: number? ( a u -- d -1 | a u 0 )
   2>r 0 dup 2r> 
   begin 
     >number dup
-  while string@ [char] . xor
+  while string@ [char] .  ( fsp @ ) xor
     if rot-drop rot r> 2drop-0 r> base! exit then 
     1- dpl ! 1+ dpl @
   repeat 2drop r> if dnegate then r> base! [-1] ;
@@ -2120,7 +2132,7 @@ h: parser ( b u c -- b u delta )
 :  ( [char] ) parse 2drop ; immediate \ ) ( parse until matching paren )
 : .( [char] ) parse type ; ( print out text until matching parenthesis )
 : \ #tib @ in! ; immediate ( comment until new line )
-h: ?length dup word-length u> if $13 -throw exit then ;
+h: ?length dup word-length u< ?exit $13 -throw ;
 : word 1depth parse ?length here pack$ ; ( c -- a ; <string> )
 : token =bl word ;                       ( -- a )
 : char token count drop c@ ;             ( -- c; <string> )
@@ -2173,7 +2185,7 @@ h: ?length dup word-length u> if $13 -throw exit then ;
 \ if it is defined. It hides the latest define word.
 \ 
 
-h: ?dictionary dup $3F00 u> if 8 -throw exit then ;
+h: ?dictionary dup $3F00 u< ?exit 8 -throw ;
 : , here dup cell+ ?dictionary cp! ! ; ( u -- : store *u* in dictionary )
 : c, here ?dictionary c! cp 1+! ;      ( c -- : store *c* in the dictionary )
 h: doLit 0x8000 or , ;                 ( n+ -- : compile literal )
@@ -2189,8 +2201,8 @@ h: make-callable chars $4000 or ; ( cfa -- instruction )
 h: $compile dup inline? if cfa @ , exit then cfa compile, ; ( pwd -- )
 h: not-found source type $D -throw ; ( -- : throw 'word not found' )
 
-h: ?compile dup compile-only? if source type $E -throw exit then ;
-: (literal) state@ if postpone literal exit then ; ( u -- u | )
+h: ?compile dup compile-only? 0= ?exit source type $E -throw ;
+: (literal) command? ?exit postpone literal ; ( u -- u | )
 : interpret ( ??? a -- ??? : The command/compiler loop )
   \ dup count type space ( <- for tracing the parser )
   find ?dup if
@@ -2270,7 +2282,7 @@ h: (smudge) nfa $80 swap toggle ; ( pwd -- )
 \
 
 h: count+ count + ;
-h: do$ r> r@ r> count+ aligned >r swap >r ; ( -- a )
+h: do$ 2r> dup count+ aligned >r swap >r ; ( -- a )
 h: string-literal do$ nop ; ( -- a : do string NB. nop to fool optimizer )
 h: .string do$ print ; ( -- : print string  )
 
@@ -2284,7 +2296,7 @@ h: .string do$ print ; ( -- : print string  )
 h: parse-string [char] " word count+ cp! ; ( ccc" -- )
 : ." compile .string parse-string ; immediate compile-only ( <string>, -- )
 : abort [-1] [-1] yield? ;                                     ( -- )
-h: ?abort swap if print cr abort then drop ;                   ( u a -- )
+h: ?abort swap if print cr abort exit then drop ;              ( u a -- )
 h: (abort) do$ ?abort ;                                        ( -- )
 : abort" compile (abort) parse-string ; immediate compile-only ( u -- )
 
@@ -2334,7 +2346,7 @@ h: ?error ( n -- : perform actions on error )
     exit
   then ;
 
-h: (ok) command? if ."  ok  " cr exit then ;  ( -- )
+h: (ok) state@ ?exit ."  ok" cr ;  ( -- : default state aware prompt )
 ( : ok <ok> @execute ; )
 
 h: eval ( -- )
@@ -2467,12 +2479,10 @@ h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) <ok> ! ;
 h: ?check ( magic-number -- : check for magic number on the stack )
    magic = ?exit $16 -throw ;
 h: ?unique ( a -- a : print a message if a word definition is not unique )
-  dup get-current searcher 
-  if
+  dup get-current searcher 0= ?exit
     ( source type )
-    space
-    2drop last-def @ nfa print  ."  redefined " cr exit
-  then ;
+  space
+  2drop last-def @ nfa print  ."  redefined" cr ;
 h: ?nul ( b -- : check for zero length strings )
    dup c@ 0<> ?exit $A -throw ;
 
@@ -2488,8 +2498,8 @@ h: get-current! ?dup if get-current ! exit then ; ( -- wid )
 : : align here dup last-def ! ( "name", -- colon-sys )
   last , token ?nul ?unique count+ cp! magic postpone ] ; ( NB. need postpone!)
 : begin here  ; immediate compile-only      ( -- a )
-: until chars $2000 or , ; immediate compile-only  ( a -- )
 : again chars , ; immediate compile-only ( a -- )
+: until $4000 or postpone again ; immediate compile-only ( a --, NB. again !? )
 h: here-0 here 0x0000 ;
 h: >mark here-0 postpone again ;
 : if here-0 postpone until ; immediate compile-only
@@ -2504,10 +2514,10 @@ h: last-cfa last-def @ cfa ;  ( -- u )
 ( : tail last-cfa postpone again ; immediate compile-only )
 : create postpone : drop compile doVar get-current ! postpone [ ;
 : >body cell+ ; ( a -- a )
-h: doDoes r> chars here chars last-cfa dup cell+ doLit ! , ;
+h: doDoes r> chars here chars last-cfa dup cell+ doLit h: !, ! , ;;
 : does> compile doDoes nop ; immediate compile-only
 : variable create 0 , ;
-: constant create ' doConst make-callable here cell- ! , ;
+: constant create ' doConst make-callable here cell- !, ;
 : :noname here-0 magic postpone ] ; ( NB. need postpone! )
 : for =>r , here ; immediate compile-only
 : next compile doNext , ; immediate compile-only
@@ -2806,8 +2816,8 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 : update [-1] block-dirty ! ; ( -- )
 h: blk-@ blk @ ;              ( -- k : retrieve current loaded block )
 h: +block blk-@ + ;           ( -- )
-: save 0 here (save) throw ;  ( -- : save blocks )
-: flush block-dirty @ 0= ?exit 0 [-1] (save) throw ; ( -- )
+: save 0 here h: -save (save) throw ;;  ( -- : save blocks )
+: flush block-dirty @ 0= ?exit 0 [-1] -save ; ( -- )
 
 : block ( k -- a )
   1depth
@@ -3003,7 +3013,7 @@ h: cold ( -- : performs a cold boot  )
    forth 
    sp0 cells sp!
    ( rp0 cells rp! )
-   <boot> @execute bye ;
+   <boot> @execute ;
 
 \ *hi* prints out the welcome message, the version number, sets the numeric
 \ base to decimal, and prints out the amount of memory used and free.
@@ -3087,7 +3097,6 @@ h: name ( cwf -- a | 0 )
      swap r@ search-for-cfa ?dup if >r 1- ndrop r> rdrop exit then
    1- repeat rdrop ;
 
-h: .name name ?dup 0= if $" ?" then print ;
 h: ?instruction ( i m e -- i 0 | e -1 )
   >r over-and r> tuck = if nip [-1] exit then drop-0 ;
 
@@ -3099,7 +3108,8 @@ h: .instruction ( u -- u )
    drop-0 [char] B emit ;
 
 h: decompile ( u -- : decompile instruction )
-   dup .instruction $BFFF and if drop exit then space .name ;
+   dup .instruction $BFFF and if drop exit then space fallthrough;
+h: .name name ?dup 0= if $" ?" then print ;
 
 h: decompiler ( previous current -- : decompile starting at address )
   >r
@@ -3138,9 +3148,9 @@ h: decompiler ( previous current -- : decompile starting at address )
   swap      2dup= if drop here then >r
   cr colon-space .id dup cr
   cfa r> decompiler space [char] ; emit
-  dup compile-only? if ."  compile-only " then
-  dup inline?       if ."  inline "       then
-      immediate?    if ."  immediate "    then cr ;
+  dup compile-only? if ."  compile-only" then
+  dup inline?       if ."  inline"       then
+      immediate?    if ."  immediate"    then cr ;
 
 \ A few useful utility words will be added next, which are not strictly
 \ necessary but are useful. Those are *.s* for examining the contents of the
@@ -3294,15 +3304,15 @@ h: [check] dup b/buf c/l/ u< ?exit $18 -throw ;
 h: [line] [check] c/l* [block] + ; ( u -- a )
 : l retrieve ;                 ( k -- : Load a block )
 : v blk-@ list ;               ( -- : View current block )
-: n   1  +block l v ;          ( -- : load and list Next block )
-: p [-1] +block l v ;          ( -- : load and list Previous block )
+: n   1  h: +blv +block l v ;;   ( -- : load and list Next block )
+: p [-1]    +blv ;              ( -- : load and list Previous block )
 : z [block] b/buf fallthrough; ( -- : Zero/blank loaded block )
 h: blank =bl fill ;            ( b u -- : fill section of memory with spaces )
 : k [line] c/l blank ;         ( u -- : delete/Kill line )
 : s update flush ;             ( -- : Save changes to disk )
 : q editor-voc -order ;        ( -- : Quit editor )
 : x q blk-@ load editor ;      ( -- : eXecute/evaluate block )
-: ia c/l* + [block] + source drop in@ + ( u u -- Insert At )
+: ia c/l* + [block] + tib in@ + ( u u -- Insert At )
    swap source nip in@ - cmove postpone \ ;
 : i 0 swap ia ;                ( u -- : Insert line )
 ( : u update ;                 ( -- : set block set as dirty ) 
@@ -3359,7 +3369,7 @@ things out in the following way:
 	| 18 - 62 | User data        |
 	| 63      | Return Stack     |
 
-The virtual machine uses the first six cells for special purposes, apart
+The virtual machine uses the first nine cells for special purposes, apart
 from the division between program/data and data only sections this is the
 only restriction that the *virtual machine* places on memory.
 
@@ -3522,8 +3532,8 @@ performed by three instructions.
 
 ## eForth
 
-The interpreter is based on eForth by C. H. Ting, with some modifications
-to the model.
+The interpreter is based on eForth described by C. H. Ting, and written by
+Bill Muench with some modifications to the model.
 
 ## eForth Memory model
 
@@ -3641,7 +3651,6 @@ This is a list of Error codes, not all of which are used by the application.
 ## Virtual Machine Implementation in C
 
 	/* Embed Forth Virtual Machine, Richard James Howe, 2017-2018, MIT License */
-	#include "embed.h"
 	#include <assert.h>
 	#include <errno.h>
 	#include <stdint.h>
@@ -3655,6 +3664,7 @@ This is a list of Error codes, not all of which are used by the application.
 
 	void embed_die(const char *fmt, ...)
 	{
+		assert(fmt);
 		va_list arg;
 		va_start(arg, fmt);
 		vfprintf(stderr, fmt, arg);
@@ -3665,9 +3675,9 @@ This is a list of Error codes, not all of which are used by the application.
 
 	FILE *embed_fopen_or_die(const char *file, const char *mode)
 	{
+		assert(file && mode);
 		FILE *h = NULL;
 		errno = 0;
-		assert(file && mode);
 		if(!(h = fopen(file, mode)))
 			embed_die("file open %s (mode %s) failed: %s", file, mode, strerror(errno));
 		return h;
@@ -3681,9 +3691,11 @@ This is a list of Error codes, not all of which are used by the application.
 		return h;
 	}
 
+	static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
+
 	static int save(forth_t *h, const char *name, const size_t start, const size_t length)
 	{
-		assert(h && ((length - start) <= length));
+		assert(h && ((length - start) <= length) && ((start + length) <= embed_cells(h)));
 		if(!name)
 			return -1;
 		FILE *out = embed_fopen_or_die(name, "wb");
@@ -3695,7 +3707,6 @@ This is a list of Error codes, not all of which are used by the application.
 		return r;
 	}
 
-	static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
 	forth_t *embed_copy(forth_t const * const h)      { assert(h); return memcpy(embed_new(), h, sizeof(*h)); }
 	int      embed_save(forth_t *h, const char *name) { return save(h, name, 0, embed_cells(h)); }
 	size_t   embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
@@ -3707,11 +3718,10 @@ This is a list of Error codes, not all of which are used by the application.
 		assert(h && name);
 		FILE *input = embed_fopen_or_die(name, "rb");
 		long r = 0, c1 = 0, c2 = 0;
-		for(size_t i = 0; i < MAX(64, embed_cells(h)); i++) {
-			if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0) {
-				r = i;
+		for(size_t i = 0; i < MAX(64, embed_cells(h)); i++, r = i) {
+			assert(embed_cells(h) <= 0x8000);
+			if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0)
 				break;
-			}
 			h->m[i] = ((c1 & 0xffu)) | ((c2 & 0xffu) << 8u);
 		}
 		fclose(input);
@@ -3730,7 +3740,7 @@ This is a list of Error codes, not all of which are used by the application.
 
 			if(m[6] & 1) /* trace on */
 				fprintf(m[6] & 2 ? out : stderr, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, m[2]-rp, sp-m[3]);
-			if((r = -!(sp < l && rp < l && pc < l)))
+			if((r = -!(sp < l && rp < l && pc < l))) /* critical error */
 				goto finished;
 
 			if(0x8000 & instruction) { /* literal */
@@ -3763,7 +3773,7 @@ This is a list of Error codes, not all of which are used by the application.
 				case 20: sp = t >> 1;              break;
 				case 21: rp = t >> 1; T = n;       break;
 				case 22: T = save(h, block, n>>1, ((uint32_t)T+1)>>1); break;
-				case 23: T = fputc(t, out);        break;
+				case 23: T = fputc(t, out);        break; 
 				case 24: T = fgetc(in); n = -1;    break; /* n = blocking status */
 				case 25: if(t) { d = m[--sp]|((uint32_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 				case 26: if(t) { T=(int16_t)n/t; t=(int16_t)n%t; n=t; } else { pc=4; T=10; } break;
@@ -3771,13 +3781,11 @@ This is a list of Error codes, not all of which are used by the application.
 				}
 				sp += delta[ instruction       & 0x3];
 				rp -= delta[(instruction >> 2) & 0x3];
-				if(instruction & 0x20)
-					T = n;
-				if(instruction & 0x40)
-					m[rp] = t;
 				if(instruction & 0x80)
 					m[sp] = t;
-				t = T;
+				if(instruction & 0x40)
+					m[rp] = t;
+				t = instruction & 0x20 ? n : T;
 			} else if (0x4000 & instruction) { /* call */
 				m[--rp] = pc << 1;
 				pc      = instruction & 0x1FFF;
@@ -3796,16 +3804,17 @@ This is a list of Error codes, not all of which are used by the application.
 	int main(int argc, char **argv)
 	{
 		forth_t *h = embed_new();
-		if(argc != 3 && argc != 4)
-			embed_die("usage: %s in.blk out.blk [file.fth]", argv[0]);
-		if(embed_load(h, argv[1]) < 0)
+		if(argc > 4)
+			embed_die("usage: %s [in.blk] [out.blk] [file.fth]", argv[0]);
+		if(embed_load(h, argc < 2 ? "eforth.blk" : argv[1]) < 0)
 			embed_die("embed: load failed");
-		FILE *in = argc == 3 ? stdin : embed_fopen_or_die(argv[3], "rb");
-		if(embed_forth(h, in, stdout, argv[2]))
+		FILE *in = argc <= 3 ? stdin : embed_fopen_or_die(argv[3], "rb");
+		if(embed_forth(h, in, stdout, argc < 3 ? NULL : argv[2]))
 			embed_die("embed: run failed");
 		return 0; /* exiting takes care of closing files, freeing memory */
 	}
 	#endif
+
 
 ## ANSI Terminal Escape Sequence Word Set
 

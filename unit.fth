@@ -1,5 +1,6 @@
 0 <ok> !
-\ This is a Forth test bench for: <https://github.com/howerj/embed>
+\ This is a Forth test bench for: <https://github.com/howerj/embed>, it also
+\ contains extensions to the base interpreter, such as floating point support.
 \
 \ The test bench consists of a few support words, and three words that should
 \ be used together, they are 'T{', '->' and '}T'.
@@ -46,8 +47,9 @@
 undefined? 0<   ?\ : 0< 0 < ;
 undefined? 1-   ?\ : 1- 1 - ;
 undefined? 2*   ?\ : 2* 1 lshift ;
-undefined? rdup ?\ : rdup r> r> dup >r >r >r ;
+\ undefined? rdup ?\ : rdup r> r> dup >r >r >r ;
 undefined? 1+!  ?\ : 1+! 1 swap +! ;
+\ undefined? -throw ?\ : -throw negate throw ;
 
 : dnegate invert >r invert 1 um+ r> + ; ( d -- d )
 : arshift ( n u -- n : arithmetic right shift )
@@ -77,9 +79,7 @@ undefined? 1+!  ?\ : 1+! 1 swap +! ;
 : nand and invert ;  ( u u -- u )
 : nor  and invert ;  ( u u -- u )
 : @bits swap @ and ; ( a u -- u )
-: ascii state @ if [compile] [char] else char then ;
-
-
+: ascii state @ if [compile] [char] else char then ; immediate
 
 \ @warning This version of *marker* comes with caveats, if you are going
 \ to use it do not change the change the vocabulary list or use *definitions*
@@ -98,7 +98,6 @@ undefined? 1+!  ?\ : 1+! 1 swap +! ;
   dabs r@ abs um/mod  ( dl dh    -- rem quo,    R: dh nn -- dh nn )
   r> r@ xor +- swap r> +- swap ;
 
-
 : */mod ( a b c -- rem a*b/c : use double precision intermediate value )
     >r m* r> sm/rem ;
 
@@ -106,14 +105,14 @@ undefined? 1+!  ?\ : 1+! 1 swap +! ;
 \ functions, control structures and recursion works correctly, it is
 \ also handy to have these functions documented somewhere in case they come
 \ in use
-: factorial dup 2 u< if drop 1 exit then dup 1- recurse * ;  ( u -- u )
+: factorial ?dup 0= if 1 exit then >r 1 r> 1- for r@ 1+ * next ; ( u -- u )
 : permutations over swap - factorial swap factorial swap / ; ( u1 u2 -- u )
 : combinations dup dup permutations >r permutations r> / ;   ( u1 u2 -- u )
 : gcd dup if tuck mod recurse exit then drop ;               ( u1 u2 -- u )
 : lcm 2dup gcd / * ; \ Least Common Multiple                 ( u1 u2 -- u )
 : square dup * ;                                             ( u -- u )
-: limit rot min max ;                                        ( u hi lo -- u )
-: sum 1- 0 $7FFF limit for aft + then next ;                 ( a0...an n -- n )
+\ : limit rot min max ;                                      ( u hi lo -- u )
+\ : sum 1- 0 $7FFF limit for aft + then next ;               ( a0...an n -- n )
 
 \ *merge* takes two word lists and appends 'wid1' to 'wid2. Most of the
 \ complexity is down to the fact that words in this eForth implementation
@@ -221,31 +220,9 @@ hide 1ms hide 1s
 \ : ?exit if rdrop exit then ;
 
 \ $FFFE constant rp0
-\ : rdepth rp0 rp@ - chars ;
-\ \ @todo 'rpick' picks the wrong way around
-\ : rpick cells cell+ rp0 swap - @ ; 
-\ 
-\ \ @todo do not print out 'r.s' on its loop counter when 'r.s' runs
-\ : r.s ( -- print out the return stack )
-\   [char] < emit rdepth 0 u.r [char] > emit
-\   rdepth for aft r@ rpick then next 
-\   rdepth for aft u. then next ;
-\ 
+ 
 \ : +leading ( b u -- b u: skip leading space )
 \     begin over c@ dup bl = swap 9 = or while 1 /string repeat ;
-\ 
-\ \ @todo fix >number and numeric input to work with doubles...
-\ : >d ( a u -- d|ud )
-\   0 0 2swap +leading
-\   ?dup if
-\     0 >r ( sign )
-\     over c@
-\     dup  [char] - = if drop rdrop -1 >r 1 /string 
-\     else [char] + = if 1 /string then then
-\     >number nip 0<> throw
-\     r> if dnegate then ( retrieve sign )
-\   else drop then ;
-
 
 \ http://forth.sourceforge.net/word/string-plus/index.html
 \ ( addr1 len1 addr2 len2 -- addr1 len3 )
@@ -326,11 +303,12 @@ only forth definitions
 \	      CHAMPAIGN, IL 61820
 \	      PHONE: 217/826-2734 
 \
+\ NB. There is not under or overflow checking, nor division by zero checks
 only forth definitions
 variable float-voc
 
-: zero  over 0= if drop 0 then ;
-: norm  >r 2dup or
+: zero  over 0= if drop 0 then ; ( f -- f : zero exponent if mantissa is )
+: norm  >r 2dup or               ( f -- f : normalize input float )
         if begin s>d invert
            while d2* r> 1- >r
            repeat swap 0< - ?dup
@@ -347,6 +325,7 @@ variable float-voc
 : fdup 2dup ;          ( f -- f f )
 : fswap 2swap ;        ( f1 f2 -- f2 f1 )
 : fover 2over ;        ( f1 f2 -- f1 f2 f1 )
+: f2dup fover fover ;  ( f1 f2 -- f1 f2 f1 f2 )
 : fdrop 2drop ;        ( f -- )
 : fnip fswap fdrop ;   ( f1 f2 -- f2 )
 : fnegate $8000 xor zero ;                  ( f -- f )
@@ -358,13 +337,17 @@ variable float-voc
 : fsq   fdup f* ;                          ( f -- f )
 : f2/   1- zero ;                          ( f -- f )
 : um/   dup >r um/mod swap r> over 2* 1+ u< swap 0< or - ;
-: f/    rot swap - $4000 + >r
+\ : f0=   zero d0= ;                       ( f -- f )
+: f/    
+	( fdup f0= if -44 throw then )
+        rot swap - $4000 + >r
         0 -rot 2dup u<
         if   um/ r> zero
         else >r d2/ fabs r> um/ r> 1+
         then ;
+\ hide f0=
 
-: f+    rot 2dup >r >r fabs swap fabs -
+: f+    rot 2dup >r >r fabs swap fabs - ( f f -- f : floating point addition )
         dup if s>d
                 if   rot swap  negate
                      r> r> swap >r >r
@@ -375,12 +358,11 @@ variable float-voc
         else d+ if 1+ 2/ $8000 or r> 1+
                 else r> then then ;
 
-: f- fnegate f+ ;      ( f1 f2 -- t )
-: f< f- 0< nip ;       ( f1 f2 -- t )
-: f> fswap f< ;        ( f1 f2 -- t )
-: f2dup fover fover ;  ( f1 f2 -- f1 f2 f1 f2 )
-: fmin f2dup f< if fdrop exit then fnip ; ( f1 f2 -- f )
-: fmax f2dup f> if fdrop exit then fnip ; ( f1 f2 -- f )
+: f- fnegate f+ ;      ( f1 f2 -- t : floating point subtract )
+: f< f- 0< nip ;       ( f1 f2 -- t : floating point less than )
+: f> fswap f< ;        ( f1 f2 -- t : floating point greater than )
+: fmin f2dup f< if fdrop exit then fnip ; ( f1 f2 -- f : min of two floats )
+: fmax f2dup f> if fdrop exit then fnip ; ( f1 f2 -- f : max of two floats )
 
 ( floating point input/output ) 
 decimal
@@ -404,8 +386,8 @@ create precision 3 ,
         [char] . hold then #s rot sign ;
 
 : f.    tuck <# f# #> type space ;
-: d>f $4020 fsign norm ;
-: f     d>f dpl @ tens d>f f/ ;    ( d -- f )
+: d>f $4020 fsign norm ;           ( d -- f : double to float )
+: f     d>f dpl @ tens d>f f/ ;    ( d -- f : formatted double to float )
 : fconstant f 2constant ;          ( "name" , f --, Run Time: -- f )
 : fliteral  f [compile] 2literal ; immediate ( f --, Run Time: -- f )
 : s>f   s>d d>f ;                  ( n -- f )
@@ -556,9 +538,82 @@ only forth definitions
 \ 
 
 hide norm hide zero hide tens hide ralign hide lalign
-hide   -+ hide  one hide fix
+hide   -+ hide  one hide fix  hide shifts 
 
 \ ========================= FLOATING POINT CODE ===============================
+
+\ ========================= DYNAMIC MEMORY ALLOCATION =========================
+\ ## Dynamic Memory Allocation
+\ alloc.fth
+\  Dynamic Memory Allocation package
+\  this code is an adaptation of the routines by
+\  Dreas Nielson, 1990; Dynamic Memory Allocation;
+\  Forth Dimensions, V. XII, No. 3, pp. 17-27
+\ @todo This could use refactoring and better error checking, 'free' could
+\ check that its arguments are within bounds and on the free list
+
+\ pointer to beginning of free space
+variable freelist  0 , 
+
+\ : cell_size ( addr -- n ) >body cell+ @ ;       \ gets array cell size
+
+: initialize ( start_addr length -- : initialize memory pool )
+  over dup freelist !  0 swap !  swap cell+ ! ;
+
+: allocate ( u -- addr ior ) \ allocate n bytes, return pointer to block
+                             \ and result flag ( 0 for success )
+                             \ check to see if pool has been initialized 
+  freelist @ 0= if drop 0 -59 exit then
+  dup 0= if drop 0 -59 exit then
+  cell+ freelist dup
+  begin
+  while dup @ cell+ @ 2 pick u<
+    if 
+      @ @ dup   \ get new link
+    else   
+      dup @ cell+ @ 2 pick - 2 cells max dup 2 cells =
+      if 
+        drop dup @ dup @ rot !
+      else  
+        2dup swap @ cell+ !   swap @ +
+      then
+      2dup ! cell+ 0  \ store size, bump pointer
+    then                   \ and set exit flag
+  repeat
+  nip dup 0= ;
+
+: free ( ptr -- ior ) \ free space at ptr, return status ( 0 for success )
+  1 cells - dup @ swap 2dup cell+ ! freelist dup
+  begin
+    dup 3 pick u< and
+  while
+    @ dup @
+  repeat
+
+  dup @ dup 3 pick ! ?dup
+  if 
+    dup 3 pick 5 pick + =
+    if 
+      dup cell+ @ 4 pick + 3 pick cell+ ! @ 2 pick !
+    else  
+      drop 
+    then
+  then
+
+  dup cell+ @ over + 2 pick =
+  if  
+    over cell+ @ over cell+ dup @ rot + swap ! swap @ swap !
+  else 
+    !
+  then
+  drop 0 ; \ this code always returns a success flag
+
+\ create pool  1000 allot
+\ pool 1000 initialize
+\ 5000 1000 initialize
+\ 5000 100 dump
+\ 40 allocate throw
+\ 80 allocate throw .s swap free throw .s 20 allocate throw .s cr
 
 \ ========================= UNIT TEST FRAMEWORK ===============================
 .( BEGIN TEST SUITE DEFINITIONS ) here . cr
@@ -991,7 +1046,6 @@ T{ max-int max-int m* max-int sm/rem ->  0 max-int }T
 
 T{ :noname 2 6 + ; execute -> 8 }T
 
-
 decimal
 
 \ 3 set-precision
@@ -1038,82 +1092,5 @@ save
 .( FINISHED TESTS ) cr
 bye
 \ ========================= END OF TESTS ======================================
-
-
-
-
-\ ========================= DYNAMIC MEMORY ALLOCATION =========================
-\ ## Dynamic Memory Allocation
-\ alloc.fth
-\  Dynamic Memory Allocation package
-\  this code is an adaptation of the routines by
-\  Dreas Nielson, 1990; Dynamic Memory Allocation;
-\  Forth Dimensions, V. XII, No. 3, pp. 17-27
-\ @todo This could use refactoring and better error checking, 'free' could
-\ check that its arguments are within bounds and on the free list
-
-\ pointer to beginning of free space
-variable freelist  0 , 
-
-\ : cell_size ( addr -- n ) >body cell+ @ ;       \ gets array cell size
-
-: initialize ( start_addr length -- : initialize memory pool )
-  over dup freelist !  0 swap !  swap cell+ ! ;
-
-: allocate ( u -- addr ior ) \ allocate n bytes, return pointer to block
-                             \ and result flag ( 0 for success )
-                             \ check to see if pool has been initialized 
-  freelist @ 0= abort" pool not initialized! " 
-  cell+ freelist dup
-  begin
-  while dup @ cell+ @ 2 pick u<
-    if 
-      @ @ dup   \ get new link
-    else   
-      dup @ cell+ @ 2 pick - 2 cells max dup 2 cells =
-      if 
-        drop dup @ dup @ rot !
-      else  
-        over over swap @ cell+ !   swap @ +
-      then
-      over over ! cell+ 0  \ store size, bump pointer
-    then                   \ and set exit flag
-  repeat
-  swap drop
-  dup 0= ;
-
-: free ( ptr -- ior ) \ free space at ptr, return status ( 0 for success )
-  1 cells - dup @ swap over over cell+ ! freelist dup
-  begin
-    dup 3 pick u< and
-  while
-    @ dup @
-  repeat
-
-  dup @ dup 3 pick ! ?dup
-  if 
-    dup 3 pick 5 pick + =
-    if 
-      dup cell+ @ 4 pick + 3 pick cell+ ! @ 2 pick !
-    else  
-      drop 
-    then
-  then
-
-  dup cell+ @ over + 2 pick =
-  if  
-    over cell+ @ over cell+ dup @ rot + swap ! swap @ swap !
-  else 
-    !
-  then
-  drop 0 ; \ this code always returns a success flag
-
-\ create pool  1000 allot
-\ pool 1000 dynamic-mem
-\ 5000 1000 initialize
-\ 5000 100 dump
-\ 40 allocate throw
-\ 80 allocate throw .s swap free throw .s 20 allocate throw .s cr
- 
 
 

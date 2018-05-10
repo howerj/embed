@@ -8,7 +8,6 @@
 #include <string.h>
 #include <stdarg.h>
 
-#define MAX(X, Y) ((X) < (Y) ? (Y) : (X))
 typedef struct forth_t { uint16_t m[32768]; } forth_t;
 
 void embed_die(const char *fmt, ...)
@@ -61,13 +60,14 @@ int      embed_save(forth_t *h, const char *name) { return save(h, name, 0, embe
 size_t   embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
 void     embed_free(forth_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
 char    *embed_get_core(forth_t *h)               { assert(h); return (char*)h->m; }
+static size_t max_size_t(size_t a, size_t b)      { return a > b ? a : b; }
 
 int embed_load(forth_t *h, const char *name)
 {
 	assert(h && name);
 	FILE *input = embed_fopen_or_die(name, "rb");
 	long r = 0, c1 = 0, c2 = 0;
-	for(size_t i = 0; i < MAX(64, embed_cells(h)); i++, r = i) {
+	for(size_t i = 0; i < max_size_t(64, embed_cells(h)); i++, r = i) {
 		assert(embed_cells(h) <= 0x8000);
 		if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0)
 			break;

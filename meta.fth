@@ -215,6 +215,8 @@ $4400 constant (sp0)   ( start of variable stack )
   [char] " word count dup tc, 1- for count tc, next drop talign update-fence ;
 : tcells =cell * ;             ( u -- a )
 : tbody 1 tcells + ;           ( a -- a )
+: tcfa cfa ;
+: tnfa nfa ;
 : meta! ! ;                    ( u a --  )
 : dump-hex #target there $10 + dump ; ( -- )
 : locations ( -- : list all words and locations in target dictionary )
@@ -576,7 +578,7 @@ a: return ( -- : Compile a return into the target )
   there swap t, mcreate , does> @ [a] literal ;
 
 : [t] ( "name", -- a : get the address of a target word )
-  token target.1 search-wordlist 0= abort" [t]? "
+  token target.1 search-wordlist 0= abort" [t]?"
   cfa >body @ ;
 
 : [f] ( "name", -- execute word in host Forth vocabulary )
@@ -782,18 +784,21 @@ $0001    t, \ $1E: Endianess check
 #version t, \ $20: Version information
 $0001    t, \ $22: Header options
 
-\ @bug There is something very weird going on with the initial header size
-\ It should be possible to allocate memory how I want here, up to a point,
-\ but it causes things to fail. Sometimes '0 t,' does not work, but '0 t, 0t,'
-\ does.
-
 \ ## First Word Definitions
+\ The very first definition is a word we jump to at the start, this word is
+\ the start of the boot loader chain, it calls cold in this version but it
+\ could be setup to retrieve a program from input, or decrypt and decompress 
+\ the rest of the image, hypothetically.
 \
-\ After the header two short words are defined, visible only to the meta
-\ compiler and used by its internal machinery. The words are needed by
-\ *tvariable* and *tconstant*, and these constructs cannot be used without
-\ them. This is an example of the metacompiler and the meta-compiled program
-\ being intermingled, which should be kept to a minimum.
+h: boot-loader fallthrough;  ( just fall-through, equivalent to a jump )
+0 tlocation    <cold>        ( location of 'cold' )
+[t] boot-loader 2/ 0 t!      ( set starting word )
+
+\ After the header and initial jump location, two short words are defined, 
+\ visible only to the meta compiler and used by its internal machinery. The 
+\ words are needed by *tvariable* and *tconstant*, and these constructs cannot 
+\ be used without them. This is an example of the metacompiler and the 
+\ meta-compiled program being intermingled, which should be kept to a minimum.
 
 h: doVar   r> ;    ( -- a : push return address and exit to caller )
 h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
@@ -1662,12 +1667,6 @@ h: 5u.r 5 u.r ;                  ( u -- )
 \
 \        : ? @ . ; ( a -- : display the contents in a memory cell )
 \
-
-\ Words that use the numeric output words can be defined, *.free* can now
-\ be defined which prints out the amount of space left in memory for programs
-\
-
-h: .free $4000 here - u. ;  ( -- : print unused program space )
 
 \ 
 \ ### String Handling and Input
@@ -2930,18 +2929,17 @@ h: retrieve block drop ;                ( k -- )
 \ The boot sequence is as follows:
 \
 \ 1. The virtual machine starts execution at address 0 which will be set
-\ to point to the word *boot-sequence*.
-\ 2. The word *boot-sequence* is executed, which will run the word *cold*
-\ to perform the system setup.
+\ to point to the word *boot-loader*
+\ 2. The word *boot-loader* is executed, which will execute the execution
+\ vector *<cold>*, which is a forward reference to *cold*.
 \ 3. The word *cold* checks that the image length and CRC in the image header
 \ match the values it calculates, zeros blocks of memory, and initializes the
 \ systems I/O.
-\ 4. *boot-sequence* continues execution by executing the execution token
+\ 4. *cold* continues execution by executing the execution token
 \ stored in the variable *<boot>*. This is set to *normal-running* by default.
 \ 5. *normal-running* prints out the welcome message by calling the word *hi*,
 \ and then entering the Forth Read-Evaluate Loop, known as *quit*. This should
 \ not normally return.
-\ 6. If the function returns, *bye* is called, halting the virtual machine.
 \
 \ The boot sequence is modifiable by the user by either writing an execution
 \ token to the *<boot>* variable, or by writing to a jump to a word into memory
@@ -3031,7 +3029,8 @@ h: cold ( -- : performs a cold boot  )
 (    ." SITE:    " site    print cr )
 (    ." LICENSE: " license print cr ; )
  
-h: hi hex cr ." eFORTH v" ver 0 u.r cr decimal here . .free cr ;       ( -- )
+h: hi hex ." eFORTH v" ver 0 u.r cr decimal here . fallthrough;        ( -- )
+h: .free $4000 here - u. cr ;             ( -- : print unused program space )
 h: normal-running hi quit ;                                ( -- : boot word )
 
 \ 
@@ -3143,6 +3142,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ currently only displayed in their raw format.
 \ 
 
+\ @todo reuse name of *immediate* to print out 'immediate'
 : see ( --, <string> : decompile a word )
   token finder ?not-found
   swap      2dup= if drop here then >r
@@ -3150,7 +3150,7 @@ h: decompiler ( previous current -- : decompile starting at address )
   cfa r> decompiler space [char] ; emit
   dup compile-only? if ."  compile-only" then
   dup inline?       if ."  inline"       then
-      immediate?    if ."  immediate"    then cr ;
+      immediate?    if ."  immediate"    then cr ; 
 
 \ A few useful utility words will be added next, which are not strictly
 \ necessary but are useful. Those are *.s* for examining the contents of the
@@ -3180,7 +3180,15 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ the current output base would have to be saved and then restored.
 \
 
-: .s depth for aft r@ pick . then next ."  <sp" cr ;     ( -- )
+( : rdepth rp0 cells rp@ - chars ; ( -- n, R: x0...xn -- x0...xn )
+( : rpick 1+ rp0 swap - cells @ ;  ( n -- xn, R: x0...xn -- x0...xn )
+( : r.s ( -- print out the return stack )
+(   [char] < emit rdepth  0 u.r [char] > emit )
+(   rdepth for aft r@  rpick then next \ NB. Prints out it's own loop counter )
+(   rdepth for aft u. then next ; )
+
+: .s depth begin ?dup while dup pick . 1- repeat ."  <sp" cr ; ( -- )
+
 h: dm+ chars for aft dup@ space 5u.r cell+ then next ;   ( a u -- a )
 ( h: dc+ chars for aft dup@ space decompile cell+ then next ; ( a u -- a )
 
@@ -3330,9 +3338,9 @@ h: blank =bl fill ;            ( b u -- : fill section of memory with spaces )
 \ 
 
 there [t] cp t!
-[t] (literal) [v] <literal> t!   ( set literal execution vector )
-[t] cold 2/ 0 t!                 ( set starting word )
-[t] normal-running [v] <boot> t!
+[t] (literal)      [v] <literal> t! ( set literal execution vector )
+[t] cold 2/        [t] <cold>    t! ( set starting word in boot-loader )
+[t] normal-running [v] <boot>    t! ( set user visible boot vector )
 
 there    [t] header-length t! \ Set Length First!
 checksum [t] header-crc t!    \ Calculate image CRC

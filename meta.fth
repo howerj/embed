@@ -192,8 +192,8 @@ $4400 constant (sp0)   ( start of variable stack )
 #target #max 0 fill    ( Erase the target memory location )
 
 : ]asm assembler.1 +order ; immediate        ( -- )
-: a: get-current assembler.1 set-current : ; ( "name" -- wid link )
-: a; [compile] ; set-current ; immediate     ( wid link -- )
+: a: current @ assembler.1 current ! : ; ( "name" -- wid link )
+: a; [compile] ; current ! ; immediate     ( wid link -- )
 
 : ( [char] ) parse 2drop ; immediate ( "comment" -- discard until parenthesis )
 : \ source drop @ >in ! ; immediate  ( "comment" -- discard until end of line )
@@ -215,8 +215,8 @@ $4400 constant (sp0)   ( start of variable stack )
   [char] " word count dup tc, 1- for count tc, next drop talign update-fence ;
 : tcells =cell * ;             ( u -- a )
 : tbody 1 tcells + ;           ( a -- a )
-: tcfa cfa ;
-: tnfa nfa ;
+\ : tcfa cfa ;
+\ : tnfa nfa ;
 : meta! ! ;                    ( u a --  )
 : dump-hex #target there $10 + dump ; ( -- )
 : locations ( -- : list all words and locations in target dictionary )
@@ -256,7 +256,7 @@ $4400 constant (sp0)   ( start of variable stack )
 \ ### The Assembler
 
 : [a] ( "name" -- : find word and compile an assembler word )
-  token assembler.1 search-wordlist 0= abort" [a]? "
+  bl word assembler.1 search-wordlist 0= abort" [a]? "
   cfa compile, ; immediate
 
 : asm[ assembler.1 -order ; immediate ( -- )
@@ -431,7 +431,7 @@ a: return ( -- : Compile a return into the target )
 \ of the Forth in the target.
 \
 
-: mcreate get-current >r target.1 set-current create r> set-current ;
+: mcreate current @ >r target.1 current ! create r> current ! ;
 
 \ *thead* compiles a word header into the target dictionary with a name
 \ given a string. It is used by *t:*.
@@ -578,11 +578,11 @@ a: return ( -- : Compile a return into the target )
   there swap t, mcreate , does> @ [a] literal ;
 
 : [t] ( "name", -- a : get the address of a target word )
-  token target.1 search-wordlist 0= abort" [t]?"
+  bl word target.1 search-wordlist 0= abort" [t]?"
   cfa >body @ ;
 
 : [f] ( "name", -- execute word in host Forth vocabulary )
-  token forth-wordlist search-wordlist 0= abort" [f]?"
+  bl word forth-wordlist search-wordlist 0= abort" [f]?"
   cfa execute ;
 
 \ @warning only use *[v]* on variables, not *tlocations*
@@ -829,10 +829,7 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ vocabulary manipulation words) and the forth vocabulary are loaded (which
 \ contains most of the words in a standard Forth).
 \
-\ *current* contains a pointer to the vocabulary which new words will be
-\ added to when the target is up and running, this will be the forth
-\ vocabulary, or *_forth-wordlist*.
-\
+
 \ None of these variables are set to any meaningful values here and will be
 \ updated during the metacompilation process.
 \
@@ -842,7 +839,6 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 0 tlocation editor-voc        ( editor vocabulary )
 ( 0 tlocation assembler-voc   ( assembler vocabulary )
 0 tlocation _forth-wordlist   ( set at the end near the end of the file )
-0 tlocation current           ( WID to add definitions to )
 
 \ 
 \ ## Target Assembly Words
@@ -1009,6 +1005,11 @@ there constant inline-end
 
 \ [last] [t] assembler-voc t!
 
+\ *current* contains a pointer to the vocabulary which new words will be
+\ added to when the target is up and running, this will be the forth
+\ vocabulary, or *_forth-wordlist*.
+\
+
 $2       tconstant cell  ( size of a cell in bytes )
 $0       tvariable >in   ( Hold character pointer when parsing input )
 $0       tvariable state ( compiler state variable )
@@ -1021,9 +1022,10 @@ $400     tconstant b/buf ( size of a block )
 #version constant  ver   ( eForth version )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
 $FFFF    tvariable dpl   ( number of places after fraction )
+0        tvariable current ( WID to add definitions to )
 0        tvariable <literal> ( holds execution vector for literal )
-0        tvariable <boot>  ( -- : execute program at startup )
-0        tvariable <ok>
+0        tvariable <boot>  ( execute program at startup )
+0        tvariable <ok>    ( prompt execution vector )
 
 \ The following execution vectors would/will be added if there is enough
 \ space, it is very useful to have hooks into the system to change how
@@ -1134,8 +1136,8 @@ h: zero 0 swap! ;           ( a -- : zero value at address )
 : 1-! [-1] s+! ;        ( a -- : decrement value at address by 1 )
 : 2! ( d a -- ) tuck ! cell+ ! ;      ( n n a -- )
 : 2@ ( a -- d ) dup cell+ @ swap @ ;  ( a -- n n )
-: get-current current @ ;             ( -- wid )
-: set-current current ! ;             ( wid -- )
+h: get-current current @ ;             ( -- wid )
+h: set-current current ! ;             ( wid -- )
 : bl =bl ;                            ( -- c )
 : within over- >r - r> u< ;           ( u lo hi -- t )
 h: s>d dup 0< ;                       ( n -- d )
@@ -1146,15 +1148,15 @@ h: tib source drop ;                  ( -- a )
 : rot >r swap r> swap ;               ( n1 n2 n3 -- n2 n3 n1 )
 : -rot rot rot ;                      ( n1 n2 n3 -- n3 n1 n2 )
 h: rot-drop rot drop ;                ( n1 n2 n3 -- n2 n3 )
-h: d0= or 0= ;                         ( d -- t )
+h: d0= or 0= ;                        ( d -- t )
 h: dnegate invert >r invert 1 um+ r> + ; ( d -- d )
-h: d+  >r swap >r um+ r> + r> + ;      ( d d -- d )
+h: d+ >r swap >r um+ r> + r> + ;         ( d d -- d )
 ( : 2swap >r -rot r> -rot ; ( n1 n2 n3 n4 -- n3 n4 n1 n2 )
 ( : d< rot   )
 (     2dup   )
 (     > if = nip nip if 0 exit then [-1] exit then 2drop u< ; ( d -- f )
-( : d>  2swap d< ;                     ( d -- t )
-( : du> 2swap du< ;                    ( d -- t )
+( : d>  2swap d< ;                    ( d -- t )
+( : du> 2swap du< ;                   ( d -- t )
 ( : d=  rot = -rot = and ;            ( d d -- t )
 ( : d- dnegate d+ ;                   ( d d -- d )
 ( : dabs  s>d if dnegate exit then ;  ( d -- ud )
@@ -1176,7 +1178,7 @@ h: d+  >r swap >r um+ r> + r> + ;      ( d d -- d )
 \
 
 : execute >r ;                   ( cfa -- : execute a function )
-h: @execute @ ?dup if >r then ;  ( cfa -- )
+h: @execute @ ?dup if execute exit then ;  ( cfa -- )
 \
 \ As the virtual machine is only addressable by cells, and not by characters,
 \ the words *c@* and *c!* cannot be defined as simple assembly primitives,
@@ -1184,10 +1186,10 @@ h: @execute @ ?dup if >r then ;  ( cfa -- )
 \ but does mean these two primitives are slower than might be first thought.
 \
 
-: c@ dup@ swap first-bit 3 lshift rshift $FF and ; ( b --c : char load )
+: c@ dup@ swap first-bit 3 lshift rshift h: lsb $FF and ;; ( b--c: char load )
 
 : c! ( c b -- : store character at address )
-  tuck first-bit 3 lshift dup>r
+  tuck first-bit 3 lshift dup>r swap lsb swap
   lshift over @
   $FF r> 8 xor lshift and or swap! ;
 
@@ -1297,7 +1299,7 @@ h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 \ outside the normal byte range).
 \
 
-: key <key> @execute dup [-1] = if bye then ; ( -- c )
+: key <key> @execute dup [-1] <> ?exit bye ; ( -- c )
 
 \ */string*, *+string* and *count* are for manipulating strings, *count*
 \ words best on counted strings which have a length prefix, but can be used
@@ -1373,7 +1375,7 @@ h: last get-current @address ;         ( -- pwd )
 h: spaces =bl fallthrough;             ( +n -- )
 h: nchars                              ( +n c -- : emit c n times )
    swap 0 max for aft dup emit then next drop ;
-h: colon-space [char] : emit space ;               ( -- )
+h: colon-space [char] : emit space ;   ( -- )
 
 \ *depth* and *pick* require knowledge of how this Forth implements its
 \ stacks. *sp0* contains the location of the stack pointer when there is
@@ -1631,7 +1633,7 @@ h: digit 9 over < 7 and + [char] 0 + ;                 ( u -- c )
 \ of a number when operating with a non-decimal base.
 \
 
-: sign  0< if [char] - hold exit then ;     ( n -- )
+: sign 0< 0= ?exit [char] - hold ; ( n -- )
 h: (.) ( n -- b u : convert a signed integer to a numeric string )
   dup>r abs 0 <# #s r> sign #> ;
 
@@ -1649,6 +1651,7 @@ h: (.) ( n -- b u : convert a signed integer to a numeric string )
 h: (u.) 0 <# #s #> ;             ( u -- b u : turn *u* into number string )
 : u.r >r (u.) r> fallthrough;    ( u +n -- : print u right justified by +n)
 h: adjust over- spaces type ;    ( b n n -- )
+h: d5u.r dup fallthrough;        ( u -- u )
 h: 5u.r 5 u.r ;                  ( u -- )
 ( :  .r >r (.)( r> adjust ;       ( n n -- : print n, right justified by +n )
 : u.  (u.) h: blt space type ;;          ( u -- : print unsigned number )
@@ -2033,7 +2036,6 @@ h: digit? ( c base -- u f )
   >r [char] 0 - 9 over <
   if 
     7 - 
-    \ =bl invert and ( handle lower case, @todo fix this )
     dup $A < or 
   then dup r> u< ;
 
@@ -2133,7 +2135,7 @@ h: parser ( b u c -- b u delta )
 : \ #tib @ in! ; immediate ( comment until new line )
 h: ?length dup word-length u< ?exit $13 -throw ;
 : word 1depth parse ?length here pack$ ; ( c -- a ; <string> )
-: token =bl word ;                       ( -- a )
+h: token =bl word ;                      ( -- a )
 : char token count drop c@ ;             ( -- c; <string> )
 
 \
@@ -2483,10 +2485,10 @@ h: ?unique ( a -- a : print a message if a word definition is not unique )
   space
   2drop last-def @ nfa print  ."  redefined" cr ;
 h: ?nul ( b -- : check for zero length strings )
-   dup c@ 0<> ?exit $A -throw ;
+   dup c@ ?exit $A -throw ;
 
 h: find-token token find fallthrough; ( -- pwd,  <string> )
-h: ?not-found 0<> ?exit not-found ; ( t -- )
+h: ?not-found ?exit not-found ; ( t -- )
 h: find-cfa find-token cfa ;                         ( -- xt, <string> )
 : ' find-cfa state@ if postpone literal exit then ; immediate
 : [compile] find-cfa compile, ; immediate compile-only  ( --, <string> )
@@ -2496,7 +2498,7 @@ h: find-cfa find-token cfa ;                         ( -- xt, <string> )
 h: get-current! ?dup if get-current ! exit then ; ( -- wid )
 : : align here dup last-def ! ( "name", -- colon-sys )
   last , token ?nul ?unique count+ cp! magic postpone ] ; ( NB. need postpone!)
-: begin here  ; immediate compile-only      ( -- a )
+: begin here  ; immediate compile-only   ( -- a )
 : again chars , ; immediate compile-only ( a -- )
 : until $4000 or postpone again ; immediate compile-only ( a --, NB. again !? )
 h: here-0 here 0x0000 ;
@@ -2658,7 +2660,7 @@ xchange _forth-wordlist root-voc
 
 ( @warning recursion without using recurse is used )
 : set-order ( widn ... wid1 n -- : set the current search order )
-  dup [-1] = if drop root-voc 1 set-order exit then 
+  dup [-1] = if drop root-voc 1 set-order exit then ( NB. Recursion! )
   dup #vocs > if $31 -throw exit then
   context swap for aft tuck ! cell+ then next zero ;
 
@@ -2984,7 +2986,7 @@ h: retrieve block drop ;                ( k -- )
 \ image with *save*.
 \
 
-h: check-header? header-options @ first-bit 0= ; ( -- t )
+h: check-header?   header-options @ first-bit 0= ; ( -- t )
 h: disable-check 1 header-options toggle ;       ( -- )
 
 \ *bist* checks the length field in the header matches *here* and that the
@@ -3108,22 +3110,15 @@ h: .instruction ( u -- u )
 
 h: decompile ( u -- : decompile instruction )
    dup .instruction $BFFF and if drop exit then space fallthrough;
-h: .name name ?dup 0= if $" ?" then print ;
+h: .name name ?dup if print then ; ( a -- a )
 
 h: decompiler ( previous current -- : decompile starting at address )
   >r
   begin dup r@ u< while
-    dup 5u.r colon-space
+    d5u.r colon-space
     dup@
-    dup 5u.r space decompile cr cell+
+    d5u.r space decompile cr cell+
   repeat rdrop drop ;
-
-\	: disassembler ( a u -- : disassemble a range of code )
-\	 1 rshift for aft 
-\	    dup   5u.r [char] : emit
-\	    dup @ 5u.r space
-\	    dup @ decompile cr cell+ 
-\	 then next drop ;
 
 \ *see* is the Forth disassembler, it takes a word and (attempts) to
 \ turn it back into readable Forth source code. The disassembler is only
@@ -3142,7 +3137,6 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ currently only displayed in their raw format.
 \ 
 
-\ @todo reuse name of *immediate* to print out 'immediate'
 : see ( --, <string> : decompile a word )
   token finder ?not-found
   swap      2dup= if drop here then >r
@@ -3215,7 +3209,7 @@ h: dm+ chars for aft dup@ space 5u.r cell+ then next ;   ( a u -- a )
 \ to the default vocabulary.
 
 [last]              [t] _forth-wordlist t!
-[t] _forth-wordlist [t] current         t!
+[t] _forth-wordlist [v] current         t!
 
 \ 
 \ ## Block Editor
@@ -3876,7 +3870,6 @@ On the command line. Four maps are provided, more can be found online at
 	variable sokoban-wordlist
 	sokoban-wordlist +order definitions
 
-	\ @todo change character set
 	$20    constant maze
 	char X constant wall
 	char * constant boulder

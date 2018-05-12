@@ -38,7 +38,7 @@
 \ Create anonymous namespace:
 : anonymous get-order 1+ here 1 cells allot swap set-order ;
 
-: undefined? token find nip 0= ; ( "name", -- f: Is word not in search order? )
+: undefined? bl word find nip 0= ; ( "name", -- f: Is word not in search order? )
 : defined? undefined? 0= ;       ( "name", -- f: Is word in search order? )
 : ?\ 0= if [compile] \ then ;    ( f --, <string>| : conditional compilation )
 
@@ -89,7 +89,7 @@ undefined? 1+!  ?\ : 1+! 1 swap +! ;
 \ other word-lists that might exist.
 \
 : marker ( "name", -- : create an eraser )
-  here >r get-current dup @ r> 
+  here >r current @ dup @ r> 
   create , 2, 
   does> dup cell+ 2@ swap ! @ here - allot ;
 
@@ -268,7 +268,7 @@ variable tx 0 tx ! variable ty 0 ty ! variable tz 0 tz !
 variable x  0  x ! variable y  0  y ! variable z  0  z !
 variable d  0  d ! variable k  0  k !
 
-forth-wordlist set-current
+forth-wordlist current ! 
 
 ( CORDIC: valid in range -pi/2 to pi/2, arguments are in fixed )
 ( point format with 1 = 16384, angle is given in radians.  )
@@ -458,7 +458,7 @@ anonymous definitions
 
 : (fsincos) pi/2 fmod >cordic cordic >r cordic> r> cordic> ; 
 
-forth-wordlist set-current
+forth-wordlist current ! 
 
 \ @warning fsincos still needs a lot of work, and simplifying
 : fsincos 2pi fmod fdup quadrant >r (fsincos) r@ >cos fswap r> >sin fswap ;

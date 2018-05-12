@@ -176,6 +176,7 @@ variable tdoConst      ( Location of doConst in target )
 variable tdoNext       ( Location of doNext in target )
 variable tdoPrintString ( Location of .string in target )
 variable tdoStringLit  ( Location of string-literal in target )
+variable tencryptStart ( start of obfuscated partition )
 variable fence         ( Do not peephole optimize before this point )
 1984 constant #version ( Version number )
 5000 constant #target  ( Memory location where the target image will be built )
@@ -242,7 +243,12 @@ $4400 constant (sp0)   ( start of variable stack )
   ." TARGET: "  there       . cr
   ." HEADER: "  #target $30 dump cr ;
 
+$22 constant (header-options)
+
 : checksum #target there crc ; ( -- u : calculate CRC of target image )
+: encrypt  ( -- : obfuscate the partition )
+    (header-options) t@ 2 xor (header-options) t!
+    tencryptStart @ #target + there tencryptStart @  - obfuscate ;
 
 : save-hex ( -- : save target binary to file )
    #target #target there + (save) throw ;
@@ -735,12 +741,11 @@ $4126 constant tib-start   ( backup tib-buf value )
 $C    constant vm-options     ( Virtual machine options register )
 $1A   constant header-length  ( location of length in header )
 $1C   constant header-crc     ( location of CRC in header )
-$22   constant header-options ( location of options bits in header )
+(header-options) constant header-options ( location of options bits in header )
 
 target.1         +order ( Add target word dictionary to search order )
 meta -order meta +order ( Reorder so *meta* has a higher priority )
 forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
-
 
 \ # The Target Forth
 \ With the assembler and meta compiler complete, we can now make our target
@@ -785,16 +790,49 @@ $0001    t, \ $1E: Endianess check
 $0001    t, \ $22: Header options
 
 \ ## First Word Definitions
-\ The very first definition is a word we jump to at the start, this word is
-\ the start of the boot loader chain, it calls cold in this version but it
-\ could be setup to retrieve a program from input, or decrypt and decompress 
-\ the rest of the image, hypothetically.
+\ The very first definitions are for the boot-loader, we have an option for
+\ creating an 'encrypted' image, which is really just an obfuscation and not
+\ meant to be taken seriously. It does demonstrate that we can do work and
+\ manipulate the rest of the image before we do anything with it. The
 \
-h: boot-loader fallthrough;  ( just fall-through, equivalent to a jump )
-0 tlocation    <cold>        ( location of 'cold' )
-[t] boot-loader 2/ 0 t!      ( set starting word )
 
-\ After the header and initial jump location, two short words are defined, 
+0 tlocation decrypt-begin
+
+h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
+  over $8 rshift xor   ( crc x )
+  dup  $4 rshift xor   ( crc x )
+  dup  $5 lshift xor   ( crc x )
+  dup  $C lshift xor   ( crc x )
+  swap $8 lshift xor ; ( crc )
+
+h: (obfuscate) ( b u k -- : obfuscate and de-obfuscate the image ) 
+  swap 1 rshift >r swap 
+  begin
+   r@
+  while ( k b )
+    swap r@ ccitt 
+    over over 
+    swap @ xor 
+    >r over r> swap ! swap
+    2 ( =cell ) + 
+    r> 1- >r
+  repeat rdrop drop drop ;
+
+h: boot-loader
+   2 header-options @ and if
+        decrypt-begin @ header-length @ over invert 1 + +
+        $0BAD (obfuscate)
+   header-options @ 2 invert and header-options ! ( disable deobfuscation )
+   then
+ fallthrough;  ( just fall-through, equivalent to a jump )
+0 tlocation    <cold>      ( location of 'cold' )
+[t] boot-loader 2/ 0 t!    ( set starting word )
+there [t] decrypt-begin t! ( set the variable 'decrypt-begin' to target 'here')
+there tencryptStart meta!  ( set meta-compiler version of 'decrypt-begin' also)
+
+: obfuscate $0BAD (obfuscate) ; ( obfuscate a section of memory )
+
+\ After the header and boot-loader words, two short words are defined, 
 \ visible only to the meta compiler and used by its internal machinery. The 
 \ words are needed by *tvariable* and *tconstant*, and these constructs cannot 
 \ be used without them. This is an example of the metacompiler and the 
@@ -1318,13 +1356,6 @@ h: string@ over c@ ;                   ( b u -- b u c )
 \ crude Pseudo Random Number Generator. CRC routines are useful for detecting
 \ memory corruption in the Forth image.
 \
-
-h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
-  over $8 rshift xor   ( crc x )
-  dup  $4 rshift xor   ( crc x )
-  dup  $5 lshift xor   ( crc x )
-  dup  $C lshift xor   ( crc x )
-  swap $8 lshift xor ; ( crc )
 
 : crc ( b u -- u : calculate ccitt-ffff CRC )
   [-1] ( -1 = 0xffff ) >r
@@ -2227,6 +2258,8 @@ h: ?compile dup compile-only? 0= ?exit source type $E -throw ;
   then
   r> not-found ; \ not a word or number, it's an error!
 
+\ @todo Move word option bits to the name field count byte, simplifying a lot
+\ of dictionary manipulation words.
 \ NB. *compile* only works for words, instructions, and numbers below $8000
 : compile  r> dup@ , cell+ >r ; compile-only ( --:Compile next compiled word )
 : immediate $4000 last fallthrough; ( -- : previous word immediate )
@@ -2597,7 +2630,7 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit h: !, ! , ;;
 
 h: trace-execute vm-options ! >r ; ( u xt -- )
 : trace ( "name" -- : trace a word )
-  find-cfa vm-options @ dup>r 3 or trace-execute r> vm-options ! ;
+  find-cfa vm-options @ dup>r 1 or trace-execute r> vm-options ! ;
 
 \ Annotated example output of running *trace* on *+* is shown:
 \
@@ -3011,7 +3044,7 @@ h: cold ( -- : performs a cold boot  )
    $10 block b/buf 0 fill
    $12 retrieve io!
    forth 
-   sp0 cells sp!
+   sp0 cells sp! 
    ( rp0 cells rp! )
    <boot> @execute ;
 
@@ -3338,6 +3371,7 @@ there [t] cp t!
 
 there    [t] header-length t! \ Set Length First!
 checksum [t] header-crc t!    \ Calculate image CRC
+( encrypt \ <- uncomment to create an obfuscated image )
 
 finished
 bye
@@ -3661,8 +3695,10 @@ This is a list of Error codes, not all of which are used by the application.
 	#include <string.h>
 	#include <stdarg.h>
 
-	#define MAX(X, Y) ((X) < (Y) ? (Y) : (X))
-	typedef struct forth_t { uint16_t m[32768]; } forth_t;
+	typedef uint16_t m_t;
+	typedef  int16_t s_t;
+	typedef uint32_t d_t;
+	typedef struct forth_t { m_t m[32768]; } forth_t;
 
 	void embed_die(const char *fmt, ...)
 	{
@@ -3687,8 +3723,8 @@ This is a list of Error codes, not all of which are used by the application.
 
 	forth_t *embed_new(void)
 	{
-		forth_t *h = NULL;
-		if(!(h = calloc(1, sizeof(*h))))
+		forth_t *h = calloc(1, sizeof(*h));
+		if(!h)
 			embed_die("allocation (of %u) failed", (unsigned)sizeof(*h));
 		return h;
 	}
@@ -3697,51 +3733,63 @@ This is a list of Error codes, not all of which are used by the application.
 
 	static int save(forth_t *h, const char *name, const size_t start, const size_t length)
 	{
-		assert(h && ((length - start) <= length) && ((start + length) <= embed_cells(h)));
-		if(!name)
-			return -1;
-		FILE *out = embed_fopen_or_die(name, "wb");
+		assert(h);
+		if(!name || !(((length - start) <= length) && ((start + length) <= embed_cells(h))))
+			return -69; /* open-file IOR */
+		FILE *out = fopen(name, "wb");
+		if(!out)
+			return -69; /* open-file IOR */
 		int r = 0;
 		for(size_t i = start; i < length; i++)
 			if(fputc(h->m[i]&255, out) < 0 || fputc(h->m[i]>>8, out) < 0)
-				r = -1;
-		fclose(out);
-		return r;
+				r = -76; /* write-file IOR */
+		return fclose(out) < 0 ? -62 /* close-file IOR */ : r;
 	}
 
 	forth_t *embed_copy(forth_t const * const h)      { assert(h); return memcpy(embed_new(), h, sizeof(*h)); }
-	int      embed_save(forth_t *h, const char *name) { return save(h, name, 0, embed_cells(h)); }
+	int      embed_save(forth_t *h, const char *name) { assert(name); return save(h, name, 0, embed_cells(h)); }
 	size_t   embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
 	void     embed_free(forth_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
-	char    *embed_get_core(forth_t *h)               { assert(h); return (char*)h->m; }
+	char    *embed_core(forth_t *h)                   { assert(h); return (char*)h->m; }
+	static size_t max_size_t(size_t a, size_t b)      { return a > b ? a : b; }
 
 	int embed_load(forth_t *h, const char *name)
 	{
 		assert(h && name);
 		FILE *input = embed_fopen_or_die(name, "rb");
 		long r = 0, c1 = 0, c2 = 0;
-		for(size_t i = 0; i < MAX(64, embed_cells(h)); i++, r = i) {
+		for(size_t i = 0; i < max_size_t(64, embed_cells(h)); i++, r = i) {
 			assert(embed_cells(h) <= 0x8000);
 			if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0)
 				break;
 			h->m[i] = ((c1 & 0xffu)) | ((c2 & 0xffu) << 8u);
 		}
 		fclose(input);
-		return r < 64 ? -1 : 0; /* minimum size checks, 128 bytes */
+		return r < 64 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
 	}
+
+	#ifdef NDEBUG
+	#define trace(OUT,M,PC,INSTRUCTION,T,RP,SP)
+	#else
+	static inline void trace(FILE *out, m_t *m, m_t pc, m_t instruction, m_t t, m_t rp, m_t sp)
+	{
+		if(!(m[6] & 1))
+			return;
+		fprintf(out, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, m[2]-rp, sp-m[3]);
+	}
+	#endif
 
 	int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 	{
 		assert(h && in && out);
-		static const uint16_t delta[] = { 0, 1, -2, -1 };
-		const uint16_t l = embed_cells(h);
-		uint16_t * const m = h->m;
-		uint16_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0;
-		for(uint32_t d;;) {
-			const uint16_t instruction = m[pc++];
+		static const m_t delta[] = { 0, 1, -2, -1 };
+		const m_t l = embed_cells(h);
+		m_t * const m = h->m;
+		m_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0;
+		for(d_t d;;) {
+			const m_t instruction = m[pc++];
 
-			if(m[6] & 1) /* trace on */
-				fprintf(m[6] & 2 ? out : stderr, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, m[2]-rp, sp-m[3]);
+			trace(out, m, pc, instruction, t, rp, sp);
 			if((r = -!(sp < l && rp < l && pc < l))) /* critical error */
 				goto finished;
 
@@ -3749,7 +3797,7 @@ This is a list of Error codes, not all of which are used by the application.
 				m[++sp] = t;
 				t       = instruction & 0x7FFF;
 			} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
-				uint16_t n = m[sp], T = t;
+				m_t n = m[sp], T = t;
 				pc = instruction & 0x10 ? m[rp] >> 1 : pc;
 
 				switch((instruction >> 8u) & 0x1f) {
@@ -3757,8 +3805,8 @@ This is a list of Error codes, not all of which are used by the application.
 				case  2: T = m[rp];                break;
 				case  3: T = m[(t>>1)%l];          break;
 				case  4: m[(t>>1)%l] = n; T = m[--sp]; break;
-				case  5: d = (uint32_t)t + n; T = d >> 16; m[sp] = d; n = d; break;
-				case  6: d = (uint32_t)t * n; T = d >> 16; m[sp] = d; n = d; break;
+				case  5: d = (d_t)t + n; T = d >> 16; m[sp] = d; n = d; break;
+				case  6: d = (d_t)t * n; T = d >> 16; m[sp] = d; n = d; break;
 				case  7: T &= n;                   break;
 				case  8: T |= n;                   break;
 				case  9: T ^= n;                   break;
@@ -3767,18 +3815,18 @@ This is a list of Error codes, not all of which are used by the application.
 				case 12: T = -(t == 0);            break;
 				case 13: T = -(t == n);            break;
 				case 14: T = -(n < t);             break;
-				case 15: T = -((int16_t)n < (int16_t)t); break;
+				case 15: T = -((s_t)n < (s_t)t);   break;
 				case 16: T = n >> t;               break;
 				case 17: T = n << t;               break;
 				case 18: T = sp << 1;              break;
 				case 19: T = rp << 1;              break;
 				case 20: sp = t >> 1;              break;
 				case 21: rp = t >> 1; T = n;       break;
-				case 22: T = save(h, block, n>>1, ((uint32_t)T+1)>>1); break;
+				case 22: T = save(h, block, n>>1, ((d_t)T+1)>>1); break;
 				case 23: T = fputc(t, out);        break; 
 				case 24: T = fgetc(in); n = -1;    break; /* n = blocking status */
-				case 25: if(t) { d = m[--sp]|((uint32_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
-				case 26: if(t) { T=(int16_t)n/t; t=(int16_t)n%t; n=t; } else { pc=4; T=10; } break;
+				case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
+				case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; } else { pc=4; T=10; } break;
 				case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;
 				}
 				sp += delta[ instruction       & 0x3];
@@ -3799,10 +3847,9 @@ This is a list of Error codes, not all of which are used by the application.
 			}
 		}
 	finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp;
-		return (int16_t)r;
+		return (s_t)r;
 	}
 
-	#ifdef USE_EMBED_MAIN
 	int main(int argc, char **argv)
 	{
 		forth_t *h = embed_new();
@@ -3815,7 +3862,6 @@ This is a list of Error codes, not all of which are used by the application.
 			embed_die("embed: run failed");
 		return 0; /* exiting takes care of closing files, freeing memory */
 	}
-	#endif
 
 
 ## ANSI Terminal Escape Sequence Word Set

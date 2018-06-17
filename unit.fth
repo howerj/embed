@@ -30,7 +30,7 @@
 \ '}T' is reached so any exceptions can be caught and dealt with.
 \
 \ The organization of this file needs to be improved, it also contains
-\ some useful extensions to the language not present in the 'meta.fth' file.
+\ some useful extensions to the language not present in the 'embed.fth' file.
 
 \ A few generic helper words will be built, to check if a word is defined, or
 \ not, and to conditionally execute a line.

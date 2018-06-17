@@ -2,16 +2,16 @@ CFLAGS= -O2 -std=c99 -g -Wall -Wextra -fwrapv
 CC=gcc
 EXE=
 DF=
-EFORTH=eforth.blk
-META1=meta1.blk
-META2=meta2.blk
+EFORTH=embed.blk
+META1=embed-1.blk
+META2=embed-2.blk
 TEMP=tmp.blk
 UNIT=unit.blk
 TARGET=embed
 CMP=cmp
 RM=rm -fv
 
-.PHONY: all clean run cross double-cross default tests docs view
+.PHONY: all clean run cross double-cross default tests docs floats view
 
 default: all
 
@@ -25,17 +25,23 @@ EXE=
 endif
 
 FORTH=${TARGET}${EXE}
+F2C=f2c${EXE}
 
 all: ${FORTH}
 
-${FORTH}: embed.c embed.h
-	${CC} ${CFLAGS} -DUSE_EMBED_MAIN $< -o $@
+${F2C}: f2c.o embed.o
+	${CC} $^ -o $@
 
-${META1}: ${FORTH} ${EFORTH} meta.fth
-	${DF}${FORTH} ${EFORTH} ${META1} meta.fth
+core.gen.c: ${F2C} embed.blk
+	${DF}${F2C} embed_block embed.blk core.gen.c
 
-${META2}: ${FORTH} ${META1} meta.fth
-	${DF}${FORTH} ${META1} ${META2} meta.fth
+${FORTH}: main.o embed.o core.gen.o embed.h
+
+${META1}: ${FORTH} ${EFORTH} embed.fth
+	${DF}${FORTH} ${EFORTH} ${META1} embed.fth
+
+${META2}: ${FORTH} ${META1} embed.fth
+	${DF}${FORTH} ${META1} ${META2} embed.fth
 
 cross: ${META1}
 
@@ -46,6 +52,7 @@ run: cross
 	${DF}${FORTH} ${META1}
 
 tests: ${UNIT}
+
 	
 ${UNIT}: ${FORTH} ${META1} unit.fth
 	${DF}${FORTH} ${META1} ${UNIT} unit.fth
@@ -60,7 +67,7 @@ libembed.a: embed.o
 	pandoc -V geometry:margin=0.5in --toc $< -o $@
 
 %.md: %.fth convert
-	./convert $< > $@
+	${DF}convert $< > $@
 
 %.htm: %.md convert
 	markdown $< > $@
@@ -71,6 +78,7 @@ view: meta.pdf
 docs: meta.pdf meta.htm
 
 clean:
-	${RM} ${FORTH} ${META1} ${META2} ${TEMP} ${UNIT} 
+	${RM} ${FORTH} ${META1} ${META2} ${TEMP} ${UNIT} ${F2C}
 	${RM} *.o *.a *.pdf *.htm
+	${RM} *.gen.c
 

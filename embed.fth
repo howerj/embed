@@ -1,5 +1,5 @@
 0 <ok> ! hex ( Turn off *ok* prompt, go into hex mode )
-\ # meta.fth
+\ # embed.fth
 \
 \	| Project    | A Small Forth VM/Implementation   |
 \	| ---------- | --------------------------------- |
@@ -23,7 +23,7 @@
 \ is also used as source for a simple document generation system using [AWK][]
 \ which feeds into either [Pandoc][] for [PDF][] or the original [Markdown][]
 \ script for [HTML][] output. The AWK script is crude and requires that the
-\ Forth source file, [meta.fth][] be formatted in a specific way. 
+\ Forth source file, [embed.fth][] be formatted in a specific way. 
 \
 \ Lines beginning with a back-slash are turned into normal Markdown text, with
 \ some characters needed to be escaped. Other lines are assumed to be Forth
@@ -3855,7 +3855,7 @@ This is a list of Error codes, not all of which are used by the application.
 		forth_t *h = embed_new();
 		if(argc > 4)
 			embed_die("usage: %s [in.blk] [out.blk] [file.fth]", argv[0]);
-		if(embed_load(h, argc < 2 ? "eforth.blk" : argv[1]) < 0)
+		if(embed_load(h, argc < 2 ? "embed.blk" : argv[1]) < 0)
 			embed_die("embed: load failed");
 		FILE *in = argc <= 3 ? stdin : embed_fopen_or_die(argv[3], "rb");
 		if(embed_forth(h, in, stdout, argc < 3 ? NULL : argv[2]))
@@ -3901,7 +3901,7 @@ Go online for more examples.
 
 This is a game of [Sokoban][], to play, type:
 
-	cat sokoban.fth /dev/stdin | ./embed eforth.blk new.blk
+	cat sokoban.fth /dev/stdin | ./embed embed.blk new.blk
 
 On the command line. Four maps are provided, more can be found online at
 <https://github.com/begoon/sokoban-maps>, where the four maps were found.
@@ -4187,13 +4187,13 @@ A [Conways Games Of Life][] in a few screens, adapted to this Forth:
 	.( Or 'random-life' ) cr
 
 
-Run in the same way sokoban.fth.
+Run in the same way as "sokoban.fth".
 
 ## Floating Point Arithmetic
 
 Floating point implementation, and adapted version can be found in the
 unit tests file. It is believed that this can be used freely so long as
-the copyright notice is left intact, similar to the [MIT][] license - although
+the copyright notice is left intact, similar to the [MIT license][] - although
 do not hold me to that.
 
 	Vierte Dimension Vol.2, No.4 1986
@@ -4773,7 +4773,7 @@ if a number of input words were vectored.
 [Run Length Encoding]: https://en.wikipedia.org/wiki/Run-length_encoding
 [Huffman]: https://en.wikipedia.org/wiki/Huffman_coding
 [Adaptive Huffman]: https://en.wikipedia.org/wiki/Adaptive_Huffman_coding
-[MIT License]: https://github.com/howerj/embed/blob/master/LICENSE
+[MIT license]: https://github.com/howerj/embed/blob/master/LICENSE
 [Markdown]: https://daringfireball.net/projects/markdown/
 [Cross Compiler]: https://en.wikipedia.org/wiki/Cross_compiler
 [eForth written for the J1]: https://github.com/samawati/j1eforth
@@ -4797,7 +4797,7 @@ if a number of input words were vectored.
 [Pandoc]: http://pandoc.org/
 [PDF]: https://acrobat.adobe.com/us/en/acrobat/about-adobe-pdf.html
 [HTML]: https://en.wikipedia.org/wiki/HTML
-[meta.fth]: https://github.com/howerj/embed/blob/master/meta.fth
+[embed.fth]: https://github.com/howerj/embed/blob/master/embed.fth
 [Forth]: https://en.wikipedia.org/wiki/Forth_(programming_language)
 [colorForth]: https://en.wikipedia.org/wiki/ColorForth
 [Verilog]: https://en.wikipedia.org/wiki/Verilog

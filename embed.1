@@ -1,0 +1,66 @@
+.\" Manpage for embed
+.\" Contact howe.r.j.89@gmail.com to correct errors or typos.
+.TH embed 1 "17 Jun 2018" "0.1.0" "embed man page"
+.SH NAME
+embed \- embed virtual machine
+.SH SYNOPSIS
+embed in.blk out.blk file.fth
+.SH DESCRIPTION
+A simple and compact Forth Virtual machine, derived from the H2 CPU
+(from <https://github.com/howerj/forth-cpu>, which in turn derives from the J1
+CPU). 
+
+.SH OPTIONS
+
+
+
+.TP
+.B in.blk
+This option supplies a file to be used as the initial virtual machine image,
+this will be loaded at startup.
+
+.TP
+.B out.blk
+
+
+.TP
+.B file.fth
+
+
+.SH EXAMPLES
+
+.TP
+.B ./embed
+
+.TP
+.B ./embed in.blk
+
+.TP
+.B ./embed in.blk out.blk
+
+.TP
+.B ./embed in.blk out.blk file.fth
+
+
+
+.SH EXIT STATUS
+
+This command returns zero on success and non zero on failure.
+
+.SH SEE ALSO
+
+For more information, see
+.B https://github.com/howerj/embed
+which contains the original program source.
+
+.SH BUGS
+
+For any bugs, contact the author.
+
+.SH AUTHOR
+Richard James Howe (howe.r.j.89@gmail.com)
+
+.SH COPYRIGHT
+The embed program is licensed under the MIT license, Copyright (c) 2018, Richard
+Howe. The same applies to the images and source code to generate those images.
+

@@ -8,6 +8,8 @@
 #include <string.h>
 #include <stdarg.h>
 
+#define IS_BIG_ENDIAN (*(uint16_t *)"\0\xff" < 0x100)
+
 typedef uint16_t m_t;
 typedef  int16_t s_t;
 typedef uint32_t d_t;
@@ -34,17 +36,38 @@ FILE *embed_fopen_or_die(const char *file, const char *mode)
 	return h;
 }
 
-forth_t *embed_new(void)
+void *embed_alloc_or_die(size_t sz)
 {
-	forth_t *h = calloc(1, sizeof(*h));
-	if(!h)
-		embed_die("allocation (of %u) failed", (unsigned)sizeof(*h));
-	return h;
+	errno = 0;
+	void *r = calloc(sz, 1);
+	if(!r)
+		embed_die("allocation of size %u bytes failed: %s", (unsigned)sizeof(*r), strerror(errno));
+	return r;
 }
 
 static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
+static size_t min_size_t(size_t a, size_t b)       { return a > b ? b : a; }
+uint16_t embed_swap16(uint16_t s)                  { return (s >> 8) | (s << 8); }
+void embed_buffer_swap16(uint16_t *b, size_t l)    { assert(b); for(size_t i = 0; i < l; i++) b[i] = embed_swap16(b[i]); }
+static void embed_normalize(forth_t *h)            { assert(h); if(IS_BIG_ENDIAN) embed_buffer_swap16(h->m, sizeof(h->m)/2); }
 
-static int save(forth_t *h, const char *name, const size_t start, const size_t length)
+int embed_load_buffer(forth_t *h, uint8_t *buf, size_t length)
+{
+	assert(h && buf);
+	memcpy(h->m, buf, min_size_t(sizeof(h->m), length));
+	embed_normalize(h);
+	return length < 128 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
+}
+
+int embed_load_file(forth_t *h, FILE *input)
+{
+	assert(h && input);
+	size_t r = fread(h->m, 1, sizeof(h->m), input);
+	embed_normalize(h);
+	return r < 128 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
+}
+
+static int save(const forth_t *h, const char *name, const size_t start, const size_t length)
 {
 	assert(h);
 	if(!name || !(((length - start) <= length) && ((start + length) <= embed_cells(h))))
@@ -59,29 +82,13 @@ static int save(forth_t *h, const char *name, const size_t start, const size_t l
 	return fclose(out) < 0 ? -62 /* close-file IOR */ : r;
 }
 
+forth_t *embed_new(void)                          { return embed_alloc_or_die(sizeof(struct forth_t)); }
 forth_t *embed_copy(forth_t const * const h)      { assert(h); return memcpy(embed_new(), h, sizeof(*h)); }
-int      embed_save(forth_t *h, const char *name) { assert(name); return save(h, name, 0, embed_cells(h)); }
+int      embed_save(const forth_t *h, const char *name) { assert(name); return save(h, name, 0, embed_cells(h)); }
 size_t   embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
 void     embed_free(forth_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
 char    *embed_core(forth_t *h)                   { assert(h); return (char*)h->m; }
-static size_t max_size_t(size_t a, size_t b)      { return a > b ? a : b; }
-
-int embed_load(forth_t *h, const char *name)
-{
-	assert(h && name);
-	FILE *input = fopen(name, "rb");
-	if(!input)
-		return -69; /* open-file IOR */
-	long r = 0, c1 = 0, c2 = 0;
-	for(size_t i = 0; i < max_size_t(64, embed_cells(h)); i++, r = i) {
-		assert(embed_cells(h) <= 0x8000);
-		if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0)
-			break;
-		h->m[i] = ((c1 & 0xffu)) | ((c2 & 0xffu) << 8u);
-	}
-	fclose(input);
-	return r < 64 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
-}
+int      embed_load(forth_t *h, const char *name) { FILE *f; int r = embed_load_file(h, f = embed_fopen_or_die(name, "rb")); fclose(f); return r; }
 
 #ifdef NDEBUG
 #define trace(OUT,M,PC,INSTRUCTION,T,RP,SP)
@@ -162,19 +169,4 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp;
 	return (s_t)r;
 }
-
-#ifdef USE_EMBED_MAIN
-int main(int argc, char **argv)
-{
-	forth_t *h = embed_new();
-	if(argc > 4)
-		embed_die("usage: %s [in.blk] [out.blk] [file.fth]", argv[0]);
-	if(embed_load(h, argc < 2 ? "eforth.blk" : argv[1]) < 0)
-		embed_die("embed: load failed");
-	FILE *in = argc <= 3 ? stdin : embed_fopen_or_die(argv[3], "rb");
-	if(embed_forth(h, in, stdout, argc < 3 ? NULL : argv[2]))
-		embed_die("embed: run failed");
-	return 0; /* exiting takes care of closing files, freeing memory */
-}
-#endif
 

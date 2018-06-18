@@ -1,9 +1,6 @@
 
-# <https://news.ycombinator.com/item?id=7371806>
-#CFLAGS=-g -g3 -ggdb -gdwarf-4 -D_FORTIFY_SOURCE=2 -Wl,-O1 
-# -fno-asynchronous-unwind-tables -fno-stack-protector -Os
-#  -mregparm=3 -pedantic
-CFLAGS= -Os -std=c99 -g -Wall -Wextra -fwrapv
+CFLAGS= -O2 -std=c99 -g -Wall -Wextra -fwrapv
+LDFLAGS=-Wl,-O1
 CC=gcc
 EXE=
 DF=
@@ -14,6 +11,8 @@ TEMP=tmp.blk
 UNIT=unit.blk
 TARGET=embed
 CMP=cmp
+AR=ar
+ARFLAGS=rcs
 RM=rm -fv
 
 .PHONY: all clean run cross double-cross default tests docs floats view
@@ -38,9 +37,12 @@ ${B2C}: b2c.o embed.o
 	${CC} $^ -o $@
 
 core.gen.c: ${B2C} embed.blk
-	${DF}${B2C} embed_block embed.blk core.gen.c
+	${DF}${B2C} embed_default_block embed.blk $@
 
-${FORTH}: main.o embed.o core.gen.o embed.h
+lib${TARGET}.a: ${TARGET}.o core.gen.o
+	${AR} ${ARFLAGS} $@ $^
+
+${FORTH}: main.o lib${TARGET}.a ${TARGET}.h
 
 ${META1}: ${FORTH} ${EFORTH} embed.fth
 	${DF}${FORTH} ${META1} ${EFORTH} embed.fth
@@ -65,9 +67,6 @@ ${UNIT}: ${FORTH} ${META1} unit.fth
 floats: ${UNIT}
 	${DF}${FORTH} ${TEMP} ${UNIT}
 
-libembed.a: embed.o
-	ar rcs $@ $<
-
 %.pdf: %.md
 	pandoc -V geometry:margin=0.5in --toc $< -o $@
 
@@ -77,10 +76,10 @@ libembed.a: embed.o
 %.htm: %.md convert
 	markdown $< > $@
 
-view: meta.pdf
+view: ${TARGET}.pdf
 	mupdf $< &>/dev/null&
 
-docs: meta.pdf meta.htm
+docs: ${TARGET}.pdf ${TARGET}.htm
 
 clean:
 	${RM} ${FORTH} ${META1} ${META2} ${TEMP} ${UNIT} ${B2C}

@@ -21,13 +21,16 @@ embed_t *embed_copy(embed_t const * const h);                             /**< C
 void     embed_free(embed_t *h);                                          /**< Delete a Forth VM */
 int      embed_forth(embed_t *h, FILE *in, FILE *out, const char *block); /**< Run the VM */
 int      embed_load(embed_t *h, const char *name);                        /**< Load VM image off disk */
-int      embed_load_buffer(embed_t *h, uint8_t *buf, size_t length);      /**< Load VM image from memory */
+int      embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length);      /**< Load VM image from memory */
 int      embed_load_file(embed_t *h, FILE *input);                        /**< Load VM image from FILE* */
 int      embed_save(const embed_t *h, const char *name);                  /**< Save VM image to disk, 0 == success */
 size_t   embed_length(embed_t const * const h);                           /**< Length in bytes of core memory */
 char    *embed_core(embed_t *h);                                          /**< Get core memory, of embed_length size */
 uint16_t embed_swap16(uint16_t s);                                        /**< Swap byte order of a 2-byte value */
 void     embed_buffer_swap16(uint16_t *b, size_t l);                      /**< Swap byte order of a buffer of 2-byte values */
+
+extern const uint8_t embed_default_block[];   /**< default VM image, generated from 'embed.blk' */
+extern const size_t embed_default_block_size; /**< size of default VM image */
 
 #ifdef __cplusplus
 }

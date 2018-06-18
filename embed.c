@@ -68,7 +68,7 @@ void embed_buffer_swap16(uint16_t *b, size_t l)    { assert(b); for(size_t i = 0
 static inline int is_big_endian(void)              { return (*(uint16_t *)"\0\xff" < 0x100); }
 static void embed_normalize(embed_t *h)            { assert(h); if(is_big_endian()) embed_buffer_swap16(h->m, sizeof(h->m)/2); }
 
-int embed_load_buffer(embed_t *h, uint8_t *buf, size_t length)
+int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length)
 {
 	assert(h && buf);
 	memcpy(h->m, buf, embed_min_size_t(sizeof(h->m), length));
@@ -192,8 +192,8 @@ int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block)
 {
 	embed_opt_t o = {
 		.get = embed_fgetc, .put = embed_fputc, .save = save,
-		.in = in, .out = out, .name = block, 
-		.callback = NULL, .param = NULL
+		.in = in,           .out = out,         .name = block, 
+		.callback = NULL,   .param = NULL
 	};
 	return embed_vm(h, &o);
 }

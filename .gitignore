@@ -8,6 +8,6 @@ vgcore.*
 *.htm
 *.pdf
 *.md
-f2c
+b2c
 *.gen.c
 static

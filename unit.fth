@@ -995,7 +995,7 @@ T{ char 1     -> $31 }T
 T{ char g     -> $67 }T
 T{ char ghijk -> $67 }T
 
-T{ #vocs 8 min -> 8 }T     \ minimum number of vocabularies is 8
+\ T{ #vocs 8 min -> 8 }T     \ minimum number of vocabularies is 8
 T{ b/buf       -> $400 }T  \ b/buf should always be 1024
 defined? sp@ ?\ T{ sp@ 2 3 4 sp@ nip nip nip - abs chars -> 4 }T
 T{ here 4 allot -4 allot here = -> -1 }T

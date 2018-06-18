@@ -4,7 +4,7 @@
 .SH NAME
 embed \- embed virtual machine
 .SH SYNOPSIS
-embed in.blk out.blk file.fth
+embed out.blk in.blk file.fth
 .SH DESCRIPTION
 A simple and compact Forth Virtual machine, derived from the H2 CPU
 (from <https://github.com/howerj/forth-cpu>, which in turn derives from the J1
@@ -12,20 +12,30 @@ CPU).
 
 .SH OPTIONS
 
+All command line arguments are optional, the meaning of the option is given
+by its position within the argument list. If any option is missing then a
+default is used.
 
+.TP
+.B out.blk
+This option supplies a file for any 'save' instructions to write a block to,
+if no 'out.blk' option is supplied the saving fails. This may be the same
+file name as given by 'in.blk'.
 
 .TP
 .B in.blk
 This option supplies a file to be used as the initial virtual machine image,
-this will be loaded at startup.
-
-.TP
-.B out.blk
-
+this will be loaded at startup. If no 'in.blk' file is provided then one of
+two things may happen depending on how 'embed' was compiled, either it will
+attempt to read from a default file ('embed.blk') in the same directory or
+it will use a default image built into the executable. This behavior can
+be specified at compile time. The built in image, if available, contains a
+fully working eForth interpreter.
 
 .TP
 .B file.fth
-
+This option supplies a file to read from, by default the virtual machine
+will read from stdin(3).
 
 .SH EXAMPLES
 
@@ -41,7 +51,9 @@ this will be loaded at startup.
 .TP
 .B ./embed in.blk out.blk file.fth
 
+.SH COMPILATION
 
+.SH LIBRARY API
 
 .SH EXIT STATUS
 

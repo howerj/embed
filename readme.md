@@ -33,11 +33,11 @@ implementation is contained within [embed.blk][].
 
 Linux:
 
-	./embed embed.blk
+	./embed out.blk embed.blk
 
 Windows:
 
-	embed.exe embed.blk
+	embed.exe out.blk embed.blk
 
 To exit the virtual machine cleanly either type **bye** and then hit
 return, or press *CTRL+D* (on Linux) / *CTRL+Z* (on Windows) and then return.
@@ -50,15 +50,17 @@ little about [Forth][] itself.
 If you do not have a copy of [make][], but do have a [C99][] compiler, the
 following command should build the project:
 
-	cc -std=c99 -DUSE_EMBED_MAIN embed.c -o embed
+@todo update this
+
+	cc -std=c99 embed.c -o embed
 
 Generating a new image is easy as well:
 
-	./embed embed.blk new.blk embed.fth
+	./embed new.blk embed.blk embed.fth
 
 We can then use the new image to generate a further image:
 
-	./embed new.blk new2.blk embed.fth
+	./embed new2.blk new.blk embed.fth
 
 Ad infinitum, the two newly generated images should be byte for byte equal
 ([embed.blk][] may differ as the latest image might not be checked in).
@@ -66,7 +68,7 @@ Ad infinitum, the two newly generated images should be byte for byte equal
 Unit tests can be ran typing:
 
 	make tests                           # Using make
-	./embed embed.blk unit.blk unit.fth # manual invocation
+	./embed unit.blk embed.blk unit.fth # manual invocation
 
 ## Project Organization
 

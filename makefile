@@ -1,4 +1,9 @@
-CFLAGS= -O2 -std=c99 -g -Wall -Wextra -fwrapv
+
+# <https://news.ycombinator.com/item?id=7371806>
+#CFLAGS=-g -g3 -ggdb -gdwarf-4 -D_FORTIFY_SOURCE=2 -Wl,-O1 
+# -fno-asynchronous-unwind-tables -fno-stack-protector -Os
+#  -mregparm=3 -pedantic
+CFLAGS= -Os -std=c99 -g -Wall -Wextra -fwrapv
 CC=gcc
 EXE=
 DF=
@@ -25,23 +30,23 @@ EXE=
 endif
 
 FORTH=${TARGET}${EXE}
-F2C=f2c${EXE}
+B2C=b2c${EXE}
 
 all: ${FORTH}
 
-${F2C}: f2c.o embed.o
+${B2C}: b2c.o embed.o
 	${CC} $^ -o $@
 
-core.gen.c: ${F2C} embed.blk
-	${DF}${F2C} embed_block embed.blk core.gen.c
+core.gen.c: ${B2C} embed.blk
+	${DF}${B2C} embed_block embed.blk core.gen.c
 
 ${FORTH}: main.o embed.o core.gen.o embed.h
 
 ${META1}: ${FORTH} ${EFORTH} embed.fth
-	${DF}${FORTH} ${EFORTH} ${META1} embed.fth
+	${DF}${FORTH} ${META1} ${EFORTH} embed.fth
 
 ${META2}: ${FORTH} ${META1} embed.fth
-	${DF}${FORTH} ${META1} ${META2} embed.fth
+	${DF}${FORTH} ${META2} ${META1} embed.fth
 
 cross: ${META1}
 
@@ -49,16 +54,16 @@ double-cross: ${META2}
 	${CMP} ${META1} ${META2}
 
 run: cross
-	${DF}${FORTH} ${META1}
+	${DF}${FORTH} ${TEMP} ${META1}
 
 tests: ${UNIT}
 
 	
 ${UNIT}: ${FORTH} ${META1} unit.fth
-	${DF}${FORTH} ${META1} ${UNIT} unit.fth
+	${DF}${FORTH} ${UNIT} ${META1} unit.fth
 
 floats: ${UNIT}
-	${DF}${FORTH} $<
+	${DF}${FORTH} ${TEMP} ${UNIT}
 
 libembed.a: embed.o
 	ar rcs $@ $<
@@ -78,7 +83,7 @@ view: meta.pdf
 docs: meta.pdf meta.htm
 
 clean:
-	${RM} ${FORTH} ${META1} ${META2} ${TEMP} ${UNIT} ${F2C}
+	${RM} ${FORTH} ${META1} ${META2} ${TEMP} ${UNIT} ${B2C}
 	${RM} *.o *.a *.pdf *.htm
 	${RM} *.gen.c
 

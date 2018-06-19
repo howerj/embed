@@ -1,5 +1,10 @@
+# Embed Virtual Machine Makefile
+#
+# Targets:
+# 	- Unix (Linux Tested)
+# 	- Windows (Using MinGW)
 
-CFLAGS= -O2 -std=c99 -g -Wall -Wextra -fwrapv -fPIC
+CFLAGS= -O2 -std=c99 -g -Wall -Wextra -fwrapv -fPIC -pedantic -I.
 CC=gcc
 EXE=
 DF=
@@ -13,8 +18,9 @@ CMP=cmp
 AR=ar
 ARFLAGS=rcs
 RM=rm -fv
+TESTAPPS=cpp simple eforth
 
-.PHONY: all clean run cross double-cross default tests docs 
+.PHONY: all clean run cross double-cross default tests docs apps
 
 default: all
 
@@ -25,6 +31,7 @@ EXE=.exe
 else # assume unixen
 DF=./
 EXE=
+TESTAPPS+= dlopen
 endif
 
 FORTH=${TARGET}${EXE}
@@ -47,15 +54,13 @@ lib${TARGET}.so: ${TARGET}.o core.gen.o
 ${FORTH}: main.o lib${TARGET}.a ${TARGET}.h
 	${CC} $^ ${LDFLAGS} -o $@
 
+### Meta Compilation ######################################################### 
+
 ${META1}: ${FORTH} ${EFORTH} embed.fth
 	${DF}${FORTH} -o ${META1} -i ${EFORTH} embed.fth
 
 ${META2}: ${FORTH} ${META1} embed.fth
 	${DF}${FORTH} -o ${META2} -i ${META1} embed.fth
-
-dlopen: CFLAGS+=-I.
-dlopen: t/dlopen.c libembed.so
-	${CC} ${CFLAGS} $< -ldl -o $@
 
 cross: ${META1}
 
@@ -65,11 +70,15 @@ double-cross: ${META2}
 run: cross
 	${DF}${FORTH} -o ${TEMP} -i ${META1}
 
+### Unit Tests ############################################################### 
+
 ${UNIT}: ${FORTH} ${META1} t/unit.fth
 	${DF}${FORTH} -o ${UNIT} -i ${META1} t/unit.fth
 
 tests: ${UNIT}
-	
+
+### Documentation ############################################################ 
+
 %.pdf: %.md
 	pandoc -V geometry:margin=0.5in --toc $< -o $@
 
@@ -81,17 +90,34 @@ tests: ${UNIT}
 
 docs: ${TARGET}.pdf ${TARGET}.htm
 
-static: CC=musl-gcc
-static: CFLAGS=-Wall -Wextra -Os -fno-stack-protector -static -std=c99
-static: LDFLAGS=-Wl,-O1
-static: embed.c core.gen.c main.c
+### Test Applications ######################################################## 
+
+dlopen: t/dlopen.c libembed.so
+	${CC} ${CFLAGS} $< -ldl -o $@
+
+cpp: t/cpp.cpp libembed.a
+	${CXX} ${CPPFLAGS} -I. -o $@ $^
+
+eforth: CC=musl-gcc
+eforth: CFLAGS=-Wall -Wextra -Os -fno-stack-protector -static -std=c99
+eforth: LDFLAGS=-Wl,-O1
+eforth: embed.c core.gen.c main.c
 	${CC} ${CFLAGS} $^ -o $@
 	strip $@
+
+simple: CFLAGS+=-DEMBED_H
+simple: embed.c
+	${CC} ${CFLAGS} $< -o $@
+
+apps: ${TESTAPPS}
+
+### Cleanup ################################################################## 
 
 clean:
 	${RM} ${FORTH} ${META1} ${META2} ${TEMP} ${UNIT} ${B2C}
 	${RM} *.o *.a *.so *.pdf *.htm
 	${RM} *.gen.c
-	${RM} dlopen
-	${RM} static
+	${RM} ${TESTAPPS}
+
+### EOF ###################################################################### 
 

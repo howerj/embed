@@ -1,17 +1,20 @@
 /* Embed Forth Virtual Machine, Richard James Howe, 2017-2018, MIT License */
-#include "embed.h"
+#include "embed.h" /* NB. defines EMBED_H, EMBED_LIBRARY */
 #include <assert.h>
 #include <errno.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 
+#ifndef EMBED_LIBRARY
+struct embed_t;                 /**< Forth Virtual Machine State (Opaque) */
+typedef struct embed_t embed_t; /**< Forth Virtual Machine State Type Define (Opaque) */
 typedef uint16_t m_t; /**< The VM is a 16-bit one, 'uintptr_t' would be more useful */
 typedef  int16_t s_t; /**< used for signed calculation and casting */
 typedef uint32_t d_t; /**< should be double the size of 'm_t' and unsigned */
-typedef struct embed_t { m_t m[32768]; } embed_t; /**< Embed Forth VM structure */
 
 typedef int (*embed_fgetc_t)(void*); /**< read character from file, return EOF on failure **/
 typedef int (*embed_fputc_t)(int ch, void*); /**< write character to file, return character wrote on success */
@@ -28,6 +31,9 @@ typedef struct {
 	     *param;               /**< first argument to 'callback' */
 	const void *name;          /**< second argument to 'save' */
 } embed_opt_t; /**< Embed VM options structure for customizing behavior */
+#endif
+
+struct embed_t { m_t m[32768]; }; /**< Embed Forth VM structure */
 
 void embed_die(const char *fmt, ...)
 {
@@ -118,7 +124,7 @@ static inline void trace(FILE *out, m_t *m, m_t pc, m_t instruction, m_t t, m_t 
 }
 #endif
 
-static int embed_vm(embed_t *h, embed_opt_t *o)
+int embed_vm(embed_t *h, embed_opt_t *o)
 {
 	assert(h && o && o->get && o->put);
 	static const m_t delta[] = { 0, 1, -2, -1 };
@@ -197,4 +203,16 @@ int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block)
 	};
 	return embed_vm(h, &o);
 }
+
+#ifndef EMBED_LIBRARY
+int main(int argc, char **argv)
+{
+	embed_t *h = embed_new();
+	if(argc != 2)
+		embed_die("usage: %s vm.blk", argv[0]);
+	if(embed_load(h, argv[1]) < 0)
+		embed_die("embed: load failed");
+	return embed_forth(h, stdin, stdout, argv[1]); /* exit takes care of 'embed_free' */
+}
+#endif
 

@@ -11,8 +11,29 @@ extern "C" {
 #include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
-struct embed_t;                 /**< Forth Virtual Machine State */
-typedef struct embed_t embed_t; /**< Forth Virtual Machine State Type Define */
+
+struct embed_t;                 /**< Forth Virtual Machine State (Opaque) */
+typedef struct embed_t embed_t; /**< Forth Virtual Machine State Type Define (Opaque) */
+
+typedef uint16_t m_t; /**< The VM is a 16-bit one, 'uintptr_t' would be more useful */
+typedef  int16_t s_t; /**< used for signed calculation and casting */
+typedef uint32_t d_t; /**< should be double the size of 'm_t' and unsigned */
+
+typedef int (*embed_fgetc_t)(void*); /**< read character from file, return EOF on failure **/
+typedef int (*embed_fputc_t)(int ch, void*); /**< write character to file, return character wrote on success */
+typedef int (*embed_save_t)(const m_t m[/*static 32768*/], const void *name, const size_t start, const size_t length);
+typedef uint16_t (*embed_callback_t)(void *param, uint16_t *s, uint16_t sp); /**< arbitrary user supplied callback */
+
+typedef struct {
+	embed_fgetc_t    get;      /**< callback to get a character, behaves like 'fgetc' */
+	embed_fputc_t    put;      /**< callback to output a character, behaves like 'fputc' */
+	embed_save_t     save;     /**< callback to save an image */
+	embed_callback_t callback; /**< arbitrary user supplied callback */
+	void *in,                  /**< first argument to 'getc' */
+	     *out,                 /**< second argument to 'putc' */
+	     *param;               /**< first argument to 'callback' */
+	const void *name;          /**< second argument to 'save' */
+} embed_opt_t; /**< Embed VM options structure for customizing behavior */
 
 void     embed_die(const char *fmt, ...);                                 /**< fprintf to stderr and die */
 FILE    *embed_fopen_or_die(const char *file, const char *mode);          /**< die on fopen failure */
@@ -29,6 +50,7 @@ size_t   embed_length(embed_t const * const h);                           /**< L
 char    *embed_core(embed_t *h);                                          /**< Get core memory, of embed_length size */
 uint16_t embed_swap16(uint16_t s);                                        /**< Swap byte order of a 2-byte value */
 void     embed_buffer_swap16(uint16_t *b, size_t l);                      /**< Swap byte order of a buffer of 2-byte values */
+int      embed_vm(embed_t *h, embed_opt_t *o);
 
 extern const uint8_t embed_default_block[];   /**< default VM image, generated from 'embed.blk' */
 extern const size_t embed_default_block_size; /**< size of default VM image */
@@ -48,5 +70,7 @@ extern const size_t embed_default_block_size; /**< size of default VM image */
 #ifdef __cplusplus
 }
 #endif
+
+#define EMBED_LIBRARY
 #endif /* EMBED_H */
 

@@ -1,4 +1,5 @@
 #include "embed.h"
+#include <stdio.h>
 #include <dlfcn.h>
 
 typedef embed_t *(*embed_new_t)(void);
@@ -8,6 +9,7 @@ typedef int (*embed_load_t)(embed_t *h, const uint8_t *buffer, size_t length);
 
 int main(void)
 {
+	fputs("dlopen eForth\n", stdout);
 	void *libembed = dlopen("./libembed.so", RTLD_LAZY);
 	if(!libembed)
 		return -1;

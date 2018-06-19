@@ -2,7 +2,9 @@
 *.a
 b2c
 *.blk
+cpp
 dlopen
+eforth
 embed
 *.exe
 *.gen.c
@@ -11,5 +13,5 @@ embed
 *.o
 *.pdf
 *.so
-static
 vgcore.*
+simple

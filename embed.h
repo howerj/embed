@@ -9,6 +9,7 @@
 extern "C" {
 #endif
 #include <stdio.h>
+#include <stddef.h>
 #include <stdint.h>
 struct embed_t;                 /**< Forth Virtual Machine State */
 typedef struct embed_t embed_t; /**< Forth Virtual Machine State Type Define */
@@ -21,7 +22,7 @@ embed_t *embed_copy(embed_t const * const h);                             /**< C
 void     embed_free(embed_t *h);                                          /**< Delete a Forth VM */
 int      embed_forth(embed_t *h, FILE *in, FILE *out, const char *block); /**< Run the VM */
 int      embed_load(embed_t *h, const char *name);                        /**< Load VM image off disk */
-int      embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length);      /**< Load VM image from memory */
+int      embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length); /**< Load VM image from memory */
 int      embed_load_file(embed_t *h, FILE *input);                        /**< Load VM image from FILE* */
 int      embed_save(const embed_t *h, const char *name);                  /**< Save VM image to disk, 0 == success */
 size_t   embed_length(embed_t const * const h);                           /**< Length in bytes of core memory */
@@ -31,6 +32,18 @@ void     embed_buffer_swap16(uint16_t *b, size_t l);                      /**< S
 
 extern const uint8_t embed_default_block[];   /**< default VM image, generated from 'embed.blk' */
 extern const size_t embed_default_block_size; /**< size of default VM image */
+
+#ifndef UNUSED
+#define UNUSED(VARIABLE) ((void)(VARIABLE))
+#endif
+
+#ifndef MAX
+#define MAX(X, Y) ((X) > (Y) ? (X) : (Y))
+#endif
+
+#ifndef MIN
+#define MIN(X, Y) ((X) > (Y) ? (Y) : (X))
+#endif
 
 #ifdef __cplusplus
 }

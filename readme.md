@@ -67,22 +67,32 @@ Ad infinitum, the two newly generated images should be byte for byte equal
 
 Unit tests can be ran typing:
 
-	make tests                           # Using make
-	./embed unit.blk embed.blk unit.fth # manual invocation
+	make tests                            # Using make
+	./embed unit.blk embed.blk t/unit.fth # manual invocation
 
 ## Project Organization
 
 * [embed.c][]: The Embed Virtual Machine
 * [embed.h][]: The Embed Virtual Machine library interface
+* [main.c][]: Test driver for the Virtual Machine Library
 * [embed.blk][]: A Forth interpreter image
 * [embed.fth][]: A meta compiler and a Forth interpreter
 * [unit.fth][]: Unit tests for the eForth image
 
+## To Do
+
+* [x] Self-Hosting Metacompiler
+* [x] Man pages
+* [x] Document project
+* [ ] Virtual Machine and eForth Image/Metacompiler that uses 'uintptr\_t'
+* [ ] Test applications that integrate with OpenGL, and Windows/Unix non-block I/O 
+
 [MIT License]: LICENSE
 [embed.c]: embed.c
+[main.c]: main.c
 [embed.h]: embed.h
 [embed.blk]: embed.blk
-[unit.fth]: unit.fth
+[unit.fth]: t/unit.fth
 [embed.fth]: embed.fth
 [C compiler]: https://gcc.gnu.org/
 [make]: https://www.gnu.org/software/make/

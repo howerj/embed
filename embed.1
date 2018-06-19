@@ -4,7 +4,7 @@
 .SH NAME
 embed \- embed virtual machine
 .SH SYNOPSIS
-embed out.blk in.blk file.fth
+embed -i in.blk -o out.blk file.fth
 .SH DESCRIPTION
 A simple and compact Forth Virtual machine, derived from the H2 CPU
 (from <https://github.com/howerj/forth-cpu>, which in turn derives from the J1
@@ -12,28 +12,31 @@ CPU). The virtual machine includes a built in eForth image which can be used
 in lieu of loading one off of disk.
 
 .SH OPTIONS
-
-All command line arguments are optional, the meaning of the option is given
-by its position within the argument list. If any option is missing then a
-default is used.
+No options are mandatory.
 
 .TP
-.B out.blk
-This option supplies a file for any 'save' instructions to write a block to,
-if no 'out.blk' option is supplied the saving fails. This may be the same
-file name as given by 'in.blk'.
+.B -i in.blk
+Select initial input block, this block will be loaded off of disk and used as
+memory for the Virtual machine, maximum block size is 65535 bytes. If no input
+block is specified then an internal initial block will be used instead, which
+contains a fully working eForth interpreter.
 
 .TP
-.B in.blk
-This option supplies a file to be used as the initial virtual machine image,
-this will be loaded at startup. If no 'in.blk' file is provided then the
-default virtual machine image built into the library is used to initialize the
-virtual machine.
+.B -o out.blk
+Select the output block, the virtual machine is capable of saving sections of
+its memory to disk and this option allows the user to specify which file the
+memory is saved to. If no file is specified then any attempts by the virtual
+machine to save memory to disk will fail.
+
+.TP
+.B -h
+Print a help message and exit indicating failure.
 
 .TP
 .B file.fth
 This option supplies a file to read from, by default the virtual machine
-will read from stdin(3).
+will read from stdin(3) if a file is not given. Multiple files can be
+specified, but if a file is specified input will not be read from stdin(3).
 
 .SH EXAMPLES
 
@@ -44,21 +47,13 @@ This will make 'embed' use the built in virtual machine image, saving will
 fail, and stdin(3) will be used as input.
 
 .TP
-.B ./embed out.blk
-
-This will make 'embed' use the built in virtual machine image, saving blocks
-will be to the file 'out.blk' and stdin(3) will be used as input.
+.B ./embed -o out.blk
 
 .TP
-.B ./embed out.blk in.blk
-
-This will make 'embed' load the initial virtual machine image from 'in.blk', no
-checking is done to make sure this is a valid image, it will just be loaded and
-treated as instructions by the virtual machine. 'out.blk' will be used to save
-the virtual machine. stdin(3) will be used as input.
+.B ./embed  -i in.blk -o out.blk
 
 .TP
-.B ./embed out.blk in.blk file.fth
+.B ./embed -i in.blk -o out.blk file.fth
 
 .SH COMPILATION
 

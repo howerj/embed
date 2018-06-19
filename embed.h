@@ -9,20 +9,41 @@
 extern "C" {
 #endif
 #include <stdio.h>
+#include <stddef.h>
 #include <stdint.h>
-struct forth_t;                 /**< Forth Virtual Machine State */
-typedef struct forth_t forth_t; /**< Forth Virtual Machine State Type Define */
+struct embed_t;                 /**< Forth Virtual Machine State */
+typedef struct embed_t embed_t; /**< Forth Virtual Machine State Type Define */
 
 void     embed_die(const char *fmt, ...);                                 /**< fprintf to stderr and die */
 FILE    *embed_fopen_or_die(const char *file, const char *mode);          /**< die on fopen failure */
-forth_t *embed_new(void);                                                 /**< make a new Forth VM */
-forth_t *embed_copy(forth_t const * const h);                             /**< Copy existing instance of a Forth VM */
-void     embed_free(forth_t *h);                                          /**< Delete a Forth VM */
-int      embed_forth(forth_t *h, FILE *in, FILE *out, const char *block); /**< Run the VM */
-int      embed_load(forth_t *h, const char *name);                        /**< Load VM image off disk */
-int      embed_save(forth_t *h, const char *name);                        /**< Save VM image to disk, 0 == success */
-size_t   embed_length(forth_t const * const h);                           /**< Length in bytes of core memory */
-char    *embed_core(forth_t *h);                                          /**< Get core memory, of embed_length size */
+void    *embed_alloc_or_die(size_t sz);                                   /**< 'calloc' or die */
+embed_t *embed_new(void);                                                 /**< make a new Forth VM */
+embed_t *embed_copy(embed_t const * const h);                             /**< Copy existing instance of a Forth VM */
+void     embed_free(embed_t *h);                                          /**< Delete a Forth VM */
+int      embed_forth(embed_t *h, FILE *in, FILE *out, const char *block); /**< Run the VM */
+int      embed_load(embed_t *h, const char *name);                        /**< Load VM image off disk */
+int      embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length); /**< Load VM image from memory */
+int      embed_load_file(embed_t *h, FILE *input);                        /**< Load VM image from FILE* */
+int      embed_save(const embed_t *h, const char *name);                  /**< Save VM image to disk, 0 == success */
+size_t   embed_length(embed_t const * const h);                           /**< Length in bytes of core memory */
+char    *embed_core(embed_t *h);                                          /**< Get core memory, of embed_length size */
+uint16_t embed_swap16(uint16_t s);                                        /**< Swap byte order of a 2-byte value */
+void     embed_buffer_swap16(uint16_t *b, size_t l);                      /**< Swap byte order of a buffer of 2-byte values */
+
+extern const uint8_t embed_default_block[];   /**< default VM image, generated from 'embed.blk' */
+extern const size_t embed_default_block_size; /**< size of default VM image */
+
+#ifndef UNUSED
+#define UNUSED(VARIABLE) ((void)(VARIABLE))
+#endif
+
+#ifndef MAX
+#define MAX(X, Y) ((X) > (Y) ? (X) : (Y))
+#endif
+
+#ifndef MIN
+#define MIN(X, Y) ((X) > (Y) ? (Y) : (X))
+#endif
 
 #ifdef __cplusplus
 }

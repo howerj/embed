@@ -1,0 +1,96 @@
+.\" Manpage for embed
+.\" Contact howe.r.j.89@gmail.com to correct errors or typos.
+.TH embed 1 "17 Jun 2018" "0.1.0" "embed man page"
+.SH NAME
+embed \- embed virtual machine
+.SH SYNOPSIS
+embed -i in.blk -o out.blk file.fth
+.SH DESCRIPTION
+A simple and compact Forth Virtual machine, derived from the H2 CPU
+(from <https://github.com/howerj/forth-cpu>, which in turn derives from the J1
+CPU). The virtual machine includes a built in eForth image which can be used
+in lieu of loading one off of disk.
+
+.SH OPTIONS
+No options are mandatory.
+
+.TP
+.B -i in.blk
+Select initial input block, this block will be loaded off of disk and used as
+memory for the Virtual machine, maximum block size is 65535 bytes. If no input
+block is specified then an internal initial block will be used instead, which
+contains a fully working eForth interpreter.
+
+.TP
+.B -o out.blk
+Select the output block, the virtual machine is capable of saving sections of
+its memory to disk and this option allows the user to specify which file the
+memory is saved to. If no file is specified then any attempts by the virtual
+machine to save memory to disk will fail.
+
+.TP
+.B -h
+Print a help message and exit indicating failure.
+
+.TP
+.B file.fth
+This option supplies a file to read from, by default the virtual machine
+will read from stdin(3) if a file is not given. Multiple files can be
+specified, but if a file is specified input will not be read from stdin(3).
+
+.SH EXAMPLES
+
+.TP
+.B ./embed
+
+This will make 'embed' use the built in virtual machine image, saving will
+fail, and stdin(3) will be used as input.
+
+.TP
+.B ./embed -o out.blk
+
+.TP
+.B ./embed  -i in.blk -o out.blk
+
+.TP
+.B ./embed -i in.blk -o out.blk file.fth
+
+.SH COMPILATION
+
+Compilation requires a C99 compiler at minimum, an executable called 'b2c' is
+made first which can turn a binary file into a C source file that represents
+that file. This is then run on the initial eForth image ('embed.blk') to be 
+included in the executable to generate 'core.gen.c'. The virtual machine 'embed.c' 
+and a driver 'main.c' are then compiled along with 'core.gen.c' into the final
+executable 'embed'.
+
+ cc -std=c99 b2c.c -o b2c
+
+ ./b2c embed_default_block embed.blk core.gen.c
+
+ cc -std=c99 main.c embed.c core.gen.c -o embed
+
+
+.SH LIBRARY API
+
+.SH EXIT STATUS
+
+This command returns zero on success and non zero on failure.
+
+.SH SEE ALSO
+
+For more information, see
+.B https://github.com/howerj/embed
+which contains the original program source.
+
+.SH BUGS
+
+For any bugs, contact the author.
+
+.SH AUTHOR
+Richard James Howe (howe.r.j.89@gmail.com)
+
+.SH COPYRIGHT
+The embed program is licensed under the MIT license, Copyright (c) 2018, Richard
+Howe. The same applies to the images and source code to generate those images.
+

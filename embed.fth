@@ -1,5 +1,5 @@
 0 <ok> ! hex ( Turn off *ok* prompt, go into hex mode )
-\ # meta.fth
+\ # embed.fth
 \
 \	| Project    | A Small Forth VM/Implementation   |
 \	| ---------- | --------------------------------- |
@@ -23,7 +23,7 @@
 \ is also used as source for a simple document generation system using [AWK][]
 \ which feeds into either [Pandoc][] for [PDF][] or the original [Markdown][]
 \ script for [HTML][] output. The AWK script is crude and requires that the
-\ Forth source file, [meta.fth][] be formatted in a specific way. 
+\ Forth source file, [embed.fth][] be formatted in a specific way. 
 \
 \ Lines beginning with a back-slash are turned into normal Markdown text, with
 \ some characters needed to be escaped. Other lines are assumed to be Forth
@@ -322,6 +322,7 @@ a: #rx     $1800 a; ( Block until byte received, T = byte/error )
 a: #um/mod $1900 a; ( Remainder/Divide: Double Cell )
 a: #/mod   $1A00 a; ( Signed Remainder/Divide: Single Cell )
 a: #bye    $1B00 a; ( Exit Interpreter )
+a: #vm     $1C00 a; ( Arbitrary VM call )
 
 \ The Stack Delta Operations occur after the ALU operations have been executed.
 \ They affect either the Return or the Variable Stack. An ALU instruction
@@ -673,6 +674,7 @@ a: return ( -- : Compile a return into the target )
 : /mod    ]asm  #/mod    t->n   alu asm[ ;
 : /       ]asm  #/mod    d-1    alu asm[ ;
 : mod     ]asm  #/mod    n->t   d-1   alu asm[ ;
+: vm      ]asm  #vm             alu asm[ ;
 : rdrop   ]asm  #t       r-1    alu asm[ ;
 \ Some words can be implemented in a single instruction which have no
 \ analogue within Forth.
@@ -943,6 +945,7 @@ h: tx!     tx!      ; ( c -- : transmit single character )
 : /mod     /mod     ; ( u1 u2 -- rem div : signed divide/modulo )
 : /        /        ; ( u1 u2 -- u : u1 divided by u2 )
 : mod      mod      ; ( u1 u2 -- u : remainder of u1 divided by u2 )
+: vm       vm       ; ( ??? -- ??? : perform arbitrary VM call ) 
 
 \ 
 \ ### Forth Implementation of Arithmetic Functions
@@ -1054,7 +1057,7 @@ $0       tvariable state ( compiler state variable )
 $0       tvariable hld   ( Pointer into hold area for numeric output )
 $10      tvariable base  ( Current output radix )
 $0       tvariable span  ( Hold character count received by expect   )
-$8       tconstant #vocs ( number of vocabularies in allowed )
+$8       constant  #vocs ( number of vocabularies in allowed )
 $400     tconstant b/buf ( size of a block )
 0        tvariable blk   ( current blk loaded, set in *cold* )
 #version constant  ver   ( eForth version )
@@ -2219,7 +2222,7 @@ h: token =bl word ;                      ( -- a )
 
 h: ?dictionary dup $3F00 u< ?exit 8 -throw ;
 : , here dup cell+ ?dictionary cp! ! ; ( u -- : store *u* in dictionary )
-: c, here ?dictionary c! cp 1+! ;      ( c -- : store *c* in the dictionary )
+\ : c, here ?dictionary c! cp 1+! ;      ( c -- : store *c* in the dictionary )
 h: doLit 0x8000 or , ;                 ( n+ -- : compile literal )
 : literal ( n -- : write a literal into the dictionary )
   dup 0x8000 and ( n > $7FFF ? )
@@ -3509,7 +3512,8 @@ some operations trap on error (UM/MOD, /MOD).
 	| 24  | RX       | Send byte            |
 	| 25  | UM/MOD   | um/mod               |
 	| 26  | /MOD     | /mod                 |
-	| 27  | BYE      | Return               |
+	| 27  | BYE      | Conditionally Yield  |
+	| 28  | Callback | Arbitrary function   |
 
 ### Encoding of Forth Words
 
@@ -3530,8 +3534,8 @@ would be difficult to achieve in hardware is easy enough to do in software.
 	| nip    | T        |     |     |     |     |     | -1  |
 	| drop   | N        |     |     |     |     |     | -1  |
 	| exit   | T        |     |     |     | R2P |  -1 |     |
-	| &gt;r  | N        |     | T2R |     |     |   1 | -1  |
-	| r&gt;  | R        | T2N |     |     |     |  -1 |  1  |
+	| >r     | N        |     | T2R |     |     |   1 | -1  |
+	| r>     | R        | T2N |     |     |     |  -1 |  1  |
 	| r@     | R        | T2N |     |     |     |     |  1  |
 	| @      | T@       |     |     |     |     |     |     |
 	| !      | NtoT     |     |     |     |     |     | -1  |
@@ -3632,7 +3636,7 @@ This is a list of Error codes, not all of which are used by the application.
 	| FFE4 | -28  | user interrupt                                |
 	| FFE3 | -29  | compiler nesting                              |
 	| FFE2 | -30  | obsolescent feature                           |
-	| FFE1 | -31  | &gt;BODY used on non-CREATEd definition       |
+	| FFE1 | -31  | >BODY used on non-CREATEd definition          |
 	| FFE0 | -32  | invalid name argument (e.g., TO xxx)          |
 	| FFDF | -33  | block read exception                          |
 	| FFDE | -34  | block write exception                         |
@@ -3855,7 +3859,7 @@ This is a list of Error codes, not all of which are used by the application.
 		forth_t *h = embed_new();
 		if(argc > 4)
 			embed_die("usage: %s [in.blk] [out.blk] [file.fth]", argv[0]);
-		if(embed_load(h, argc < 2 ? "eforth.blk" : argv[1]) < 0)
+		if(embed_load(h, argc < 2 ? "embed.blk" : argv[1]) < 0)
 			embed_die("embed: load failed");
 		FILE *in = argc <= 3 ? stdin : embed_fopen_or_die(argv[3], "rb");
 		if(embed_forth(h, in, stdout, argc < 3 ? NULL : argv[2]))
@@ -3901,7 +3905,7 @@ Go online for more examples.
 
 This is a game of [Sokoban][], to play, type:
 
-	cat sokoban.fth /dev/stdin | ./embed eforth.blk new.blk
+	cat sokoban.fth /dev/stdin | ./embed embed.blk new.blk
 
 On the command line. Four maps are provided, more can be found online at
 <https://github.com/begoon/sokoban-maps>, where the four maps were found.
@@ -4187,13 +4191,13 @@ A [Conways Games Of Life][] in a few screens, adapted to this Forth:
 	.( Or 'random-life' ) cr
 
 
-Run in the same way sokoban.fth.
+Run in the same way as "sokoban.fth".
 
 ## Floating Point Arithmetic
 
 Floating point implementation, and adapted version can be found in the
 unit tests file. It is believed that this can be used freely so long as
-the copyright notice is left intact, similar to the [MIT][] license - although
+the copyright notice is left intact, similar to the [MIT license][] - although
 do not hold me to that.
 
 	Vierte Dimension Vol.2, No.4 1986
@@ -4773,7 +4777,7 @@ if a number of input words were vectored.
 [Run Length Encoding]: https://en.wikipedia.org/wiki/Run-length_encoding
 [Huffman]: https://en.wikipedia.org/wiki/Huffman_coding
 [Adaptive Huffman]: https://en.wikipedia.org/wiki/Adaptive_Huffman_coding
-[MIT License]: https://github.com/howerj/embed/blob/master/LICENSE
+[MIT license]: https://github.com/howerj/embed/blob/master/LICENSE
 [Markdown]: https://daringfireball.net/projects/markdown/
 [Cross Compiler]: https://en.wikipedia.org/wiki/Cross_compiler
 [eForth written for the J1]: https://github.com/samawati/j1eforth
@@ -4797,7 +4801,7 @@ if a number of input words were vectored.
 [Pandoc]: http://pandoc.org/
 [PDF]: https://acrobat.adobe.com/us/en/acrobat/about-adobe-pdf.html
 [HTML]: https://en.wikipedia.org/wiki/HTML
-[meta.fth]: https://github.com/howerj/embed/blob/master/meta.fth
+[embed.fth]: https://github.com/howerj/embed/blob/master/embed.fth
 [Forth]: https://en.wikipedia.org/wiki/Forth_(programming_language)
 [colorForth]: https://en.wikipedia.org/wiki/ColorForth
 [Verilog]: https://en.wikipedia.org/wiki/Verilog

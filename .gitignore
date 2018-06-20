@@ -12,6 +12,7 @@ embed
 *.md
 *.o
 *.pdf
+ref
+simple
 *.so
 vgcore.*
-simple

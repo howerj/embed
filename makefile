@@ -8,7 +8,6 @@ CFLAGS= -O2 -std=c99 -g -Wall -Wextra -fwrapv -fPIC -pedantic -I.
 CC=gcc
 EXE=
 DF=
-EFORTH=embed.blk
 META1=embed-1.blk
 META2=embed-2.blk
 TEMP=tmp.blk
@@ -18,7 +17,7 @@ CMP=cmp
 AR=ar
 ARFLAGS=rcs
 RM=rm -fv
-TESTAPPS=cpp simple eforth
+TESTAPPS=cpp ref
 
 .PHONY: all clean run cross double-cross default tests docs apps
 
@@ -31,7 +30,7 @@ EXE=.exe
 else # assume unixen
 DF=./
 EXE=
-TESTAPPS+= dlopen
+TESTAPPS+= dlopen eforth
 endif
 
 FORTH=${TARGET}${EXE}
@@ -39,16 +38,16 @@ B2C=b2c${EXE}
 
 all: ${FORTH}
 
-${B2C}: b2c.o embed.o
-	${CC} $^ -o $@
+${B2C}: t/b2c.o embed.o
+	${CC} ${CFLAGS} $^ -o $@
 
-core.gen.c: ${B2C} embed.blk
-	${DF}${B2C} embed_default_block embed.blk $@
+core.gen.c: ${B2C} t/embed.blk
+	${DF}${B2C} embed_default_block t/embed.blk $@ "eForth Image"
 
-lib${TARGET}.a: ${TARGET}.o core.gen.o
+lib${TARGET}.a: ${TARGET}.o image.o
 	${AR} ${ARFLAGS} $@ $^
 
-lib${TARGET}.so: ${TARGET}.o core.gen.o
+lib${TARGET}.so: ${TARGET}.o image.o
 	${CC} -shared -o $@ $^
 
 ${FORTH}: main.o lib${TARGET}.a ${TARGET}.h
@@ -56,8 +55,8 @@ ${FORTH}: main.o lib${TARGET}.a ${TARGET}.h
 
 ### Meta Compilation ######################################################### 
 
-${META1}: ${FORTH} ${EFORTH} embed.fth
-	${DF}${FORTH} -o ${META1} -i ${EFORTH} embed.fth
+${META1}: ${FORTH} embed.fth
+	${DF}${FORTH} -o ${META1} embed.fth
 
 ${META2}: ${FORTH} ${META1} embed.fth
 	${DF}${FORTH} -o ${META2} -i ${META1} embed.fth
@@ -101,12 +100,11 @@ cpp: t/cpp.cpp libembed.a
 eforth: CC=musl-gcc
 eforth: CFLAGS=-Wall -Wextra -Os -fno-stack-protector -static -std=c99
 eforth: LDFLAGS=-Wl,-O1
-eforth: embed.c core.gen.c main.c
+eforth: embed.c image.c main.c
 	${CC} ${CFLAGS} $^ -o $@
 	strip $@
 
-simple: CFLAGS+=-DEMBED_H
-simple: embed.c
+ref: t/ref.c
 	${CC} ${CFLAGS} $< -o $@
 
 apps: ${TESTAPPS}

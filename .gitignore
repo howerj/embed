@@ -16,3 +16,4 @@ ref
 simple
 *.so
 vgcore.*
+*.tgz

@@ -49,29 +49,92 @@ fail, and stdin(3) will be used as input.
 .TP
 .B ./embed -o out.blk
 
+Set output block to 'out.blk', any changes using the save instruction will
+be written to this file.
+
 .TP
-.B ./embed  -i in.blk -o out.blk
+.B ./embed  -i in.blk
+
+Set the initial VM image to 'in.blk'
 
 .TP
 .B ./embed -i in.blk -o out.blk file.fth
 
+.SH EFORTH
+
+This manual page is not the right medium to describe eForth, the language
+implemented in the default image loaded. eForth is a variant of Forth designed
+to be portable and small. Forth is a stack based imperative programming with
+minimal safety checks and footprint, it uses Reverse Polish Notation to 
+organize input and output arguments, allows for Reflection (the language can
+inquire about its run time), has incremental compilation, and is extensible.
+
+The default image includes the Forth interpreter, a simple editor, a 
+primitive disassembler, and CRC checks.
+
+If you run the default image you should be greeted with a prompt that looks
+something like this:
+
+.TP 
+.B eFORTH v1984
+.B 5290 11094
+
+
+You can starting typing things in, the eForth interpreter gets its input a line
+at a time and will print out 'ok' after a line has been successfully
+interpreted.
+
+Some examples:
+
+.TP
+.B 2 2 + . 
+
+This performs the simple sum '2+2' and it prints the result, you should see
+the line:
+
+.TP
+ 4 ok
+
+Printed out.
+
+.TP
+.B : hello ." Hello, World!" cr ;
+
+.B hello
+
+.TP
+.B words
+
+Displays all of the functions (Forth calls functions words) in the Forth
+dictionary (the dictionary is a list of all defined words) in the currently
+loaded vocabularies. You can use this word to find out 
+
+.TP
+.B see words
+
+The word 'see' is the Forth disassembler, it takes the next word, 'words' and
+shows you how assembly for it. You can use 'see' to work out how words work
+without the source code.
+
+.TP
+.B save
+
+Save the current image to disk, this will fail if you do not specify and
+output file when you ran the interpreter with the '-o' option.
+
 .SH COMPILATION
 
-Compilation requires a C99 compiler at minimum, an executable called 'b2c' is
-made first which can turn a binary file into a C source file that represents
-that file. This is then run on the initial eForth image ('embed.blk') to be 
-included in the executable to generate 'core.gen.c'. The virtual machine 'embed.c' 
-and a driver 'main.c' are then compiled along with 'core.gen.c' into the final
-executable 'embed'.
+Compilation requires a C compiler that supports the C99 standard at minimum,
+if you have make installed you can type 'make' to build the interpreter, if
+you do not:
 
- cc -std=c99 b2c.c -o b2c
-
- ./b2c embed_default_block embed.blk core.gen.c
-
- cc -std=c99 main.c embed.c core.gen.c -o embed
-
+.B cc -std=c99 main.c embed.c image.c -o embed
 
 .SH LIBRARY API
+
+The Virtual Machine and default eForth image is designed to be flexible and
+embeddable in different scenarios, the VM may need editing but given its small
+size it should not be too much of a problem.
 
 .SH EXIT STATUS
 
@@ -85,12 +148,15 @@ which contains the original program source.
 
 .SH BUGS
 
-For any bugs, contact the author.
+For any bugs, contact the author. The eForth image is not standards compliant
+with ANS Forth or any other Forth standard, however it does look to not
+deviate if possible so if you find any simple changes please email me.
 
 .SH AUTHOR
 Richard James Howe (howe.r.j.89@gmail.com)
 
 .SH COPYRIGHT
-The embed program is licensed under the MIT license, Copyright (c) 2018, Richard
-Howe. The same applies to the images and source code to generate those images.
+The embed program is licensed under the MIT license, Copyright (c) 2018, 
+Richard James Howe. The same applies to the images and source code to generate 
+those images.
 

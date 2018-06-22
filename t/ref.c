@@ -113,6 +113,7 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			pc = instruction & 0x10 ? m[rp] >> 1 : pc;
 
 			switch((instruction >> 8u) & 0x1f) {
+			case  0:                           break;
 			case  1: T = n;                    break;
 			case  2: T = m[rp];                break;
 			case  3: T = m[(t>>1)%l];          break;
@@ -140,6 +141,8 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; } else { pc=4; T=10; } break;
 			case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;
+			/* 28 reserved for callback instruction */
+			default: pc = 4; T=21;             break;
 			}
 			sp += delta[ instruction       & 0x3];
 			rp -= delta[(instruction >> 2) & 0x3];

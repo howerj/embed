@@ -19,7 +19,7 @@ ARFLAGS=rcs
 RM=rm -fv
 TESTAPPS=cpp ref
 
-.PHONY: all clean run cross double-cross default tests docs apps
+.PHONY: all clean run cross double-cross default tests docs apps dist
 
 default: all
 
@@ -89,6 +89,11 @@ tests: ${UNIT}
 
 docs: ${TARGET}.pdf ${TARGET}.htm
 
+### Release Distribution ##################################################### 
+
+dist: lib${TARGET}.so lib${TARGET}.a ${TARGET}.pdf embed.1 ${FORTH} ${TARGET}.h embed.blk
+	tar zcf ${TARGET}.tgz $^
+
 ### Test Applications ######################################################## 
 
 dlopen: t/dlopen.c libembed.so
@@ -115,6 +120,7 @@ clean:
 	${RM} ${FORTH} ${META1} ${META2} ${TEMP} ${UNIT} ${B2C}
 	${RM} *.o *.a *.so *.pdf *.htm
 	${RM} *.gen.c
+	${RM} *.tgz
 	${RM} ${TESTAPPS}
 
 ### EOF ###################################################################### 

@@ -9,6 +9,10 @@
 #include <string.h>
 #include <stdarg.h>
 
+typedef uint16_t m_t; /**< The VM is a 16-bit one, 'uintptr_t' would be more useful */
+typedef  int16_t s_t; /**< used for signed calculation and casting */
+typedef uint32_t d_t; /**< should be double the size of 'm_t' and unsigned */
+
 struct embed_t { m_t m[32768]; }; /**< Embed Forth VM structure */
 
 void embed_die(const char *fmt, ...)
@@ -41,8 +45,8 @@ void *embed_alloc_or_die(size_t sz)
 	return r;
 }
 
-static int embed_fputc(int ch, void *file)         { assert(file); return fputc(ch, file); }
-static int embed_fgetc(void *file)                 { assert(file); return fgetc(file); }
+int embed_fputc_cb(int ch, void *file)             { assert(file); return fputc(ch, file); }
+int embed_fgetc_cb(void *file)                     { assert(file); return fgetc(file); }
 static size_t embed_cells(embed_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
 static size_t embed_min_size_t(size_t a, size_t b) { return a > b ? b : a; }
 uint16_t embed_swap16(uint16_t s)                  { return (s >> 8) | (s << 8); }
@@ -66,7 +70,7 @@ int embed_load_file(embed_t *h, FILE *input)
 	return r < 128 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
 }
 
-static int save(const m_t m[static 32768], const void *name, const size_t start, const size_t length)
+int embed_save_cb(const m_t m[static 32768], const void *name, const size_t start, const size_t length)
 {
 	assert(m);
 	if(!name || !(((length - start) <= length) && ((start + length) <= m[5] /*embed_cells(h)*/)))
@@ -83,7 +87,7 @@ static int save(const m_t m[static 32768], const void *name, const size_t start,
 
 embed_t *embed_new(void)                          { return embed_alloc_or_die(sizeof(struct embed_t)); }
 embed_t *embed_copy(embed_t const * const h)      { assert(h); return memcpy(embed_new(), h, sizeof(*h)); }
-int      embed_save(const embed_t *h, const char *name) { assert(name); return save(h->m, name, 0, embed_cells(h)); }
+int      embed_save(const embed_t *h, const char *name) { assert(name); return embed_save_cb(h->m, name, 0, embed_cells(h)); }
 size_t   embed_length(embed_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
 void     embed_free(embed_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
 char    *embed_core(embed_t *h)                   { assert(h); return (char*)h->m; }
@@ -92,24 +96,35 @@ int      embed_load(embed_t *h, const char *name) { FILE *f = embed_fopen_or_die
 #ifdef NDEBUG
 #define trace(OUT,M,PC,INSTRUCTION,T,RP,SP)
 #else
-static inline void trace(FILE *out, m_t *m, m_t pc, m_t instruction, m_t t, m_t rp, m_t sp)
+static void efputs(embed_opt_t *o, const char *s)
 {
-	if(!(m[6] & 1))
+	assert(o && s);
+	if(!(o->put))
 		return;
-	fprintf(out, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, (uint16_t)(m[2]-rp), (uint16_t)(sp-m[3]));
+	for(int ch = 0;(ch = *s++); o->put(ch, o->out));
+}
+
+static inline void trace(embed_opt_t *o, m_t *m, m_t pc, m_t instruction, m_t t, m_t rp, m_t sp)
+{
+	if(!(m[6] & 1) || !(o->put))
+		return;
+	char buf[32] = { 0 };
+	snprintf(buf, sizeof buf, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, (uint16_t)(m[2]-rp), (uint16_t)(sp-m[3]));
+	efputs(o, buf);
 }
 #endif
 
 int embed_vm(embed_t *h, embed_opt_t *o)
 {
-	assert(h && o && o->get && o->put);
+	assert(h && o);
 	static const m_t delta[] = { 0, 1, -2, -1 };
 	const m_t l = embed_cells(h);
 	m_t * const m = h->m;
 	m_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0;
+	m[6] = o->status;
 	for(d_t d;;) {
 		const m_t instruction = m[pc++];
-		trace(stdout, m, pc, instruction, t, rp, sp); /**@todo fix trace output */
+		trace(o, m, pc, instruction, t, rp, sp);
 		if((r = -!(sp < l && rp < l && pc < l))) /* critical error */
 			goto finished;
 		if(0x8000 & instruction) { /* literal */
@@ -120,17 +135,18 @@ int embed_vm(embed_t *h, embed_opt_t *o)
 			pc = instruction & 0x10 ? m[rp] >> 1 : pc;
 
 			switch((instruction >> 8u) & 0x1f) {
+			case  0: T = t;                    break;
 			case  1: T = n;                    break;
 			case  2: T = m[rp];                break;
 			case  3: T = m[(t>>1)%l];          break;
 			case  4: m[(t>>1)%l] = n; T = m[--sp]; break;
 			case  5: d = (d_t)t + n; T = d >> 16; m[sp] = d; n = d; break;
 			case  6: d = (d_t)t * n; T = d >> 16; m[sp] = d; n = d; break;
-			case  7: T &= n;                   break;
-			case  8: T |= n;                   break;
-			case  9: T ^= n;                   break;
+			case  7: T = t&n;                   break;
+			case  8: T = t|n;                   break;
+			case  9: T = t^n;                   break;
 			case 10: T = ~t;                   break;
-			case 11: T--;                      break;
+			case 11: T = t-1;                  break;
 			case 12: T = -(t == 0);            break;
 			case 13: T = -(t == n);            break;
 			case 14: T = -(n < t);             break;
@@ -141,13 +157,14 @@ int embed_vm(embed_t *h, embed_opt_t *o)
 			case 19: T = rp << 1;              break;
 			case 20: sp = t >> 1;              break;
 			case 21: rp = t >> 1; T = n;       break;
-			case 22: if(o->save) { T = o->save(h->m, o->name, n>>1, ((d_t)T+1)>>1); } else { pc=4; T=21; } break;
+			case 22: if(o->save) { T = o->save(h->m, o->name, n>>1, ((d_t)t+1)>>1); } else { pc=4; T=21; } break;
 			case 23: if(o->put) { T = o->put(t, o->out); }                  else { pc=4; T=21; } break; 
 			case 24: if(o->get) { T = o->get(o->in); n = -1; }              else { pc=4; T=21; } break; /* n = blocking status */
 			case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; }                 else { pc=4; T=10; } break;
 			case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;
-			case 28: if(o->callback) sp = o->callback(o->param, &m[sp], sp >> 1); else { pc=4; T=21; } break;
+			case 28: if(o->callback) { sp = o->callback(o->param, &m[sp], sp >> 1); } else { pc=4; T=21; } break;
+			default: pc = 4; T=21;             break;
 			}
 			sp += delta[ instruction       & 0x3];
 			rp -= delta[(instruction >> 2) & 0x3];
@@ -166,16 +183,17 @@ int embed_vm(embed_t *h, embed_opt_t *o)
 			pc = instruction & 0x1FFF;
 		}
 	}
-finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp;
+finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp, o->status = m[6];
 	return (s_t)r;
 }
 
 int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block)
 {
 	embed_opt_t o = {
-		.get = embed_fgetc, .put = embed_fputc, .save = save,
-		.in = in,           .out = out,         .name = block, 
-		.callback = NULL,   .param = NULL
+		.get      = embed_fgetc_cb, .put   = embed_fputc_cb, .save = embed_save_cb,
+		.in       = in,             .out   = out,            .name = block, 
+		.callback = NULL,           .param = NULL,
+		.status   = 0
 	};
 	return embed_vm(h, &o);
 }

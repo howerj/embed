@@ -798,6 +798,11 @@ $0001    t, \ $22: Header options
 \ manipulate the rest of the image before we do anything with it. The
 \
 
+\ @todo Remove this to reduce image size so that proper terminal handling
+\ can be added in (along with IO Vectors) without increasing the image size,
+\ also read in the VM options instruction and do not print out the eForth
+\ welcome if we reading from a file and not stdin.
+
 0 tlocation decrypt-begin
 
 h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
@@ -3805,6 +3810,7 @@ This is a list of Error codes, not all of which are used by the application.
 				pc = instruction & 0x10 ? m[rp] >> 1 : pc;
 
 				switch((instruction >> 8u) & 0x1f) {
+				case  0:                           break;
 				case  1: T = n;                    break;
 				case  2: T = m[rp];                break;
 				case  3: T = m[(t>>1)%l];          break;
@@ -3832,6 +3838,7 @@ This is a list of Error codes, not all of which are used by the application.
 				case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 				case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; } else { pc=4; T=10; } break;
 				case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;
+				default: pc=4; T=21; break;
 				}
 				sp += delta[ instruction       & 0x3];
 				rp -= delta[(instruction >> 2) & 0x3];

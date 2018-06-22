@@ -87,7 +87,7 @@ int main(int argc, char **argv)
 				goto end;
 		}
 	}
-	if(!ran)
+	if(!ran) /**@todo set CPU options */
 		r = run(h, !ran, in, out, iblk, oblk);
 end:
 	embed_free(h);

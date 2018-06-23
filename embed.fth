@@ -1,4 +1,3 @@
-0 <ok> ! hex ( Turn off *ok* prompt, go into hex mode )
 \ # embed.fth
 \
 \	| Project    | A Small Forth VM/Implementation   |
@@ -242,7 +241,7 @@ $4400 constant (sp0)   ( start of variable stack )
   ." TARGET: "  there       . cr
   ." HEADER: "  #target $30 dump cr ;
 
-$22 constant (header-options)
+$26 constant (header-options)
 
 : checksum #target there crc ; ( -- u : calculate CRC of target image )
 
@@ -413,8 +412,6 @@ a: return ( -- : Compile a return into the target )
 : exit, exit-optimize update-fence ;            ( -- )
 
 \ ### Meta-Compiler Defining Words and Control Structures
-\ 
-\
 \
 \ *compile-only* and *immediate* set bits in the latest defined word for
 \ making a word a "compile only" word (one which can only be executed from
@@ -739,8 +736,8 @@ $4126 constant tib-start   ( backup tib-buf value )
 \ $4280 == pad-area
 
 \ $C    constant vm-options   ( Virtual machine options register )
-$1A   constant header-length  ( location of length in header )
-$1C   constant header-crc     ( location of CRC in header )
+$1E   constant header-length  ( location of length in header )
+$20   constant header-crc     ( location of CRC in header )
 (header-options) constant header-options ( location of options bits in header )
 
 target.1         +order ( Add target word dictionary to search order )
@@ -777,17 +774,19 @@ forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 0        t, \  $8: Instruction exception vector
 $8000    t, \  $A: VM Memory Size in cells
 $0000    t, \  $C: VM Options
-$0000    t, \  $E: VM Reserved
-$0000    t, \ $10: VM Reserved
-$4689    t, \ $12: 0x89 'F'
-$4854    t, \ $14: 'T'  'H'
-$0A0D    t, \ $16: '\r' '\n'
-$0A1A    t, \ $18: ^Z   '\n'
-0        t, \ $1A: For Length of Forth image, different from VM size
-0        t, \ $1C: For CRC of Forth image, not entire VM memory
-$0001    t, \ $1E: Endianess check
-#version t, \ $20: Version information
-$0001    t, \ $22: Header options
+0        t, \  $E: Shadow PC
+0        t, \ $10: Shadow T
+(rp0)    t, \ $12: Shadow RP0
+(sp0)    t, \ $14: Shadow SP0
+$4689    t, \ $16: 0x89 'F'
+$4854    t, \ $18: 'T'  'H'
+$0A0D    t, \ $1A: '\r' '\n'
+$0A1A    t, \ $1C: ^Z   '\n'
+0        t, \ $1E: For Length of Forth image, different from VM size
+0        t, \ $20: For CRC of Forth image, not entire VM memory
+$0001    t, \ $22: Endianess check
+#version t, \ $24: Version information
+$0001    t, \ $26: Header options
 
 \ ## First Word Definitions
 \ The very first definitions are for the first stage boot loader, which can
@@ -795,7 +794,8 @@ $0001    t, \ $22: Header options
 \ 
 
 0 tlocation    <cold> ( location of 'cold' )
-[t] <cold> 2/ 0 t!    ( set starting word )
+[t] <cold> 2/ 0  t!   ( set starting word )
+[t] <cold> 2/ $E t!   ( set shadow register starting location )
 
 \ After the header and boot-loader words, two short words are defined, 
 \ visible only to the meta compiler and used by its internal machinery. The 
@@ -1015,7 +1015,7 @@ $2       tconstant cell  ( size of a cell in bytes )
 $0       tvariable >in   ( Hold character pointer when parsing input )
 $0       tvariable state ( compiler state variable )
 $0       tvariable hld   ( Pointer into hold area for numeric output )
-$10      tvariable base  ( Current output radix )
+$A       tvariable base  ( Current output radix )
 $0       tvariable span  ( Hold character count received by expect   )
 $8       constant  #vocs ( number of vocabularies in allowed )
 $400     tconstant b/buf ( size of a block )
@@ -2945,7 +2945,6 @@ h: retrieve block drop ;                ( k -- )
 
 ( : --> blk-@ 1+ load ; immediate )
 
-
 \ 
 \ ## Booting
 \ 
@@ -3036,10 +3035,10 @@ h: cold ( -- : performs a cold boot  )
    bist ?dup if negate dup yield? exit then
 \  $10 retrieve z 
    $10 block b/buf 0 fill
-   $12 retrieve io!
+   $12 retrieve io! 
    forth
    sp0 cells sp!
-   ( rp0 cells rp! )
+   rp0 cells rp!
    <boot> @execute ;
 
 \ *hi* prints out the welcome message, the version number, sets the numeric
@@ -3398,11 +3397,11 @@ things out in the following way:
 	| 18 - 62 | User data        |
 	| 63      | Return Stack     |
 
-The virtual machine uses the first nine cells for special purposes, apart
+The virtual machine uses the first twenty cells for special purposes, apart
 from the division between program/data and data only sections this is the
 only restriction that the *virtual machine* places on memory.
 
-The first six locations are used for:
+The first twenty locations are used for:
 
 	| Address  |  Use                                                         |
 	| -------- | ------------------------------------------------------------ |
@@ -3412,10 +3411,11 @@ The first six locations are used for:
 	| $6       | Initial Variable Stack Register value (grows upwards)        |
 	| $8       | Instruction exception vector (trap handler)                  |
 	| $A       | Virtual Machine memory in cells, if used, else $8000 assumed |
-	| $C       | Virtual Machine memory in cells, if used, else $8000 assumed |
-	| $E       | Virtual Machine Options, various uses                        |
-	| $10      | Virtual Machine Reserved For Future Use                      |
-	| $12      | Virtual Machine Reserved For Future Use                      |
+	| $C       | Virtual Machine Options, various uses                        |
+	| $E       | Shadow PC, Not set by VM on exit                             |
+	| $10      | Shadow T, Not set by VM on exit                              |
+	| $12      | Shadow RP0, Not set by VM on exit                            |
+	| $14      | Shadow SP0, Not set by VM on exit                            |
 
 
 The eForth image maps things in the following way. The variable stack starts 
@@ -3504,6 +3504,7 @@ some operations trap on error (UM/MOD, /MOD).
 	| 26  | /MOD     | /mod                 |
 	| 27  | BYE      | Conditionally Yield  |
 	| 28  | Callback | Arbitrary function   |
+	| 29  | CPU XCHG | Exchange CPU status  |
 
 ### Encoding of Forth Words
 

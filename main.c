@@ -29,7 +29,7 @@ static int run(embed_t *h, embed_vm_option_e opt, bool load, FILE *in, FILE *out
 }
 
 static const char *help ="\
-usage: ./embed -i in.blk -o out.blk file.fth\n\n\
+usage: ./embed -i in.blk -o out.blk file.fth...\n\n\
 Program: Embed Virtual Machine and eForth Image\n\
 Author:  Richard James Howe\n\
 License: MIT\n\
@@ -57,7 +57,7 @@ static char *next(int *i, const int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-	embed_vm_option_e option = 0;
+	embed_vm_option_e option = EMBED_VM_USE_SHADOW_REGS;
 	char *oblk = NULL, *iblk = NULL;
 	FILE *in = stdin, *out = stdout;
 	bool ran = false;
@@ -79,7 +79,7 @@ int main(int argc, char **argv)
 			if(oblk)
 				embed_die("embed: output block already set");
 			oblk = next(&i, argc, argv);
-		} else if(!strcmp("-q", argv[i])) { /* quit mode */
+		} else if(!strcmp("-q", argv[i])) { /* quite mode */
 			option |= EMBED_VM_QUITE_ON;
 		} else if(!strcmp("-t", argv[i])) { /* trace */
 			option |= EMBED_VM_TRACE_ON;
@@ -87,14 +87,14 @@ int main(int argc, char **argv)
 			embed_die("%s", help);
 		} else {
 			FILE *f = embed_fopen_or_die(argv[i], "rb");
-			r = run(h, option, !ran, f, out, iblk, oblk);
+			r = run(h, option | EMBED_VM_QUITE_ON, !ran, f, out, iblk, oblk);
 			ran = true;
 			fclose(f);
 			if(r < 0)
 				goto end;
 		}
 	}
-	if(!ran) /**@todo set CPU options */
+	if(!ran)
 		r = run(h, option, !ran, in, out, iblk, oblk);
 end:
 	embed_free(h);

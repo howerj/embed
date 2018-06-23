@@ -118,9 +118,9 @@ int embed_vm(embed_t *h, embed_opt_t *o)
 {
 	assert(h && o);
 	static const m_t delta[] = { 0, 1, -2, -1 };
-	const m_t l = embed_cells(h);
+	const m_t l = embed_cells(h), /*the Giga */shadow = (!!(o->options & EMBED_VM_USE_SHADOW_REGS))*0x7;
 	m_t * const m = h->m;
-	m_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0;
+	m_t pc = m[0+shadow], t = m[1+shadow], rp = m[2+shadow], sp = m[3+shadow], r = 0;
 	for(d_t d;;) {
 		const m_t instruction = m[pc++];
 		trace(o, m, pc, instruction, t, rp, sp);
@@ -183,7 +183,7 @@ int embed_vm(embed_t *h, embed_opt_t *o)
 			pc = instruction & 0x1FFF;
 		}
 	}
-finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp;
+finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp; /* NB. Shadow registers not modified */
 	return (s_t)r;
 }
 

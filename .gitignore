@@ -15,5 +15,7 @@ embed
 ref
 simple
 *.so
-vgcore.*
 *.tgz
+unix
+vgcore.*
+*.txt

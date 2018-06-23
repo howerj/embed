@@ -20,6 +20,12 @@ typedef int (*embed_fputc_t)(int ch, void*); /**< write character to file, retur
 typedef int (*embed_save_t)(const uint16_t m[/*static 32768*/], const void *name, const size_t start, const size_t length);
 typedef uint16_t (*embed_callback_t)(void *param, uint16_t *s, uint16_t sp); /**< arbitrary user supplied callback */
 
+typedef enum {
+	EMBED_VM_OPT_TRACE_ON    = 1u << 0, /**< turn tracing on */
+	EMBED_VM_RX_NON_BLOCKING = 1u << 1, /**< embed_fgetc_t passed in does not block (EOF = no data, not End Of File) */
+	EMBED_VM_RAW_TERMINAL    = 1u << 2, /**< raw terminal mode */
+} embed_vm_status_e;
+
 typedef struct {
 	embed_fgetc_t    get;      /**< callback to get a character, behaves like 'fgetc' */
 	embed_fputc_t    put;      /**< callback to output a character, behaves like 'fputc' */
@@ -29,7 +35,7 @@ typedef struct {
 	     *out,                 /**< second argument to 'putc' */
 	     *param;               /**< first argument to 'callback' */
 	const void *name;          /**< second argument to 'save' */
-	uint16_t status;           /**< CPU status information */
+	embed_vm_status_e options; /**< virtual machine options register */
 } embed_opt_t; /**< Embed VM options structure for customizing behavior */
 
 /* Default Callback which can be passed to options */

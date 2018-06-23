@@ -30,7 +30,7 @@ EXE=.exe
 else # assume unixen
 DF=./
 EXE=
-TESTAPPS+= dlopen eforth
+TESTAPPS+= dlopen eforth unix
 endif
 
 FORTH=${TARGET}${EXE}
@@ -41,8 +41,8 @@ all: ${FORTH}
 ${B2C}: t/b2c.o embed.o
 	${CC} ${CFLAGS} $^ -o $@
 
-core.gen.c: ${B2C} t/embed.blk
-	${DF}${B2C} embed_default_block t/embed.blk $@ "eForth Image"
+core.gen.c: ${B2C} embed-1.blk
+	${DF}${B2C} embed_default_block embed-1.blk $@ "eForth Image"
 
 lib${TARGET}.a: ${TARGET}.o image.o
 	${AR} ${ARFLAGS} $@ $^
@@ -111,6 +111,9 @@ eforth: embed.c image.c main.c
 
 ref: t/ref.c
 	${CC} ${CFLAGS} $< -o $@
+
+unix: t/unix.c libembed.a
+	${CC} ${CFLAGS} $^ -o $@
 
 apps: ${TESTAPPS}
 

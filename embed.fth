@@ -176,7 +176,6 @@ variable tdoConst      ( Location of doConst in target )
 variable tdoNext       ( Location of doNext in target )
 variable tdoPrintString ( Location of .string in target )
 variable tdoStringLit  ( Location of string-literal in target )
-variable tencryptStart ( start of obfuscated partition )
 variable fence         ( Do not peephole optimize before this point )
 1984 constant #version ( Version number )
 5000 constant #target  ( Memory location where the target image will be built )
@@ -246,9 +245,6 @@ $4400 constant (sp0)   ( start of variable stack )
 $22 constant (header-options)
 
 : checksum #target there crc ; ( -- u : calculate CRC of target image )
-: encrypt  ( -- : obfuscate the partition )
-    (header-options) t@ 2 xor (header-options) t!
-    tencryptStart @ #target + there tencryptStart @  - obfuscate ;
 
 : save-hex ( -- : save target binary to file )
    #target #target there + (save) throw ;
@@ -323,6 +319,7 @@ a: #um/mod $1900 a; ( Remainder/Divide: Double Cell )
 a: #/mod   $1A00 a; ( Signed Remainder/Divide: Single Cell )
 a: #bye    $1B00 a; ( Exit Interpreter )
 a: #vm     $1C00 a; ( Arbitrary VM call )
+a: #cpu    $1D00 a; ( CPU information )
 
 \ The Stack Delta Operations occur after the ALU operations have been executed.
 \ They affect either the Return or the Variable Stack. An ALU instruction
@@ -675,6 +672,8 @@ a: return ( -- : Compile a return into the target )
 : /       ]asm  #/mod    d-1    alu asm[ ;
 : mod     ]asm  #/mod    n->t   d-1   alu asm[ ;
 : vm      ]asm  #vm             alu asm[ ;
+: cpu-xchg ]asm  #cpu            alu asm[ ;
+: cpu!    ]asm #cpu n->t d-1 alu asm[ ;
 : rdrop   ]asm  #t       r-1    alu asm[ ;
 \ Some words can be implemented in a single instruction which have no
 \ analogue within Forth.
@@ -730,17 +729,15 @@ $400C constant block-dirty ( -1 if loaded block buffer is modified )
 $4010 constant <key>       ( -- c : new character, blocking input )
 $4012 constant <emit>      ( c -- : emit character )
 $4014 constant <expect>    ( "accept" vector )
-( $4016 constant <tap>     ( "tap" vector, for terminal handling )
-( $4018 constant <echo>    ( c -- : emit character )
-( $4020 constant <ok>      ( -- : display prompt )
-( $4022 constant _literal  ( u -- u | : handles literals )
+$4016 constant <tap>       ( "tap" vector, for terminal handling )
+$4018 constant <echo>      ( c -- : emit character )
 $4110 constant context     ( holds current context for search order )
 $4122 constant #tib        ( Current count of terminal input buffer )
 $4124 constant tib-buf     ( ... and address )
 $4126 constant tib-start   ( backup tib-buf value )
 \ $4280 == pad-area
 
-$C    constant vm-options     ( Virtual machine options register )
+\ $C    constant vm-options   ( Virtual machine options register )
 $1A   constant header-length  ( location of length in header )
 $1C   constant header-crc     ( location of CRC in header )
 (header-options) constant header-options ( location of options bits in header )
@@ -792,52 +789,17 @@ $0001    t, \ $1E: Endianess check
 $0001    t, \ $22: Header options
 
 \ ## First Word Definitions
-\ The very first definitions are for the boot-loader, we have an option for
-\ creating an 'encrypted' image, which is really just an obfuscation and not
-\ meant to be taken seriously. It does demonstrate that we can do work and
-\ manipulate the rest of the image before we do anything with it. The
-\
-
+\ The very first definitions are for the first stage boot loader, which can
+\ be used to manipulate the image before we do anything else
+\ 
 \ @todo Remove this to reduce image size so that proper terminal handling
 \ can be added in (along with IO Vectors) without increasing the image size,
 \ also read in the VM options instruction and do not print out the eForth
-\ welcome if we reading from a file and not stdin.
+\ welcome if we reading from a file and not stdin. Add execution vectors
+\ and the like to a system vocabulary as well
 
-0 tlocation decrypt-begin
-
-h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
-  over $8 rshift xor   ( crc x )
-  dup  $4 rshift xor   ( crc x )
-  dup  $5 lshift xor   ( crc x )
-  dup  $C lshift xor   ( crc x )
-  swap $8 lshift xor ; ( crc )
-
-h: (obfuscate) ( b u k -- : obfuscate and de-obfuscate the image ) 
-  swap 1 rshift >r swap 
-  begin
-   r@
-  while ( k b )
-    swap r@ ccitt 
-    over over 
-    swap @ xor 
-    >r over r> swap ! swap
-    2 ( =cell ) + 
-    r> 1- >r
-  repeat rdrop drop drop ;
-
-h: boot-loader
-   2 header-options @ and if
-        decrypt-begin @ header-length @ over invert 1 + +
-        $0BAD (obfuscate)
-   header-options @ 2 invert and header-options ! ( disable deobfuscation )
-   then
- fallthrough;  ( just fall-through, equivalent to a jump )
-0 tlocation    <cold>      ( location of 'cold' )
-[t] boot-loader 2/ 0 t!    ( set starting word )
-there [t] decrypt-begin t! ( set the variable 'decrypt-begin' to target 'here')
-there tencryptStart meta!  ( set meta-compiler version of 'decrypt-begin' also)
-
-: obfuscate $0BAD (obfuscate) ; ( obfuscate a section of memory )
+0 tlocation    <cold> ( location of 'cold' )
+[t] <cold> 2/ 0 t!    ( set starting word )
 
 \ After the header and boot-loader words, two short words are defined, 
 \ visible only to the meta compiler and used by its internal machinery. The 
@@ -882,7 +844,6 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 0 tlocation cp                ( Dictionary Pointer: Set at end of file )
 0 tlocation root-voc          ( root vocabulary )
 0 tlocation editor-voc        ( editor vocabulary )
-( 0 tlocation assembler-voc   ( assembler vocabulary )
 0 tlocation _forth-wordlist   ( set at the end near the end of the file )
 
 \ 
@@ -942,7 +903,7 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 ( : sp!    sp!      ; ( u -- ??? : set stack depth )
 : 1-       1-       ; ( u -- u : decrement top of stack )
 : 0=       0=       ; ( u -- t : if top of stack equal to zero )
-h: yield?  yield?   ; ( u -- !!! : exit VM with *u* as return value )
+( h: yield?  yield?   ; ( u -- !!! : exit VM with *u* as return value )
 h: rx?     rx?      ; ( -- c | -1 : fetch a single character, or EOF )
 h: tx!     tx!      ; ( c -- : transmit single character )
 : (save)   (save)   ; ( u1 u2 -- u : save memory from u1 to u2 inclusive )
@@ -950,8 +911,8 @@ h: tx!     tx!      ; ( c -- : transmit single character )
 : /mod     /mod     ; ( u1 u2 -- rem div : signed divide/modulo )
 : /        /        ; ( u1 u2 -- u : u1 divided by u2 )
 : mod      mod      ; ( u1 u2 -- u : remainder of u1 divided by u2 )
-: vm       vm       ; ( ??? -- ??? : perform arbitrary VM call ) 
-
+: vm       vm       ; ( ??? -- ??? : perform arbitrary VM call )
+( h: cpu!    cpu!     ; ( u -- : set CPU options register )
 \ 
 \ ### Forth Implementation of Arithmetic Functions
 \
@@ -1048,8 +1009,6 @@ there constant inline-end
 \ or *xor*, only a few words will be inlined. There are potential solutions
 \ to this problem, but they are not worth further complicating the Forth just
 \ yet.
-
-\ [last] [t] assembler-voc t!
 
 \ *current* contains a pointer to the vocabulary which new words will be
 \ added to when the target is up and running, this will be the forth
@@ -1153,6 +1112,7 @@ h: base@ base @ ;            ( -- u )
 \ *cell+* require a reason for such a simple word (they embody a concept or
 \ they help hide implementation details).
 
+h: cpu@    0 cpu-xchg dup cpu! ; ( -- u : get CPU options register )
 h: ?exit if rdrop exit then ; ( u --, R: xt -- xt| : conditional return )
 : 2drop drop drop ;         ( n n -- )
 : 1+ 1 + ;                  ( n -- n : increment a value  )
@@ -1345,7 +1305,13 @@ h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 \ outside the normal byte range).
 \
 
-: key <key> @execute dup [-1] <> ?exit bye ; ( -- c )
+h: non-blocking? cpu@ 2 and 0= ; ( -- t : non blocking mode on? )
+
+: key ( -- c )
+    begin
+      <key> @execute dup [-1] <> ?exit
+      non-blocking? if bye then 0= 
+    until ;
 
 \ */string*, *+string* and *count* are for manipulating strings, *count*
 \ words best on counted strings which have a length prefix, but can be used
@@ -1364,6 +1330,12 @@ h: string@ over c@ ;                   ( b u -- b u c )
 \ crude Pseudo Random Number Generator. CRC routines are useful for detecting
 \ memory corruption in the Forth image.
 \
+h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
+  over $8 rshift xor   ( crc x )
+  dup  $4 rshift xor   ( crc x )
+  dup  $5 lshift xor   ( crc x )
+  dup  $C lshift xor   ( crc x )
+  swap $8 lshift xor ; ( crc )
 
 : crc ( b u -- u : calculate ccitt-ffff CRC )
   [-1] ( -1 = 0xffff ) >r
@@ -1407,7 +1379,8 @@ h: last get-current @address ;         ( -- pwd )
 \ when we see *^h* and *ktap*.
 \
 
-( h: echo <echo> @execute ; )          ( c -- )
+
+h: echo <echo> @execute ;              ( c -- )
 : emit <emit> @execute ;               ( c -- : write out a char )
 : cr =cr emit =lf emit ;               ( -- : emit a newline )
 : space     1 fallthrough;             ( -- : emit a space )
@@ -1795,31 +1768,33 @@ h: down cell negate and ; ( a -- a : align down )
 \ a backspace to move the cursor back one space again. It only does this if it
 \ will not go below the bottom of the input buffer.
 \
-\       : ^h ( bot eot cur -- bot eot cur )
-\         >r over r@ < dup
-\         if
-\           =bs dup echo =bl echo echo
-\         then r> + ;
+
+h: ^h ( bot eot cur -- bot eot cur )
+ >r over r@ < dup
+ if
+   =bs dup echo =bl echo echo
+ then r> + ;
+
+\ *tap* is used to store a character in the current line, *ktap* can also
+\ call this word, *tap* uses echo to echo back the character - it is currently
+\ commented out as this is handled by the terminal emulator but would be
+\ needed for serial communication.
+
+h: tap dup echo over c! 1+ ; ( bot eot cur c -- bot eot cur )
+
 \
 \ *ktap* processes the current character received, and has the same buffer
 \ information that *^h* does, in fact it passes that information to *^h* to
 \ process if the character is a backspace. It also handles the case where a
 \ line feed, indicating a new line, has been entered. It returns a modified
 \ buffer.
-\
-\       : ktap ( bot eot cur c -- bot eot cur )
-\         dup =lf ( <-- was =cr ) xor
-\         if =bs xor
-\           if =bl tap else ^h then
-\           exit
-\         then drop nip dup ;
-\
-\ *tap* is used to store a character in the current line, *ktap* can also
-\ call this word, *tap* uses echo to echo back the character - it is currently
-\ commented out as this is handled by the terminal emulator but would be
-\ needed for serial communication.
 
-h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
+h: ktap ( bot eot cur c -- bot eot cur )
+ dup =cr xor
+ if =bs xor
+   if =bl tap else ^h then
+   exit
+ then drop nip dup ;
 
 \ *accept* takes an buffer input buffer and returns a pointer and line length
 \ once a line of text has been fully entered. A line is considered fully
@@ -1830,16 +1805,18 @@ h: tap ( dup echo ) over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ as a commented out line.
 \
 
+h: raw? cpu@ 4 and 0= 0= ; ( c -- raw terminal mode? )
 : accept ( b u -- b u )
   over+ over
   begin
     2dupxor
   while
-    key dup =lf xor if tap else drop nip dup then
-    \ The alternative *accept* code replaces the line above:
-    \
-    \   key  dup =bl - 95 u< if tap else <tap> @execute then
-    \
+    key dup 
+    raw? if ( we need to handle echoing, and handling delete keys )
+	=bl - 95 u< if tap else <tap> @execute then
+    else ( the terminal takes care of it )
+	=lf xor if tap else drop nip dup then
+    then
   repeat drop over- ;
 
 \ *<expect>* is set to *accept* later on in this file, but can be changed if
@@ -2438,12 +2415,12 @@ h: set-input <ok> ! id ! in! #tib 2! ;     ( n1...n5 -- )
 \ Open and reading from different files is also not needed, it is handled
 \ by the virtual machine.
 
-h: io! preset fallthrough;  ( -- : initialize I/O )
+: io! preset fallthrough;  ( -- : initialize I/O )
 h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
-h: hand ' (ok)  ( ' drop <-- was emit )  ( ' ktap ) fallthrough;
-h: xio  ' accept <expect> ! ( <tap> ! ) ( <echo> ! ) <ok> ! ;
-( h: pace 11 emit ; )
-( : file ' pace ' drop ' ktap xio ; )
+h: hand ' (ok)  raw? if ' emit  ' ktap else ' drop ' tap then fallthrough;
+h: xio  ' accept <expect> ! <tap> ! <echo> ! <ok> ! ;
+h: pace 11 emit ;
+: file ' pace ' drop ' ktap xio ; 
 
 \ 
 \ ## Control Structures and Defining words
@@ -2636,9 +2613,9 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit h: !, ! , ;;
 \ is always possible to edit the VM's C source and recompile it.
 \ 
 
-h: trace-execute vm-options ! >r ; ( u xt -- )
+h: trace-execute cpu! >r ; ( u xt -- )
 : trace ( "name" -- : trace a word )
-  find-cfa vm-options @ dup>r 1 or trace-execute r> vm-options ! ;
+  find-cfa cpu@ dup>r 1 or trace-execute r> cpu! ;
 
 \ Annotated example output of running *trace* on *+* is shown:
 \
@@ -3051,8 +3028,8 @@ h: cold ( -- : performs a cold boot  )
 \  $10 retrieve z 
    $10 block b/buf 0 fill
    $12 retrieve io!
-   forth 
-   sp0 cells sp! 
+   forth
+   sp0 cells sp!
    ( rp0 cells rp! )
    <boot> @execute ;
 
@@ -3379,7 +3356,6 @@ there [t] cp t!
 
 there    [t] header-length t! \ Set Length First!
 checksum [t] header-crc t!    \ Calculate image CRC
-( encrypt \ <- uncomment to create an obfuscated image )
 
 finished
 bye

@@ -94,7 +94,7 @@ char    *embed_core(embed_t *h)                   { assert(h); return (char*)h->
 int      embed_load(embed_t *h, const char *name) { FILE *f = embed_fopen_or_die(name, "rb"); int r = embed_load_file(h, f); fclose(f); return r; }
 
 #ifdef NDEBUG
-#define trace(OUT,M,PC,INSTRUCTION,T,RP,SP)
+#define trace(OPT,M,PC,INSTRUCTION,T,RP,SP)
 #else
 static void efputs(embed_opt_t *o, const char *s)
 {
@@ -106,7 +106,7 @@ static void efputs(embed_opt_t *o, const char *s)
 
 static inline void trace(embed_opt_t *o, m_t *m, m_t pc, m_t instruction, m_t t, m_t rp, m_t sp)
 {
-	if(!(m[6] & 1) || !(o->put))
+	if(!(o->options & 1) || !(o->put))
 		return;
 	char buf[32] = { 0 };
 	snprintf(buf, sizeof buf, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, (uint16_t)(m[2]-rp), (uint16_t)(sp-m[3]));
@@ -121,7 +121,6 @@ int embed_vm(embed_t *h, embed_opt_t *o)
 	const m_t l = embed_cells(h);
 	m_t * const m = h->m;
 	m_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0;
-	m[6] = o->status;
 	for(d_t d;;) {
 		const m_t instruction = m[pc++];
 		trace(o, m, pc, instruction, t, rp, sp);
@@ -142,9 +141,9 @@ int embed_vm(embed_t *h, embed_opt_t *o)
 			case  4: m[(t>>1)%l] = n; T = m[--sp]; break;
 			case  5: d = (d_t)t + n; T = d >> 16; m[sp] = d; n = d; break;
 			case  6: d = (d_t)t * n; T = d >> 16; m[sp] = d; n = d; break;
-			case  7: T = t&n;                   break;
-			case  8: T = t|n;                   break;
-			case  9: T = t^n;                   break;
+			case  7: T = t&n;                  break;
+			case  8: T = t|n;                  break;
+			case  9: T = t^n;                  break;
 			case 10: T = ~t;                   break;
 			case 11: T = t-1;                  break;
 			case 12: T = -(t == 0);            break;
@@ -158,12 +157,13 @@ int embed_vm(embed_t *h, embed_opt_t *o)
 			case 20: sp = t >> 1;              break;
 			case 21: rp = t >> 1; T = n;       break;
 			case 22: if(o->save) { T = o->save(h->m, o->name, n>>1, ((d_t)t+1)>>1); } else { pc=4; T=21; } break;
-			case 23: if(o->put) { T = o->put(t, o->out); }                  else { pc=4; T=21; } break; 
-			case 24: if(o->get) { T = o->get(o->in); n = -1; }              else { pc=4; T=21; } break; /* n = blocking status */
+			case 23: if(o->put)  { T = o->put(t, o->out); }                 else { pc=4; T=21; } break; 
+			case 24: if(o->get)  { T = o->get(o->in); }                     else { pc=4; T=21; } break;
 			case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; }                 else { pc=4; T=10; } break;
 			case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;
 			case 28: if(o->callback) { sp = o->callback(o->param, &m[sp], sp >> 1); } else { pc=4; T=21; } break;
+			case 29: T = o->options; o->options = t; break;
 			default: pc = 4; T=21;             break;
 			}
 			sp += delta[ instruction       & 0x3];
@@ -183,7 +183,7 @@ int embed_vm(embed_t *h, embed_opt_t *o)
 			pc = instruction & 0x1FFF;
 		}
 	}
-finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp, o->status = m[6];
+finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp;
 	return (s_t)r;
 }
 
@@ -193,7 +193,6 @@ int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block)
 		.get      = embed_fgetc_cb, .put   = embed_fputc_cb, .save = embed_save_cb,
 		.in       = in,             .out   = out,            .name = block, 
 		.callback = NULL,           .param = NULL,
-		.status   = 0
 	};
 	return embed_vm(h, &o);
 }

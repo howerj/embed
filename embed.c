@@ -187,13 +187,16 @@ finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp;
 	return (s_t)r;
 }
 
-int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block)
+int embed_forth_opt(embed_t *h, embed_vm_option_e opt, FILE *in, FILE *out, const char *block)
 {
 	embed_opt_t o = {
 		.get      = embed_fgetc_cb, .put   = embed_fputc_cb, .save = embed_save_cb,
 		.in       = in,             .out   = out,            .name = block, 
 		.callback = NULL,           .param = NULL,
+		.options  = opt
 	};
 	return embed_vm(h, &o);
 }
+
+int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block) { return embed_forth_opt(h, 0, in, out, block); }
 

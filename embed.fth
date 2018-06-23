@@ -705,6 +705,7 @@ $20   constant =bl         ( blank, or space )
 $D    constant =cr         ( carriage return )
 $A    constant =lf         ( line feed )
 $8    constant =bs         ( back space )
+$7F   constant =del        ( delete key )
 $1B   constant =escape     ( escape character )
 
 $10   constant dump-width  ( number of columns for *dump* )
@@ -792,11 +793,6 @@ $0001    t, \ $22: Header options
 \ The very first definitions are for the first stage boot loader, which can
 \ be used to manipulate the image before we do anything else
 \ 
-\ @todo Remove this to reduce image size so that proper terminal handling
-\ can be added in (along with IO Vectors) without increasing the image size,
-\ also read in the VM options instruction and do not print out the eForth
-\ welcome if we reading from a file and not stdin. Add execution vectors
-\ and the like to a system vocabulary as well
 
 0 tlocation    <cold> ( location of 'cold' )
 [t] <cold> 2/ 0 t!    ( set starting word )
@@ -1310,7 +1306,7 @@ h: non-blocking? cpu@ 2 and 0= ; ( -- t : non blocking mode on? )
 : key ( -- c )
     begin
       <key> @execute dup [-1] <> ?exit
-      non-blocking? if bye then 0= 
+      non-blocking? if bye then 0= \ @todo yield so we can do other things
     until ;
 
 \ */string*, *+string* and *count* are for manipulating strings, *count*
@@ -1374,9 +1370,8 @@ h: last get-current @address ;         ( -- pwd )
 \ *tx!*. In eForth another character emitting primitive was defined alongside
 \ *emit*, which was *echo*, which allowed for more control in how the
 \ interpreter interacts with the programmer and other programs. It is not
-\ necessary in a hosted Forth to have such a mechanism, but it can be added
-\ back in as needed, we will see commented out relics of this features later,
-\ when we see *^h* and *ktap*.
+\ necessary in a hosted Forth to have such a mechanism, but it can be turned
+\ on when needed with a VM CPU option, when we see *^h* and *ktap*.
 \
 
 
@@ -1769,11 +1764,15 @@ h: down cell negate and ; ( a -- a : align down )
 \ will not go below the bottom of the input buffer.
 \
 
+\ h: ^h ( bot eot cur -- bot eot cur )
+\  >r over r> swap over xor
+\  if =bs echo =bl echo =bs echo then ;
+
 h: ^h ( bot eot cur -- bot eot cur )
- >r over r@ < dup
- if
-   =bs dup echo =bl echo echo
- then r> + ;
+  >r over r@ < dup
+  if
+    =bs dup echo =bl echo echo
+  then r> + ;
 
 \ *tap* is used to store a character in the current line, *ktap* can also
 \ call this word, *tap* uses echo to echo back the character - it is currently
@@ -1789,9 +1788,10 @@ h: tap dup echo over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ line feed, indicating a new line, has been entered. It returns a modified
 \ buffer.
 
+h: delete? dup =bs = swap =del = or 0= ; ( c -- t : delete key pressed? )
 h: ktap ( bot eot cur c -- bot eot cur )
  dup =cr xor
- if =bs xor
+ if delete? \ =bs xor
    if =bl tap else ^h then
    exit
  then drop nip dup ;
@@ -1805,7 +1805,8 @@ h: ktap ( bot eot cur c -- bot eot cur )
 \ as a commented out line.
 \
 
-h: raw? cpu@ 4 and 0= 0= ; ( c -- raw terminal mode? )
+h: ktap? dup =bl - 95 u< swap =del <> and ; ( c -- t : possible ktap? )
+h: raw? cpu@ 4 and 0<> ; ( c -- t : raw terminal mode? )
 : accept ( b u -- b u )
   over+ over
   begin
@@ -1813,7 +1814,8 @@ h: raw? cpu@ 4 and 0= 0= ; ( c -- raw terminal mode? )
   while
     key dup 
     raw? if ( we need to handle echoing, and handling delete keys )
-	=bl - 95 u< if tap else <tap> @execute then
+	\ =bl - 95 u< if tap else <tap> @execute then
+	ktap? if tap else <tap> @execute then
     else ( the terminal takes care of it )
 	=lf xor if tap else drop nip dup then
     then
@@ -2415,9 +2417,16 @@ h: set-input <ok> ! id ! in! #tib 2! ;     ( n1...n5 -- )
 \ Open and reading from different files is also not needed, it is handled
 \ by the virtual machine.
 
+h: quite? 8 cpu@ and 0<> ;
 : io! preset fallthrough;  ( -- : initialize I/O )
 h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
-h: hand ' (ok)  raw? if ' emit  ' ktap else ' drop ' tap then fallthrough;
+h: hand 
+   quite? if 0 else ' (ok) then
+   raw? if 
+     ' emit  ' ktap 
+   else 
+     ' drop ' tap 
+   then fallthrough;
 h: xio  ' accept <expect> ! <tap> ! <echo> ! <ok> ! ;
 h: pace 11 emit ;
 : file ' pace ' drop ' ktap xio ; 
@@ -3049,7 +3058,7 @@ h: cold ( -- : performs a cold boot  )
 (    ." SITE:    " site    print cr )
 (    ." LICENSE: " license print cr ; )
  
-h: hi hex ." eFORTH v" ver 0 u.r cr decimal here . fallthrough;        ( -- )
+h: hi quite? ?exit  hex ." eFORTH v" ver 0 u.r cr decimal here . fallthrough; 
 h: .free $4000 here - u. cr ;             ( -- : print unused program space )
 h: normal-running hi quit ;                                ( -- : boot word )
 

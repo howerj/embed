@@ -21,10 +21,11 @@ typedef int (*embed_save_t)(const uint16_t m[/*static 32768*/], const void *name
 typedef uint16_t (*embed_callback_t)(void *param, uint16_t *s, uint16_t sp); /**< arbitrary user supplied callback */
 
 typedef enum {
-	EMBED_VM_OPT_TRACE_ON    = 1u << 0, /**< turn tracing on */
+	EMBED_VM_TRACE_ON        = 1u << 0, /**< turn tracing on */
 	EMBED_VM_RX_NON_BLOCKING = 1u << 1, /**< embed_fgetc_t passed in does not block (EOF = no data, not End Of File) */
 	EMBED_VM_RAW_TERMINAL    = 1u << 2, /**< raw terminal mode */
-} embed_vm_status_e;
+	EMBED_VM_QUITE_ON        = 1u << 3, /**< turn off 'okay' prompt and welcome message */
+} embed_vm_option_e;
 
 typedef struct {
 	embed_fgetc_t    get;      /**< callback to get a character, behaves like 'fgetc' */
@@ -35,7 +36,7 @@ typedef struct {
 	     *out,                 /**< second argument to 'putc' */
 	     *param;               /**< first argument to 'callback' */
 	const void *name;          /**< second argument to 'save' */
-	embed_vm_status_e options; /**< virtual machine options register */
+	embed_vm_option_e options; /**< virtual machine options register */
 } embed_opt_t; /**< Embed VM options structure for customizing behavior */
 
 /* Default Callback which can be passed to options */
@@ -50,6 +51,7 @@ embed_t  *embed_new(void);                                                 /**< 
 embed_t  *embed_copy(embed_t const * const h);                             /**< Copy existing instance of a Forth VM */
 void      embed_free(embed_t *h);                                          /**< Delete a Forth VM */
 int       embed_forth(embed_t *h, FILE *in, FILE *out, const char *block); /**< Run the VM */
+int       embed_forth_opt(embed_t *h, embed_vm_option_e opt, FILE *in, FILE *out, const char *block); /**< Run the VM */
 int       embed_load(embed_t *h, const char *name);                        /**< Load VM image off disk */
 int       embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length); /**< Load VM image from memory */
 int       embed_load_file(embed_t *h, FILE *input);                        /**< Load VM image from FILE* */

@@ -20,12 +20,12 @@ static int load_default_or_file(embed_t *h, char *file)
 	return embed_load(h, file);
 }
 
-static int run(embed_t *h, bool load, FILE *in, FILE *out, char *iblk, char *oblk)
+static int run(embed_t *h, embed_vm_option_e opt, bool load, FILE *in, FILE *out, char *iblk, char *oblk)
 {
 	if(load)
 		if(load_default_or_file(h, iblk) < 0)
 			embed_die("embed: load failed (input = %s)", iblk ? iblk : "(null)");
-	return embed_forth(h, in, out, oblk);
+	return embed_forth_opt(h, opt, in, out, oblk);
 }
 
 static const char *help ="\
@@ -38,6 +38,8 @@ Options:\n\
   -i in.blk   load virtual machine image from 'in.blk'\n\
   -o out.blk  set save location to 'out.blk'\n\
   -h          display this help message and die\n\
+  -q          quite mode on\n\
+  -t          turn tracing on\n\
   file.fth    read from 'file.fth'\n\n\
 If no input Forth file is given standard input is read from. If no input\n\
 block is given a built in version containing an eForth interpreter is\n\
@@ -55,6 +57,7 @@ static char *next(int *i, const int argc, char **argv)
 
 int main(int argc, char **argv)
 {
+	embed_vm_option_e option = 0;
 	char *oblk = NULL, *iblk = NULL;
 	FILE *in = stdin, *out = stdout;
 	bool ran = false;
@@ -76,11 +79,15 @@ int main(int argc, char **argv)
 			if(oblk)
 				embed_die("embed: output block already set");
 			oblk = next(&i, argc, argv);
+		} else if(!strcmp("-q", argv[i])) { /* quit mode */
+			option |= EMBED_VM_QUITE_ON;
+		} else if(!strcmp("-t", argv[i])) { /* trace */
+			option |= EMBED_VM_TRACE_ON;
 		} else if(!strcmp("-h", argv[i])) {
 			embed_die("%s", help);
 		} else {
 			FILE *f = embed_fopen_or_die(argv[i], "rb");
-			r = run(h, !ran, f, out, iblk, oblk);
+			r = run(h, option, !ran, f, out, iblk, oblk);
 			ran = true;
 			fclose(f);
 			if(r < 0)
@@ -88,7 +95,7 @@ int main(int argc, char **argv)
 		}
 	}
 	if(!ran) /**@todo set CPU options */
-		r = run(h, !ran, in, out, iblk, oblk);
+		r = run(h, option, !ran, in, out, iblk, oblk);
 end:
 	embed_free(h);
 	return r;

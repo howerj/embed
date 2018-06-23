@@ -103,7 +103,7 @@ cpp: t/cpp.cpp libembed.a
 	${CXX} ${CPPFLAGS} -I. -o $@ $^
 
 eforth: CC=musl-gcc
-eforth: CFLAGS=-Wall -Wextra -Os -fno-stack-protector -static -std=c99
+eforth: CFLAGS=-Wall -Wextra -Os -fno-stack-protector -static -std=c99 -DNDEBUG
 eforth: LDFLAGS=-Wl,-O1
 eforth: embed.c image.c main.c
 	${CC} ${CFLAGS} $^ -o $@

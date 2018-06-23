@@ -4,7 +4,7 @@
 .SH NAME
 embed \- embed virtual machine
 .SH SYNOPSIS
-embed -i in.blk -o out.blk file.fth
+embed [-hqt] -i in.blk -o out.blk file.fth
 .SH DESCRIPTION
 A simple and compact Forth Virtual machine, derived from the H2 CPU
 (from <https://github.com/howerj/forth-cpu>, which in turn derives from the J1
@@ -31,6 +31,19 @@ machine to save memory to disk will fail.
 .TP
 .B -h
 Print a help message and exit indicating failure.
+
+.TP 
+.B -q
+
+Turn quite mode on. It is up to the virtual machine image to respect this
+option if it is given, this option justs set the bit to indicate a quite mode.
+
+.TP 
+.B -t
+
+Turn tracing on, this sets an option turn on tracing in the virtual machine.
+This will do anything if the library has been compiled with the NDEBUG macro
+defined.
 
 .TP
 .B file.fth

@@ -73,6 +73,7 @@ void *embed_alloc_or_die(size_t sz)
 
 int embed_fputc_cb(int ch, void *file)             { assert(file); return fputc(ch, file); }
 int embed_fgetc_cb(void *file)                     { assert(file); return fgetc(file); }
+m_t *embed_core_get(embed_t *h)                    { assert(h);    return h->m; }
 static size_t embed_cells(embed_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
 static size_t embed_min_size_t(size_t a, size_t b) { return a > b ? b : a; }
 uint16_t embed_swap16(uint16_t s)                  { return (s >> 8) | (s << 8); }
@@ -241,8 +242,7 @@ int embed_vm(embed_t *h, embed_opt_t *o)
 					 m[0] = pc; m[1] = t; m[2] = rp; m[3] = sp; 
 					 r = o->callback(h, o->param);
 					 pc   = m[0]; T  = m[1]; rp = m[2]; sp = m[3]; 
-					 if(r) /**@todo throw or finish? */
-						 goto finished;
+					 if(r) { pc = 4; T = r; }
 				 } else { pc=4; T=21; } break;
 			case 29: T = o->options; o->options = t; break;
 			default: pc = 4; T=21;             break;

@@ -105,6 +105,8 @@ int       embed_push(embed_t *h, uint16_t value); /**< push value, returns negat
 int       embed_pop(embed_t *h, uint16_t *value); /**< pop value in 'value', returns negative on failure */
 embed_opt_t embed_options_default(void);          /**< retrieve a copy of some sensible default options */
 void      embed_reset(embed_t *h);                /**< reset the virtual machine image */
+uint16_t *embed_core_get(embed_t *h);             /**< get a pointer to VM core @warning be careful with this! */
+
 
 extern const uint8_t embed_default_block[];   /**< default VM image, generated from 'embed.blk' */
 extern const size_t embed_default_block_size; /**< size of default VM image */

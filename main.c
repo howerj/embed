@@ -24,7 +24,7 @@ static int run(embed_t *h, embed_vm_option_e opt, bool load, FILE *in, FILE *out
 {
 	if(load)
 		if(load_default_or_file(h, iblk) < 0)
-			embed_die("embed: load failed (input = %s)", iblk ? iblk : "(null)");
+			embed_fatal("embed: load failed (input = %s)", iblk ? iblk : "(null)");
 	return embed_forth_opt(h, opt, in, out, oblk);
 }
 
@@ -50,7 +50,7 @@ static char *next(int *i, const int argc, char **argv)
 {
 	const int j = *i;
 	if(j + 1 >= argc)
-		embed_die("%s expects option", argv[j]);
+		embed_fatal("%s expects option", argv[j]);
 	*i = j + 1;
 	return argv[*i];
 }
@@ -67,24 +67,24 @@ int main(int argc, char **argv)
 	binary(stderr);
 	embed_t *h = embed_new();
 	if(!h)
-		embed_die("embed: new failed");
+		embed_fatal("embed: new failed");
 	for(int i = 1; i < argc; i++) {
 		if(!strcmp("-i", argv[i])) {
 			if(iblk)
-				embed_die("embed: input block already set");
+				embed_fatal("embed: input block already set");
 			iblk = next(&i, argc, argv);
 			if(embed_load(h, iblk) < 0)
-				embed_die("embed: load failed");
+				embed_fatal("embed: load failed");
 		} else if(!strcmp("-o", argv[i])) {
 			if(oblk)
-				embed_die("embed: output block already set");
+				embed_fatal("embed: output block already set");
 			oblk = next(&i, argc, argv);
 		} else if(!strcmp("-q", argv[i])) { /* quite mode */
 			option |= EMBED_VM_QUITE_ON;
 		} else if(!strcmp("-t", argv[i])) { /* trace */
 			option |= EMBED_VM_TRACE_ON;
 		} else if(!strcmp("-h", argv[i])) {
-			embed_die("%s", help);
+			embed_fatal("%s", help);
 		} else {
 			FILE *f = embed_fopen_or_die(argv[i], "rb");
 			r = run(h, option | EMBED_VM_QUITE_ON, !ran, f, out, iblk, oblk);

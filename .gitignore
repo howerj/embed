@@ -6,6 +6,7 @@ cpp
 dlopen
 eforth
 embed
+eval
 *.exe
 *.gen.c
 *.htm
@@ -16,6 +17,6 @@ ref
 simple
 *.so
 *.tgz
+*.txt
 unix
 vgcore.*
-*.txt

@@ -1,6 +1,7 @@
 #include "embed.h"
 
 #define _POSIX_C_SOURCE 200809L
+#include <assert.h>
 #include <stdbool.h>
 #include <termios.h>
 #include <unistd.h>
@@ -63,15 +64,18 @@ static int unix_putch(int ch, void *file)
 
 int main(void)
 {
+	int r;
 	embed_vm_option_e options = 0;
 
 	fd = STDIN_FILENO;
 	if(isatty(fd)) {
 		fprintf(stdout, "TTY RAW/NO-BLOCKING - UART Simulation\n");
-		options = EMBED_VM_RX_NON_BLOCKING | EMBED_VM_RAW_TERMINAL;
+		options |= EMBED_VM_RX_NON_BLOCKING | EMBED_VM_RAW_TERMINAL;
 		if(raw(fd) < 0)
-			embed_die("failed to set terminal attributes: %s", strerror(errno));
+			embed_fatal("failed to set terminal attributes: %s", strerror(errno));
 		atexit(cooked);
+	} else {
+		fprintf(stdout, "NOT A TTY\n");
 	}
 
 	embed_opt_t o = {
@@ -82,8 +86,11 @@ int main(void)
 	};
 
 	embed_t *h = embed_new();
+	/**@todo fix yield in Forth image so this works */
 	if(embed_load_buffer(h, embed_default_block, embed_default_block_size) < 0)
-		embed_die("embed: load failed");
-	return embed_vm(h, &o);
+		embed_fatal("embed: load failed");
+	for(r = 0; (r = embed_vm(h, &o)) > 0; usleep(10 * 1000uLL))
+		;
+	return r;
 }
 

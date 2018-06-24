@@ -9,21 +9,47 @@
 #include <string.h>
 #include <stdarg.h>
 
-typedef uint16_t m_t; /**< The VM is a 16-bit one, 'uintptr_t' would be more useful */
+#define SHADOW    (7)     /**< start location of shadow registers */
+#define CORE_SIZE (32768) /**< core size in cells */
+typedef uint16_t m_t; /**< The VM is 16-bit, 'uintptr_t' would be more useful */
 typedef  int16_t s_t; /**< used for signed calculation and casting */
 typedef uint32_t d_t; /**< should be double the size of 'm_t' and unsigned */
+struct embed_t { m_t m[CORE_SIZE]; }; /**< Embed Forth VM structure */
 
-struct embed_t { m_t m[32768]; }; /**< Embed Forth VM structure */
+static embed_log_level_e global_log_level = EMBED_LOG_LEVEL_INFO; /**< Global log level */
 
-void embed_die(const char *fmt, ...)
+void embed_log_level_set(embed_log_level_e level) { global_log_level = level; }
+embed_log_level_e embed_log_level_get(void)       { return global_log_level; }
+void embed_die(void)                              { exit(EXIT_FAILURE); }
+
+static void _embed_logger(embed_log_level_e level, const char *file, const char *func, unsigned line, const char *fmt, va_list arg)
 {
-	assert(fmt);
+	assert(file && func && fmt && level < EMBED_LOG_LEVEL_ALL_ON);
+	if(level >= embed_log_level_get())
+		goto end;
+	static const char *str[] = {
+		[EMBED_LOG_LEVEL_ALL_OFF]  =  "all-off",
+		[EMBED_LOG_LEVEL_FATAL]    =  "fatal",
+		[EMBED_LOG_LEVEL_ERROR]    =  "error",
+		[EMBED_LOG_LEVEL_WARNING]  =  "warning",
+		[EMBED_LOG_LEVEL_INFO]     =  "info",
+		[EMBED_LOG_LEVEL_DEBUG]    =  "debug",
+		[EMBED_LOG_LEVEL_ALL_ON]   =  "all-on",
+	};
+	fprintf(stderr, "(%s:%s:%s:%u)\t", str[level], file, func, line);
+	vfprintf(stderr, fmt, arg);
+	fputc('\n', stderr);
+end:
+	if(level == EMBED_LOG_LEVEL_FATAL)
+		embed_die();
+}
+
+void embed_logger(embed_log_level_e level, const char *file, const char *func, unsigned line, const char *fmt, ...)
+{
 	va_list arg;
 	va_start(arg, fmt);
-	vfprintf(stderr, fmt, arg);
+	_embed_logger(level, file, func, line, fmt, arg);
 	va_end(arg);
-	fputc('\n', stderr);
-	exit(EXIT_FAILURE);
 }
 
 FILE *embed_fopen_or_die(const char *file, const char *mode)
@@ -32,7 +58,7 @@ FILE *embed_fopen_or_die(const char *file, const char *mode)
 	FILE *h = NULL;
 	errno = 0;
 	if(!(h = fopen(file, mode)))
-		embed_die("file open %s (mode %s) failed: %s", file, mode, strerror(errno));
+		embed_fatal("file open %s (mode %s) failed: %s", file, mode, strerror(errno));
 	return h;
 }
 
@@ -41,7 +67,7 @@ void *embed_alloc_or_die(size_t sz)
 	errno = 0;
 	void *r = calloc(sz, 1);
 	if(!r)
-		embed_die("allocation of size %u bytes failed: %s", (unsigned)sz, strerror(errno));
+		embed_fatal("allocation of size %u bytes failed: %s", (unsigned)sz, strerror(errno));
 	return r;
 }
 
@@ -70,7 +96,7 @@ int embed_load_file(embed_t *h, FILE *input)
 	return r < 128 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
 }
 
-int embed_save_cb(const m_t m[static 32768], const void *name, const size_t start, const size_t length)
+int embed_save_cb(const m_t m[static CORE_SIZE], const void *name, const size_t start, const size_t length)
 {
 	assert(m);
 	if(!name || !(((length - start) <= length) && ((start + length) <= m[5] /*embed_cells(h)*/)))
@@ -91,7 +117,56 @@ int      embed_save(const embed_t *h, const char *name) { assert(name); return e
 size_t   embed_length(embed_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
 void     embed_free(embed_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
 char    *embed_core(embed_t *h)                   { assert(h); return (char*)h->m; }
-int      embed_load(embed_t *h, const char *name) { FILE *f = embed_fopen_or_die(name, "rb"); int r = embed_load_file(h, f); fclose(f); return r; }
+int      embed_load(embed_t *h, const char *name) { FILE *f = fopen(name, "rb"); if(!f) return -69; int r = embed_load_file(h, f); fclose(f); return r; }
+
+void embed_reset(embed_t *h)
+{
+	assert(h);
+	m_t * const m = h->m;
+	m[0] = m[0+SHADOW], m[1] = m[1+SHADOW], m[2] = m[2+SHADOW], m[3] = m[3+SHADOW];
+}
+
+int embed_push(embed_t *h, uint16_t value)
+{
+	assert(h);
+	m_t * const m = h->m;
+	m_t rp = m[2], sp = m[3], sp0 = m[3+SHADOW];
+	if(sp < 32 || sp < sp0)
+		return -4; /* stack underflow */
+	if(sp > (CORE_SIZE-2) || (sp+1) > rp)
+		return -3; /* stack overflow */
+	m[++sp] = m[1];
+	m[1] = value;
+	m[3] = sp;
+	return 0;
+}
+
+int embed_pop(embed_t *h, uint16_t *value)
+{
+	assert(h && value);
+	m_t * const m = h->m;
+	m_t rp = m[2], sp = m[3], sp0 = m[3+SHADOW];
+	*value = 0;
+	if(sp < 32 || (sp-1) < sp0)
+		return -4; /* stack underflow */
+	if(sp > (CORE_SIZE-1) || sp > rp)
+		return -3; /* stack overflow */
+	*value = m[1];
+	m[1] = m[sp--];
+	m[3] = sp;
+	return 0;
+}
+
+embed_opt_t embed_options_default(void)
+{
+	embed_opt_t o = {
+		.get      = embed_fgetc_cb, .put   = embed_fputc_cb, .save = embed_save_cb,
+		.in       = stdin,          .out   = stdout,         .name = NULL, 
+		.callback = NULL,           .param = NULL,
+		.options  = 0
+	};
+	return o;
+}
 
 #ifdef NDEBUG
 #define trace(OPT,M,PC,INSTRUCTION,T,RP,SP)
@@ -109,7 +184,7 @@ static inline void trace(embed_opt_t *o, m_t *m, m_t pc, m_t instruction, m_t t,
 	if(!(o->options & 1) || !(o->put))
 		return;
 	char buf[32] = { 0 };
-	snprintf(buf, sizeof buf, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, (uint16_t)(m[2]-rp), (uint16_t)(sp-m[3]));
+	snprintf(buf, sizeof buf, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, (uint16_t)(m[2+SHADOW]-rp), (uint16_t)(sp-m[3+SHADOW]));
 	efputs(o, buf);
 }
 #endif
@@ -118,7 +193,7 @@ int embed_vm(embed_t *h, embed_opt_t *o)
 {
 	assert(h && o);
 	static const m_t delta[] = { 0, 1, -2, -1 };
-	const m_t l = embed_cells(h), /*the Giga */shadow = (!!(o->options & EMBED_VM_USE_SHADOW_REGS))*0x7;
+	const m_t l = embed_cells(h), shadow = (!!(o->options & EMBED_VM_USE_SHADOW_REGS))*SHADOW;
 	m_t * const m = h->m;
 	m_t pc = m[0+shadow], t = m[1+shadow], rp = m[2+shadow], sp = m[3+shadow], r = 0;
 	for(d_t d;;) {
@@ -162,7 +237,13 @@ int embed_vm(embed_t *h, embed_opt_t *o)
 			case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; }                 else { pc=4; T=10; } break;
 			case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;
-			case 28: if(o->callback) { sp = o->callback(o->param, &m[sp], sp >> 1); } else { pc=4; T=21; } break;
+			case 28: if(o->callback) { 
+					 m[0] = pc; m[1] = t; m[2] = rp; m[3] = sp; 
+					 r = o->callback(h, o->param);
+					 pc   = m[0]; T  = m[1]; rp = m[2]; sp = m[3]; 
+					 if(r) /**@todo throw or finish? */
+						 goto finished;
+				 } else { pc=4; T=21; } break;
 			case 29: T = o->options; o->options = t; break;
 			default: pc = 4; T=21;             break;
 			}
@@ -189,12 +270,8 @@ finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp; /* NB. Shadow registers not
 
 int embed_forth_opt(embed_t *h, embed_vm_option_e opt, FILE *in, FILE *out, const char *block)
 {
-	embed_opt_t o = {
-		.get      = embed_fgetc_cb, .put   = embed_fputc_cb, .save = embed_save_cb,
-		.in       = in,             .out   = out,            .name = block, 
-		.callback = NULL,           .param = NULL,
-		.options  = opt
-	};
+	embed_opt_t o = embed_options_default();
+	o.in = in, o.out = out, o.options = opt, o.name = block;
 	return embed_vm(h, &o);
 }
 

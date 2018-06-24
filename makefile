@@ -17,7 +17,7 @@ CMP=cmp
 AR=ar
 ARFLAGS=rcs
 RM=rm -fv
-TESTAPPS=cpp ref
+TESTAPPS=cpp ref eval
 
 .PHONY: all clean run cross double-cross default tests docs apps dist
 
@@ -96,23 +96,27 @@ dist: lib${TARGET}.so lib${TARGET}.a ${TARGET}.pdf embed.1 ${FORTH} ${TARGET}.h 
 
 ### Test Applications ######################################################## 
 
-dlopen: t/dlopen.c libembed.so
+dlopen: t/dlopen.c libembed.so embed.h
 	${CC} ${CFLAGS} $< -ldl -o $@
 
-cpp: t/cpp.cpp libembed.a
+cpp: t/cpp.cpp libembed.a embed.h
 	${CXX} ${CPPFLAGS} -I. -o $@ $^
 
 eforth: CC=musl-gcc
 eforth: CFLAGS=-Wall -Wextra -Os -fno-stack-protector -static -std=c99 -DNDEBUG
 eforth: LDFLAGS=-Wl,-O1
-eforth: embed.c image.c main.c
+eforth: embed.c image.c main.c embed.h
 	${CC} ${CFLAGS} $^ -o $@
 	strip $@
 
 ref: t/ref.c
 	${CC} ${CFLAGS} $< -o $@
 
-unix: t/unix.c libembed.a
+unix: CFLAGS=-Wall -Wextra -std=gnu99 -I.
+unix: t/unix.c libembed.a embed.h
+	${CC} ${CFLAGS} $^ -o $@
+
+eval: t/eval.c libembed.a
 	${CC} ${CFLAGS} $^ -o $@
 
 apps: ${TESTAPPS}

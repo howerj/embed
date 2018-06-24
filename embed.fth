@@ -1306,8 +1306,8 @@ h: non-blocking? cpu@ 2 and 0= ; ( -- t : non blocking mode on? )
 : key ( -- c )
     begin
       <key> @execute dup [-1] <> ?exit
-      non-blocking? if bye then 0= \ @todo yield so we can do other things
-    until ;
+      non-blocking? if bye then 0= until ; \ @todo yield VM
+      \ non-blocking? if bye then -1 1 yield? 2drop again ;
 
 \ */string*, *+string* and *count* are for manipulating strings, *count*
 \ words best on counted strings which have a length prefix, but can be used
@@ -2206,7 +2206,7 @@ h: token =bl word ;                      ( -- a )
 
 h: ?dictionary dup $3F00 u< ?exit 8 -throw ;
 : , here dup cell+ ?dictionary cp! ! ; ( u -- : store *u* in dictionary )
-\ : c, here ?dictionary c! cp 1+! ;      ( c -- : store *c* in the dictionary )
+\ : c, here ?dictionary c! cp 1+! ;    ( c -- : store *c* in the dictionary )
 h: doLit 0x8000 or , ;                 ( n+ -- : compile literal )
 : literal ( n -- : write a literal into the dictionary )
   dup 0x8000 and ( n > $7FFF ? )
@@ -3124,26 +3124,33 @@ h: name ( cwf -- a | 0 )
      swap r@ search-for-cfa ?dup if >r 1- ndrop r> rdrop exit then
    1- repeat rdrop ;
 
-h: ?instruction ( i m e -- i 0 | e -1 )
-  >r over-and r> tuck = if nip [-1] exit then drop-0 ;
+\ h: neg? dup 2 and if $FFFE or then ;
+\ h: .alu ( u -- )
+\   dup ." alu(" 8 rshift $1F and 2 u.r ." ) " 
+\   dup $03 and ." d("          neg? . ." ) " 
+\   dup $0C and ." r(" 2 rshift neg? . ." ) "
+\   dup $10 and if ." r->p " then
+\   dup $20 and if ." n->t " then
+\   dup $40 and if ." t->r " then
+\   dup $80 and if ." t->n " then drop ;
 
-h: .instruction ( u -- u )
-   0x8000  0x8000 ?instruction if [char] L emit exit then
-   $6000   $6000  ?instruction if [char] A emit exit then
-   $6000   $4000  ?instruction if [char] C emit exit then
-   $6000   $2000  ?instruction if [char] Z emit exit then
-   drop-0 [char] B emit ;
+h: ?instruction ( i m e -- i t )
+   >r over-and r> = ;
 
-h: decompile ( u -- : decompile instruction )
-   dup .instruction $BFFF and if drop exit then space fallthrough;
-h: .name name ?dup if print then ; ( a -- a )
+h: .name name ?dup if print then ; ( a -- )
+h: .instruction ( u -- )
+   0x8000  0x8000 ?instruction if [char] L emit $7FFF and u. exit then
+   $6000   $6000  ?instruction if [char] A emit drop ( space .alu ) exit then
+   $6000   $4000  ?instruction if [char] C emit space .name  exit then
+   $6000   $2000  ?instruction if [char] Z emit space .name  exit then
+   drop [char] B emit ;
 
 h: decompiler ( previous current -- : decompile starting at address )
   >r
   begin dup r@ u< while
     d5u.r colon-space
     dup@
-    d5u.r space decompile cr cell+
+    d5u.r space .instruction cr cell+
   repeat rdrop drop ;
 
 \ *see* is the Forth disassembler, it takes a word and (attempts) to

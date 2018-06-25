@@ -86,9 +86,9 @@ int main(void)
 	};
 
 	embed_t *h = embed_new();
+	if(!h)
+		embed_fatal("embed: allocate failed");
 	/**@todo fix yield in Forth image so this works */
-	if(embed_load_buffer(h, embed_default_block, embed_default_block_size) < 0)
-		embed_fatal("embed: load failed");
 	for(r = 0; (r = embed_vm(h, &o)) > 0; usleep(10 * 1000uLL))
 		;
 	return r;

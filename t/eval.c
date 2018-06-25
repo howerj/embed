@@ -7,48 +7,8 @@
  * point stack, and write floating point numbers to the same output stream
  * using sprintf the VMs output methods. Also extracting strings and putting
  * strings into the interpreter need to be managed.
+ * @todo Use C++ templates instead?
  * @todo Return throwable numbers instead of dieing */
-
-static embed_t *embed_new_default(void)
-{
-	embed_t *h = embed_new();
-	if(!h)
-		return NULL;
-	if(embed_load_buffer(h, embed_default_block, embed_default_block_size) < 0) {
-		embed_free(h);
-		return NULL;
-	}
-	return h;
-}
-
-static int eval_sgetc(void *string_ptr)
-{
-	assert(string_ptr);
-	char **sp = (char**)string_ptr;
-	char ch = **sp;
-	if(!ch)
-		return EOF;
-	(*sp)++;
-	return ch;
-}
-
-static int embed_eval(embed_t *h, const char *str)
-{
-	assert(h && str);
-	/*size_t length = strlen(str);
-	if(length > 79 || length < 1)
-		return -1;
-	if(str[length-1] != '\n')
-		return -1;*/
-	embed_opt_t o = embed_options_default();
-	o.get = eval_sgetc;
-	o.in = &str;
-	o.options = EMBED_VM_QUITE_ON;
-	int r = embed_vm(h, &o);
-	embed_reset(h);
-	return r;
-}
-
 
 struct vm_extension_t;
 typedef struct vm_extension_t vm_extension_t;
@@ -60,6 +20,8 @@ typedef struct {
 } callbacks_t;
 
 struct vm_extension_t {
+	callbacks_t *callbacks;
+	size_t callbacks_length;
 	float f[128];
 	size_t fsp;
 	embed_opt_t o;
@@ -319,21 +281,27 @@ static int callbacks_add(embed_t *h, callbacks_t *cb, size_t number)
 static int callback_selector(embed_t *h, void *param)
 {
 	assert(h);
+	vm_extension_t *e = (vm_extension_t*)param;
 	uint16_t func = pop(h);
-	if(func >= number_of_callbacks())
+	if(func >= e->callbacks_length)
 		return -21;
-	return callbacks[func].cb(h, param);
+	return e->callbacks[func].cb(h, param);
 }
 
 int main(void)
 {
-	embed_t *h    = embed_new_default();
-	vm_extension_t e = { .f = { 0 } };
+	vm_extension_t e = { 
+		.f = { 0 }, 
+		.callbacks_length = number_of_callbacks(), 
+		.callbacks = callbacks 
+	};
 	e.o = embed_options_default();
-	if(!h)
-		embed_fatal("embed: load failed");
 	e.o.callback = callback_selector;
 	e.o.param    = &e;
+
+	embed_t *h    = embed_new();
+	if(!h)
+		embed_fatal("embed: load failed");
 	if(callbacks_add(h, callbacks, number_of_callbacks()) < 0)
 		embed_fatal("embed: failed to register callbacks");
 	int r = embed_vm(h, &e.o);

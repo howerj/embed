@@ -2553,6 +2553,10 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit h: !, ! , ;;
 : hide find-token (smudge) ; ( --, <string> : hide word by name )
 ( : name? find-token nfa ; )
 
+( \ Force tail call )
+( : ;tail [compile] ; -2 cells allot here @ $1FFF and here ! 1 cells allot ; )
+( immediate )
+
 \ ### DOER/MAKE
 \ 
 \ *doer* and *make* which are useful for implementing deferred execution and

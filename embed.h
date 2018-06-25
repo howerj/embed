@@ -42,8 +42,9 @@ typedef struct {
 
 /* Default Callback which can be passed to options */
 int embed_save_cb(const uint16_t m[/*static 32768*/], const void *name, const size_t start, const size_t length); /**< saves to a file called 'name */
-int embed_fputc_cb(int ch, void *file); /**< file is a FILE*, like 'stdout' */
-int embed_fgetc_cb(void *file);         /**< file is a FILE*, like 'stdin' */
+int embed_fputc_cb(int ch, void *file); /**< 'file' is a 'FILE*', like 'stdout' */
+int embed_fgetc_cb(void *file);         /**< 'file' is a 'FILE*', like 'stdin' */
+int embed_sgetc_cb(void *string_ptr);   /**< 'string_ptr' is a 'char **' to ASCII NUL terminated string */
 
 typedef enum {
 	EMBED_LOG_LEVEL_ALL_OFF, /**< Turn all log messages off, EMBED_LOG_LEVEL_FATAL still kills the process */
@@ -86,8 +87,9 @@ embed_log_level_e embed_log_level_get(void);            /**< get global log leve
 void      embed_die(void);                              /**< exit system with failure */
 void      embed_logger(embed_log_level_e level, const char *file, const char *func, unsigned line, const char *fmt, ...); /**< fprintf to stderr */
 FILE     *embed_fopen_or_die(const char *file, const char *mode);          /**< die on fopen failure */
+void     *embed_alloc(size_t sz);                                          /**< 'calloc' of size 'sz' */
 void     *embed_alloc_or_die(size_t sz);                                   /**< 'calloc' or die */
-embed_t  *embed_new(void);                                                 /**< make a new Forth VM */
+embed_t  *embed_new(void);                                                 /**< make a new Forth VM, and load with default image */
 embed_t  *embed_copy(embed_t const * const h);                             /**< Copy existing instance of a Forth VM */
 void      embed_free(embed_t *h);                                          /**< Delete a Forth VM */
 int       embed_forth(embed_t *h, FILE *in, FILE *out, const char *block); /**< Run the VM */
@@ -106,7 +108,7 @@ int       embed_pop(embed_t *h, uint16_t *value); /**< pop value in 'value', ret
 embed_opt_t embed_options_default(void);          /**< retrieve a copy of some sensible default options */
 void      embed_reset(embed_t *h);                /**< reset the virtual machine image */
 uint16_t *embed_core_get(embed_t *h);             /**< get a pointer to VM core @warning be careful with this! */
-
+int       embed_eval(embed_t *h, const char *str); /**< evaluate a string, each line should be less than 80 chars and end in a newline*/
 
 extern const uint8_t embed_default_block[];   /**< default VM image, generated from 'embed.blk' */
 extern const size_t embed_default_block_size; /**< size of default VM image */

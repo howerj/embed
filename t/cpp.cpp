@@ -7,9 +7,7 @@ int main(void)
 {
 	cout << "C++ eForth" << endl;
 	embed_t *h = embed_new();
-	if(embed_load_buffer(h, embed_default_block, embed_default_block_size) < 0) {
-		cerr << "embed: load failed" << endl;
-		return -1;
-	}
+	if(!h)
+		embed_fatal("embed: allocate failed");
 	return embed_forth(h, stdin, stdout, NULL);
 }

@@ -84,8 +84,11 @@ Unit tests can be ran typing:
 * [x] Self-Hosting Metacompiler
 * [x] Man pages
 * [x] Document project
+* [x] Forth Unit tests
+* [ ] C Unit tests
+* [x] C Test programs
+  * [ ] Test applications that integrate with OpenGL, and Windows/Unix non-block I/O 
 * [ ] Virtual Machine and eForth Image/Metacompiler that uses 'uintptr\_t'
-* [ ] Test applications that integrate with OpenGL, and Windows/Unix non-block I/O 
 
 [MIT License]: LICENSE
 [embed.c]: embed.c

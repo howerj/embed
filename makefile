@@ -17,7 +17,7 @@ CMP=cmp
 AR=ar
 ARFLAGS=rcs
 RM=rm -fv
-TESTAPPS=cpp ref eval
+TESTAPPS=cpp call
 
 .PHONY: all clean run cross double-cross default tests docs apps dist
 
@@ -109,14 +109,12 @@ eforth: embed.c image.c main.c embed.h
 	${CC} ${CFLAGS} $^ -o $@
 	strip $@
 
-ref: t/ref.c
-	${CC} ${CFLAGS} $< -o $@
-
 unix: CFLAGS=-Wall -Wextra -std=gnu99 -I.
 unix: t/unix.c libembed.a embed.h
 	${CC} ${CFLAGS} $^ -o $@
 
-eval: t/eval.c libembed.a
+call: CFLAGS=-O3 -Wall -Wextra -std=c99 -I.
+call: t/call.c libembed.a
 	${CC} ${CFLAGS} $^ -o $@
 
 apps: ${TESTAPPS}

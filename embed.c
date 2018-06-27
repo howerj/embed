@@ -68,10 +68,9 @@ void *embed_alloc_or_die(size_t sz) {
 
 void *embed_alloc(size_t sz)                       { return calloc(sz, 1); }
 int embed_fputc_cb(int ch, void *file)             { assert(file); return fputc(ch, file); }
-int embed_fgetc_cb(void *file)                     { assert(file); return fgetc(file); }
+int embed_fgetc_cb(void *file, int *no_data)       { assert(file && no_data); *no_data = 0; return fgetc(file); }
 m_t *embed_core_get(embed_t *h)                    { assert(h);    return h->m; }
 static size_t embed_cells(embed_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
-static size_t embed_min_size_t(size_t a, size_t b) { return a > b ? b : a; }
 uint16_t embed_swap16(uint16_t s)                  { return (s >> 8) | (s << 8); }
 void embed_buffer_swap16(uint16_t *b, size_t l)    { assert(b); for(size_t i = 0; i < l; i++) b[i] = embed_swap16(b[i]); }
 static inline int is_big_endian(void)              { return (*(uint16_t *)"\0\xff" < 0x100); }
@@ -79,7 +78,7 @@ static void embed_normalize(embed_t *h)            { assert(h); if(is_big_endian
 
 int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length) {
 	assert(h && buf);
-	memcpy(h->m, buf, embed_min_size_t(sizeof(h->m), length));
+	memcpy(h->m, buf, MIN(sizeof(h->m), length));
 	embed_normalize(h);
 	return length < 128 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
 }
@@ -105,8 +104,7 @@ int embed_save_cb(const m_t m[static CORE_SIZE], const void *name, const size_t 
 	return fclose(out) < 0 ? -62 /* close-file IOR */ : r;
 }
 
-embed_t *embed_new(void) 
-{ 
+embed_t *embed_new(void) { 
 	embed_t *h = embed_alloc(sizeof(struct embed_t)); 
 	if(!h) 
 		return NULL; 
@@ -119,19 +117,19 @@ embed_t *embed_new(void)
 
 /**@todo 'embed_new' should load the default block, and return NULL on failure */
 void     embed_free(embed_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
-embed_t *embed_copy(embed_t const * const h)      { assert(h); return memcpy(embed_new(), h, sizeof(*h)); }
+embed_t *embed_copy(embed_t const * const h)      { assert(h); embed_t *r = embed_new(); if(!r) return NULL; return memcpy(r, h, sizeof(*h)); }
 int      embed_save(const embed_t *h, const char *name) { assert(name); return embed_save_cb(h->m, name, 0, embed_cells(h)); }
 size_t   embed_length(embed_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
-char    *embed_core(embed_t *h)                   { assert(h); return (char*)h->m; }
 int      embed_load(embed_t *h, const char *name) { FILE *f = fopen(name, "rb"); if(!f) return -69; int r = embed_load_file(h, f); fclose(f); return r; }
 
-int embed_sgetc_cb(void *string_ptr) {
+int embed_sgetc_cb(void *string_ptr, int *no_data) {
 	assert(string_ptr);
 	char **sp = (char**)string_ptr;
 	char ch = **sp;
 	if(!ch)
 		return EOF;
 	(*sp)++;
+	*no_data = 0;
 	return ch;
 }
 
@@ -258,7 +256,7 @@ int embed_vm(embed_t *h, embed_opt_t *o) {
 			case 21: rp = t >> 1; T = n;       break;
 			case 22: if(o->save) { T = o->save(h->m, o->name, n>>1, ((d_t)t+1)>>1); } else { pc=4; T=21; } break;
 			case 23: if(o->put)  { T = o->put(t, o->out); }                 else { pc=4; T=21; } break; 
-			case 24: if(o->get)  { T = o->get(o->in); }                     else { pc=4; T=21; } break;
+			case 24: if(o->get)  { int nd = 0; T = o->get(o->in, &nd); n = nd; } else { pc=4; T=21; } break;
 			case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; }                 else { pc=4; T=10; } break;
 			case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;
@@ -269,7 +267,7 @@ int embed_vm(embed_t *h, embed_opt_t *o) {
 					 if(r) { pc = 4; T = r; }
 				 } else { pc=4; T=21; } break;
 			case 29: T = o->options; o->options = t; break;
-			default: pc = 4; T=21;             break;
+			default: pc = 4; T=21;                   break;
 			}
 			sp += delta[ instruction       & 0x3];
 			rp -= delta[(instruction >> 2) & 0x3];

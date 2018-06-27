@@ -187,7 +187,7 @@ variable header -1 header !  ( if true target headers generated )
 $7FFF constant (rp0)   ( start of return stack )
 $4400 constant (sp0)   ( start of variable stack )
 
-1   constant verbose   ( verbosity level, higher is more verbose )
+( 1   constant verbose   ( verbosity level, higher is more verbose )
 #target #max 0 fill    ( Erase the target memory location )
 
 : ]asm assembler.1 +order ; immediate        ( -- )
@@ -229,14 +229,14 @@ $4400 constant (sp0)   ( start of variable stack )
     $3FFF and @
   repeat ;
 : display ( -- : display metacompilation and target information )
-  verbose 0= if exit then
+(  verbose 0= if exit then )
   hex
   ." COMPILATION COMPLETE" cr
-  verbose 1 u> if
-    dump-hex cr
-    ." TARGET DICTIONARY: " cr
-    locations
-  then
+(   verbose 1 u> if )
+(     dump-hex cr )
+(     ." TARGET DICTIONARY: " cr )
+(     locations )
+(   then )
   ." HOST:   "  here        . cr
   ." TARGET: "  there       . cr
   ." HEADER: "  #target $30 dump cr ;
@@ -1027,6 +1027,8 @@ $FFFF    tvariable dpl   ( number of places after fraction )
 0        tvariable <literal> ( holds execution vector for literal )
 0        tvariable <boot>  ( execute program at startup )
 0        tvariable <ok>    ( prompt execution vector )
+         ( @todo move <ok>, <boot>, and other words to a system vocabulary )
+
 
 \ The following execution vectors would/will be added if there is enough
 \ space, it is very useful to have hooks into the system to change how
@@ -2543,6 +2545,8 @@ h: last-cfa last-def @ cfa ;  ( -- u )
 : create postpone : drop compile doVar get-current ! postpone [ ;
 : >body cell+ ; ( a -- a )
 h: doDoes r> chars here chars last-cfa dup cell+ doLit h: !, ! , ;;
+\ NB. A more space efficient but non-standards compliant 'does>' can be 
+\ constructed, this could save a lot of space in the metacompiler.
 : does> compile doDoes nop ; immediate compile-only
 : variable create 0 , ;
 : constant create ' doConst make-callable here cell- !, ;
@@ -3545,7 +3549,7 @@ would be difficult to achieve in hardware is easy enough to do in software.
 	| lshift | NlshiftT |     |     |     |     |     | -1  |
 	| =      | T=N      |     |     |     |     |     | -1  |
 	| u<     | Nu<T     |     |     |     |     |     | -1  |
-	| <      | N<       |     |     |     |     |     | -1  |
+	| <      | N<T      |     |     |     |     |     | -1  |
 	| and    | T&N      |     |     |     |     |     | -1  |
 	| xor    | T^N      |     |     |     |     |     | -1  |
 	| or     | T|N      |     |     |     |     |     | -1  |

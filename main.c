@@ -28,6 +28,14 @@ static int run(embed_t *h, embed_vm_option_e opt, bool load, FILE *in, FILE *out
 	return embed_forth_opt(h, opt, in, out, oblk);
 }
 
+static int run_file(embed_t *h, embed_vm_option_e opt, bool load, char *in_file, FILE *out, char *iblk, char *oblk)
+{
+	FILE *in = embed_fopen_or_die(in_file, "rb");
+	int r = run(h, opt, load, in, out, iblk, oblk);
+	fclose(in);
+	return r;
+}
+
 static const char *help ="\
 usage: ./embed -i in.blk -o out.blk file.fth...\n\n\
 Program: Embed Virtual Machine and eForth Image\n\
@@ -60,7 +68,7 @@ int main(int argc, char **argv)
 	embed_vm_option_e option = EMBED_VM_USE_SHADOW_REGS;
 	char *oblk = NULL, *iblk = NULL;
 	FILE *in = stdin, *out = stdout;
-	bool ran = false;
+	bool ran = false, stop = false;
 	int r = 0;
 	binary(stdin);
 	binary(stdout);
@@ -69,6 +77,8 @@ int main(int argc, char **argv)
 	if(!h)
 		embed_fatal("embed: new failed");
 	for(int i = 1; i < argc; i++) {
+		if(stop)
+			goto optend;
 		if(!strcmp("-i", argv[i])) {
 			if(iblk)
 				embed_fatal("embed: input block already set");
@@ -85,11 +95,12 @@ int main(int argc, char **argv)
 			option |= EMBED_VM_TRACE_ON;
 		} else if(!strcmp("-h", argv[i])) {
 			embed_fatal("%s", help);
+		} else if(!strcmp("--", argv[i])) {
+			stop = true;
 		} else {
-			FILE *f = embed_fopen_or_die(argv[i], "rb");
-			r = run(h, option | EMBED_VM_QUITE_ON, !ran, f, out, iblk, oblk);
+optend:
+			r = run_file(h, option | EMBED_VM_QUITE_ON, !ran, argv[i], out, iblk, oblk);
 			ran = true;
-			fclose(f);
 			if(r < 0)
 				goto end;
 		}

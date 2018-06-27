@@ -48,11 +48,14 @@ static void cooked(void)
 	tcsetattr(fd, TCSANOW, &old);
 }
 
-static int unix_getch(void *file)
+static int unix_getch(void *file, int *no_data)
 {
+	assert(no_data); /*zero is a valid file descriptor*/
 	int fd = (int)(intptr_t)file;
 	bool eagain = false;
-	return getch(fd, &eagain);
+	int r = getch(fd, &eagain);
+	*no_data = eagain ? -1 : 0;
+	return r;
 }
 
 static int unix_putch(int ch, void *file)

@@ -143,11 +143,25 @@ you do not:
 
 .B cc -std=c99 main.c embed.c image.c -o embed
 
-.SH LIBRARY API
+.SH LIBRARY API AND PORTING
 
-The Virtual Machine and default eForth image is designed to be flexible and
-embeddable in different scenarios, the VM may need editing but given its small
-size it should not be too much of a problem.
+The library API itself is described in detail in the header for the library.
+The goal of the library, and the virtual machine, is too be as flexible as
+possible. It achieves flexibility by allowing the library user to pass in
+callbacks to change the behavior of the Input/Output channels (of which there
+are three available to the virtual machine), and also by allowing the user to
+pass in a callback that can be used to do arbitrary things by pushing and
+pulling data to and from the virtual machines stack.
+
+It should be possible to port to most platforms quite easily, including various
+microcontrollers (it might even be possible to do so just by providing the
+right callbacks depending on your Board Support Package).
+
+The header file describes what each function does, and the repository contains
+example programs. The library should be simple to use, and if it is not please
+contact the author to complain about it. Do not be afraid to hack around with
+the virtual machine to get it to do what you want either, the program is
+relatively short and should be easy to understand even if the code is dense.
 
 .SH EXIT STATUS
 

@@ -2,62 +2,104 @@
  * library API to add double and floating point words to that are accessible
  * via the eForth image.
  *
- * @todo Implement separate floating point stack 
  * @todo Implement extracting strings and putting strings into the interpreter
- * @todo Use C++ templates instead?
+ * @todo To save forth dictionary space, the search could be done external to
+ * the virtual machine for words that have not been found. The virtual
+ * machine/eForth image would pass a string to the callback if it cannot find 
+ * a word and the callback would search for the word, and return a token the
+ * virtual machine can use to execute the word by calling the callback with
+ * modified arguments.
+ * @todo Use C++ templates instead, or even 'tgmath.h', perhaps even
+ * <https://stackoverflow.com/questions/16522341/pseudo-generics-in-c>
  */
 
 #include "embed.h"
+#include <errno.h>
 #include <stdbool.h>
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
+#include <ctype.h>
+#include <stdio.h>
 
 struct vm_extension_t;
 typedef struct vm_extension_t vm_extension_t;
+
+typedef float float_t;
+typedef int32_t sdc_t;   /**< signed double cell type */
 
 typedef int (*embed_callback_extended_t)(vm_extension_t *v);
 typedef struct { 
 	embed_callback_extended_t cb; /**< Callback for function */
 	const char *name;             /**< Forth function */
+	bool use;                     /**< Use this callback? */
 } callbacks_t;
 
 struct vm_extension_t {
 	embed_t *h;              /**< embed VM instance we are operating with */
 	callbacks_t *callbacks;  /**< callbacks to use with this instance */
 	size_t callbacks_length; /**< length of 'callbacks' field */
-	float f[128];            /**< floating point stack */
-	size_t fsp;              /**< floating point stack pointer */
 	embed_opt_t o;           /**< embed virtual machine options */
-	uint16_t error;          /**< current error condition */
+	cell_t error;          /**< current error condition */
 };
 
 #define CALLBACK_XMACRO\
-	X("d+",      cb_dplus)\
-	X("d*",      cb_dmul)\
-	X("d.",      cb_dprint)\
-	X("d-",      cb_dsub)\
-	X("d/",      cb_ddiv)\
-	X("d<",      cb_dless)\
-	X("d>",      cb_dmore)\
-	X("d=",      cb_dequal)\
-	X("dnegate", cb_dnegate)\
-	X("f.",      cb_flt_print)\
-	X("f+",      cb_fadd)\
-	X("f-",      cb_fsub)\
-	X("f*",      cb_fmul)\
-	X("f/",      cb_fdiv)\
-	X("d>f",     cb_d2f)\
-	X("f>d",     cb_f2d)\
-	X("f<",      cb_fless)\
-	X("f>",      cb_fmore)
+	X("d+",       cb_dplus,      false)\
+	X("d*",       cb_dmul,       false)\
+	X("d.",       cb_dprint,     false)\
+	X("d-",       cb_dsub,       false)\
+	X("d/",       cb_ddiv,       false)\
+	X("d<",       cb_dless,      false)\
+	X("d>",       cb_dmore,      false)\
+	X("d=",       cb_dequal,     false)\
+	X("dnegate",  cb_dnegate,    false)\
+	X("f.",       cb_flt_print,  true)\
+	X("f+",       cb_fadd,       true)\
+	X("f-",       cb_fsub,       true)\
+	X("f*",       cb_fmul,       true)\
+	X("f/",       cb_fdiv,       true)\
+	X("d>f",      cb_d2f,        true)\
+	X("f>d",      cb_f2d,        true)\
+	X("f<",       cb_fless,      true)\
+	X("f>",       cb_fmore,      true)\
+	X("fdup",     cb_fdup,       true)\
+	X("fswap",    cb_fswap,      true)\
+	X("fdrop",    cb_fdrop,      true)\
+	X("fover",    cb_fover,      true)\
+	X("fnip",     cb_fnip,       true)\
+	X("s>f",      cb_s2f,        true)\
+	X("f>s",      cb_f2s,        true)\
+	X("fsin",     cb_fsin,       true)\
+	X("fcos",     cb_fcos,       true)\
+	X("ftan",     cb_ftan,       true)\
+	X("fasin",    cb_fasin,      true)\
+	X("facos",    cb_facos,      true)\
+	X("fatan",    cb_fatan,      true)\
+	X("fatan2",   cb_fatan2,     true)\
+	X("flog",     cb_flog,       true)\
+	X("flog10",   cb_flog10,     true)\
+	X("fpow",     cb_fpow,       true)\
+	X("fexp",     cb_fexp,       true)\
+	X("fsqrt",    cb_fsqrt,      true)\
+	X("fget",     cb_fget,       true)\
+	X("floor",    cb_floor,      true)\
+	X("fceil",    cb_fceil,      true)\
+	X("fround",   cb_fround,     true)\
+	X("fabs",     cb_fabs,       true)\
+	X("ferfc",    cb_ferfc,      false)\
+	X("ferf",     cb_ferf,       false)\
+	X("flgamma",  cb_flgamma,    false)\
+	X("ftgamma",  cb_ftgamma,    false)\
+	X("fmin",     cb_fmin,       true)\
+	X("fmax",     cb_fmax,       true)\
 
-#define X(NAME, FUNCTION) static int FUNCTION ( vm_extension_t * const v );
+#define X(NAME, FUNCTION, USE) static int FUNCTION ( vm_extension_t * const v );
 	CALLBACK_XMACRO
 #undef X
 
 static callbacks_t callbacks[] = {
-#define X(NAME, FUNCTION) { .name = NAME, .cb = FUNCTION },
+#define X(NAME, FUNCTION, USE) { .name = NAME, .cb = FUNCTION, .use = USE },
 	CALLBACK_XMACRO
 #undef X
 };
@@ -75,36 +117,37 @@ static int call_puts(embed_opt_t *o, const char *s) {
 	return r;
 }
 
-static inline void eset(vm_extension_t * const v, const uint16_t error) { /**< set error register if not set */
+static inline cell_t eset(vm_extension_t * const v, const cell_t error) { /**< set error register if not set */
 	assert(v);
 	if(!(v->error))
 		v->error = error;
+	return v->error;
 }
 
-static inline uint16_t eget(vm_extension_t const * const v) { /**< get current error register */
+static inline cell_t eget(vm_extension_t const * const v) { /**< get current error register */
 	assert(v);
 	return v->error;
 }
 
-static inline uint16_t eclr(vm_extension_t * const v) { /**< clear error register and return value before clear */
+static inline cell_t eclr(vm_extension_t * const v) { /**< clear error register and return value before clear */
 	assert(v);
-	const uint16_t error = v->error;
+	const cell_t error = v->error;
 	v->error = 0;
 	return error;
 }
 
-static inline uint16_t pop(vm_extension_t *v) {
+static inline cell_t pop(vm_extension_t *v) {
 	assert(v);
 	if(eget(v))
 		return 0;
-	uint16_t rv = 0;
+	cell_t rv = 0;
 	int e = 0;
 	if((e = embed_pop(v->h, &rv)) < 0)
 		eset(v, e);
 	return rv;
 }
 
-static inline void push(vm_extension_t * const v, const uint16_t value) {
+static inline void push(vm_extension_t * const v, const cell_t value) {
 	assert(v);
 	if(eget(v))
 		return;
@@ -113,57 +156,54 @@ static inline void push(vm_extension_t * const v, const uint16_t value) {
 		eset(v, e);
 }
 
-static inline void udpush(vm_extension_t * const v, const uint32_t value) {
+static inline void udpush(vm_extension_t * const v, const double_cell_t value) {
 	push(v, value);
 	push(v, value >> 16);
 }
 
-static inline uint32_t udpop(vm_extension_t * const v) {
-	const uint32_t hi = pop(v);
-	const uint32_t lo = pop(v);
-	const uint32_t d  = (hi << 16) | lo;
+static inline double_cell_t udpop(vm_extension_t * const v) {
+	const double_cell_t hi = pop(v);
+	const double_cell_t lo = pop(v);
+	const double_cell_t d  = (hi << 16) | lo;
 	return d;
 }
 
-static inline int32_t dpop(vm_extension_t * const v)                       { return udpop(v); }
-static inline void    dpush(vm_extension_t * const v, const int32_t value) { udpush(v, value); }
+static inline sdc_t dpop(vm_extension_t * const v)                       { return udpop(v); }
+static inline void    dpush(vm_extension_t * const v, const sdc_t value) { udpush(v, value); }
 
-typedef union { float f; uint32_t d; } fd_u;
+typedef union { float_t f; double_cell_t d; } fd_u;
 
-static inline float fpop(vm_extension_t * const v) {
+static inline float_t fpop(vm_extension_t * const v) {
+	BUILD_BUG_ON(sizeof(float_t) != sizeof(double_cell_t));
 	const fd_u fd = { .d = udpop(v) };
 	return fd.f;
 }
 
-static inline void fpush(vm_extension_t * const v, const float f) {
+static inline void fpush(vm_extension_t * const v, const float_t f) {
 	const fd_u fd = { .f = f };
 	udpush(v, fd.d);
 }
 
 static int cb_dplus(vm_extension_t * const v) {
-	const int32_t d1 = dpop(v);
-	const int32_t d2 = dpop(v);
-	dpush(v, d1 + d2);
+	dpush(v, dpop(v) + dpop(v));
 	return eclr(v);
 }
 
 static int cb_dmul(vm_extension_t * const v) {
-	const int32_t d1 = dpop(v);
-	const int32_t d2 = dpop(v);
-	dpush(v, d1 * d2);
+	dpush(v, dpop(v) * dpop(v));
 	return eclr(v);
 }
 
 static int cb_dsub(vm_extension_t * const v) {
-	const int32_t d1 = dpop(v);
-	const int32_t d2 = dpop(v);
+	const sdc_t d1 = dpop(v);
+	const sdc_t d2 = dpop(v);
 	dpush(v, d2 - d1);
 	return eclr(v);
 }
 
 static int cb_ddiv(vm_extension_t * const v) {
-	const int32_t d1 = dpop(v);
-	const int32_t d2 = dpop(v);
+	const sdc_t d1 = dpop(v);
+	const sdc_t d2 = dpop(v);
 	if(!d1) {
 		eset(v, 10); /* division by zero */
 		return eclr(v); 
@@ -178,23 +218,21 @@ static int cb_dnegate(vm_extension_t * const v) {
 }
 
 static int cb_dless(vm_extension_t * const v) {
-	const int32_t d1 = dpop(v);
-	const int32_t d2 = dpop(v);
+	const sdc_t d1 = dpop(v);
+	const sdc_t d2 = dpop(v);
 	push(v, -(d2 < d1));
 	return eclr(v);
 }
 
 static int cb_dmore(vm_extension_t * const v) {
-	const int32_t d1 = dpop(v);
-	const int32_t d2 = dpop(v);
+	const sdc_t d1 = dpop(v);
+	const sdc_t d2 = dpop(v);
 	push(v, -(d2 > d1));
 	return eclr(v);
 }
 
 static int cb_dequal(vm_extension_t * const v) {
-	const int32_t d1 = dpop(v);
-	const int32_t d2 = dpop(v);
-	push(v, -(d1 == d2));
+	push(v, -(dpop(v) == dpop(v)));
 	return eclr(v);
 }
 
@@ -209,7 +247,7 @@ static int cb_dprint(vm_extension_t * const v) {
 }
 
 static int cb_flt_print(vm_extension_t * const v) {
-	const float flt = fpop(v);
+	const float_t flt = fpop(v);
 	char buf[512] = { 0 }; /* floats can be quite large */
 	if(eget(v))
 		return eclr(v);
@@ -229,15 +267,15 @@ static int cb_fmul(vm_extension_t * const v) {
 }
 
 static int cb_fsub(vm_extension_t * const v) {
-	const float f1 = fpop(v);
-	const float f2 = fpop(v);
+	const float_t f1 = fpop(v);
+	const float_t f2 = fpop(v);
 	fpush(v, f2 - f1);
 	return eclr(v);
 }
 
 static int cb_fdiv(vm_extension_t * const v) {
-	const float f1 = fpop(v);
-	const float f2 = fpop(v);
+	const float_t f1 = fpop(v);
+	const float_t f2 = fpop(v);
 	if(f1 == 0.0f) {
 		eset(v, 42); /* floating point division by zero */
 		return eclr(v);
@@ -257,16 +295,242 @@ static int cb_f2d(vm_extension_t * const v) {
 }
 
 static int cb_fless(vm_extension_t * const v) {
-	const float f1 = fpop(v);
-	const float f2 = fpop(v);
+	const float_t f1 = fpop(v);
+	const float_t f2 = fpop(v);
 	push(v, -(f2 < f1));
 	return eclr(v);
 }
 
 static int cb_fmore(vm_extension_t * const v) {
-	const float f1 = fpop(v);
-	const float f2 = fpop(v);
+	const float_t f1 = fpop(v);
+	const float_t f2 = fpop(v);
 	push(v, -(f2 > f1));
+	return eclr(v);
+}
+
+static int cb_fdup(vm_extension_t * const v) {
+	const float_t f = fpop(v);
+	fpush(v, f);
+	fpush(v, f);
+	return eclr(v);
+}
+
+static int cb_fswap(vm_extension_t * const v) {
+	const float_t f1 = fpop(v);
+	const float_t f2 = fpop(v);
+	fpush(v, f1);
+	fpush(v, f2);
+	return eclr(v);
+}
+
+static int cb_fdrop(vm_extension_t * const v) {
+	fpop(v);
+	return eclr(v);
+}
+
+static int cb_fnip(vm_extension_t * const v) {
+	const float_t f1 = fpop(v);
+	fpop(v);
+	fpush(v, f1);
+	return eclr(v);
+}
+
+static int cb_fover(vm_extension_t * const v) {
+	const float_t f1 = fpop(v);
+	const float_t f2 = fpop(v);
+	fpush(v, f2);
+	fpush(v, f1);
+	fpush(v, f2);
+	return eclr(v);
+}
+
+static int cb_s2f(vm_extension_t * const v) {
+	int16_t i = pop(v);
+	fpush(v, i);
+	return eclr(v);
+}
+
+static int cb_f2s(vm_extension_t * const v) {
+	push(v, (int16_t)fpop(v));
+	return eclr(v);
+}
+
+static int cb_fsin(vm_extension_t * const v) {
+	fpush(v, sinf(fpop(v)));
+	return eclr(v);
+}
+
+static int cb_fcos(vm_extension_t * const v) {
+	fpush(v, cosf(fpop(v)));
+	return eclr(v);
+}
+
+static int cb_ftan(vm_extension_t * const v) {
+	fpush(v, tanf(fpop(v)));
+	return eclr(v);
+}
+
+static int cb_fasin(vm_extension_t * const v) {
+	fpush(v, asinf(fpop(v)));
+	return eclr(v);
+}
+
+static int cb_facos(vm_extension_t * const v) {
+	fpush(v, acosf(fpop(v)));
+	return eclr(v);
+}
+
+static int cb_fatan(vm_extension_t * const v) {
+	fpush(v, atanf(fpop(v)));
+	return eclr(v);
+}
+
+static int cb_fexp(vm_extension_t * const v) {
+	fpush(v, expf(fpop(v)));
+	return eclr(v);
+}
+
+static int cb_fatan2(vm_extension_t * const v) {
+	const float_t f1 = fpop(v);
+	const float_t f2 = fpop(v);
+	fpush(v, atan2f(f1, f2));
+	return eclr(v);
+}
+
+static int cb_fpow(vm_extension_t * const v) {
+	const float_t f1 = fpop(v);
+	const float_t f2 = fpop(v);
+	fpush(v, powf(f1, f2));
+	return eclr(v);
+}
+
+static int cb_fsqrt(vm_extension_t * const v) {
+	const float_t f = fpop(v);
+	if(f < 0.0f)
+		return eset(v, 43);
+	fpush(v, sqrtf(f));
+	return eclr(v);
+}
+
+static int cb_flog(vm_extension_t * const v) {
+	const float_t f = fpop(v);
+	if(f <= 0.0f)
+		return eset(v, 43);
+	fpush(v, logf(f));
+	return eclr(v);
+}
+
+static int cb_flog10(vm_extension_t * const v) {
+	const float_t f = fpop(v);
+	if(f <= 0.0f)
+		return eset(v, 43);
+	fpush(v, log10f(f));
+	return eclr(v);
+}
+
+static int get_a_char(vm_extension_t * const v) {
+	embed_fgetc_t get = v->o.get;
+	void *getp = v->o.in;
+	int ch, no_data = 0;
+	do { ch = get(getp, &no_data); } while(no_data);
+	return ch;
+}
+
+static int cb_fget(vm_extension_t * const v) {
+	char buf[512] = { 0 };
+	int ch = 0;
+	float_t f = 0.0;
+
+	while(isspace(ch = get_a_char(v)))
+		;
+
+	if(ch == EOF)
+		return 57;
+
+	buf[0] = ch;
+
+	for(size_t i = 1; i < (sizeof(buf)-1); i++) {
+		if((ch = get_a_char(v)) == EOF)
+			return 57;
+		if(isspace(ch))
+			break;
+		buf[i] = ch;
+	}
+
+	if(sscanf(buf, "%f", &f) != 1)
+		return 13;
+
+	fpush(v, f);
+
+	return eclr(v);
+}
+
+static int cb_fround(vm_extension_t * const v) {
+	fpush(v, roundf(fpop(v)));
+	return eclr(v);
+}
+
+static int cb_floor(vm_extension_t * const v) {
+	fpush(v, floorf(fpop(v)));
+	return eclr(v);
+}
+
+static int cb_fceil(vm_extension_t * const v) {
+	fpush(v, ceilf(fpop(v)));
+	return eclr(v);
+}
+
+static int cb_fabs(vm_extension_t * const v) {
+	fpush(v, fabsf(fpop(v)));
+	return eclr(v);
+}
+
+static int cb_ferf(vm_extension_t * const v) {
+	fpush(v, fabsf(fpop(v)));
+	return eclr(v);
+}
+
+static int cb_ferfc(vm_extension_t * const v) {
+	float_t f = fpop(v);
+	if(eget(v))
+		return eclr(v);
+	errno = 0;
+	f = erff(f);
+	if(errno == ERANGE)
+		return eset(v, 43);
+	fpush(v, f);
+	return eclr(v);
+}
+
+static int cb_flgamma(vm_extension_t * const v) {
+	float_t f = fpop(v);
+	errno = 0;
+	f = lgammaf(f);
+	if(errno == ERANGE)
+		return eset(v, 43);
+	fpush(v, f);
+	return eclr(v);
+}
+
+static int cb_ftgamma(vm_extension_t * const v) {
+	float_t f = fpop(v);
+	errno = 0;
+	f = tgammaf(f);
+	if(errno == ERANGE || errno == EDOM)
+		return eset(v, 43);
+	fpush(v, f);
+	return eclr(v);
+}
+
+static int cb_fmin(vm_extension_t * const v) {
+	const float_t f1 = fpop(v), f2 = fpop(v);
+	fpush(v, f1 < f2 ? f1 : f2);
+	return eclr(v);
+}
+
+static int cb_fmax(vm_extension_t * const v) {
+	const float_t f1 = fpop(v), f2 = fpop(v);
+	fpush(v, f1 > f2 ? f1 : f2);
 	return eclr(v);
 }
 
@@ -280,12 +544,15 @@ static int callback_selector(embed_t *h, void *param) {
 	if(e->h != h)
 		embed_fatal("embed extensions: instance corruption");
 	eclr(e);
-	uint16_t func = pop(e);
+	const cell_t func = pop(e);
 	if(eget(e))
 		return eclr(e);
 	if(func >= e->callbacks_length)
 		return -21;
-	return e->callbacks[func].cb(e);
+	const callbacks_t *cb = &e->callbacks[func];
+	if(!(cb->use))
+		return -21;
+	return cb->cb(e);
 }
 
 /*! This adds the call backs to an instance of the virtual machine running
@@ -293,9 +560,11 @@ static int callback_selector(embed_t *h, void *param) {
  */
 static int callbacks_add(embed_t * const h, const bool optimize,  callbacks_t *cb, const size_t number) {
 	assert(h && cb);
+	const char *optimizer = optimize ? "-2 cells allot ' vm chars ," : "";
 	for(size_t i = 0; i < number; i++) {
 		char line[80] = { 0 };
-		const char *optimizer = optimize ? "-2 cells allot ' vm chars ," : "";
+		if(!cb[i].use)
+			continue;
 		int r = snprintf(line, sizeof(line) - 1, ": %s %u vm ; %s\n", cb[i].name, (unsigned)i, optimizer);
 		if(r < 0)
 			return -1;
@@ -342,6 +611,7 @@ static void vm_extension_free(vm_extension_t *v) {
 }
 
 int main(void) {
+	BUILD_BUG_ON(sizeof(double_cell_t) != sizeof(sdc_t));
 	vm_extension_t *v = vm_extension_new();
 	if(!v)
 		embed_fatal("embed extensions: load failed");

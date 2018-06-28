@@ -5,7 +5,8 @@
  *
  *  Do not be afraid to modify things and generally hack around with things,
  *  if you want to port this to a microcontroller you might need to modify
- *  this file and 'embed.c' as well. */
+ *  this file and 'embed.c' as well. 
+ */
 #ifndef EMBED_H
 #define EMBED_H
 
@@ -15,6 +16,11 @@ extern "C" {
 #include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
+
+typedef uint16_t cell_t;               /**< Virtual Machine Cell size: 16-bit*/
+typedef  int16_t signed_cell_t;        /**< Virtual Machine Signed Cell */
+typedef uint32_t double_cell_t;        /**< Virtual Machine Double Cell (2*sizeof(cell_t)) */
+typedef  int32_t signed_double_cell_t; /**< Virtual Machine Signed Double Cell */
 
 struct embed_t;                 /**< Forth Virtual Machine State (Opaque) */
 typedef struct embed_t embed_t; /**< Forth Virtual Machine State Type Define (Opaque) */
@@ -48,12 +54,12 @@ typedef int (*embed_fputc_t)(int ch, void *file); /**< write character to file, 
  * the virtual machine image to mass storage. Mass storage on a hosted machine
  * would be a file on disk, but on a microcontroller it could be a Flash
  * chip, for example.
- * @param m,      Virtual Machine memory to write to, of embed_length() uint16_t long (maximum length is 32768).
+ * @param m,      Virtual Machine memory to write to, of embed_length() cell_t long (maximum length is 32768).
  * @param name,   handle that identifies place to write to (such as a 'FILE*')
  * @param start,  position in 'm' to start write from
  * @param length, length of section to save from 'm', starting at 'start'.
  * @return zero on success, negative on failure */
-typedef int (*embed_save_t)(const uint16_t m[/*static 32768*/], const void *name, const size_t start, const size_t length);
+typedef int (*embed_save_t)(const cell_t m[/*static 32768*/], const void *name, const size_t start, const size_t length);
 
 /**@brief Function pointer typedef for user supplied callbacks for doing
  * arbitrary things. The function should return zero on success or a number
@@ -69,7 +75,7 @@ typedef enum {
 	EMBED_VM_RAW_TERMINAL    = 1u << 2, /**< raw terminal mode */
 	EMBED_VM_QUITE_ON        = 1u << 3, /**< turn off 'okay' prompt and welcome message */
 	EMBED_VM_USE_SHADOW_REGS = 1u << 4, /**< use shadow registers on entry */
-} embed_vm_option_e; /**< VM option */
+} embed_vm_option_e; /**< VM option enum */
 
 typedef struct {
 	embed_fgetc_t    get;      /**< callback to get a character, behaves like 'fgetc' */
@@ -87,12 +93,12 @@ typedef struct {
 
 /**@brief Saves to a file called 'name', this is the default callback to save
  * an image to disk with the 'save' ALU instruction.
- * @param m,       memory to save to disk, 32768 uint16_t long
+ * @param m,       memory to save to disk, 32768 cell_t long
  * @param name,    name of file to save to on disk
  * @param start,   start of image location to save from
- * @param length,  length in uint16_t to save, starting at 'start'
+ * @param length,  length in cell_t to save, starting at 'start'
  * @return 0 on success, negative on failure */
-int embed_save_cb(const uint16_t m[/*static 32768*/], const void *name, const size_t start, const size_t length); 
+int embed_save_cb(const cell_t m[/*static 32768*/], const void *name, const size_t start, const size_t length); 
 
 /**@brief 'embed_fputc_t' callback to write to a file
  * @param file, a 'FILE*' object to write to
@@ -165,22 +171,41 @@ typedef enum {
 #define MIN(X, Y) ((X) > (Y) ? (Y) : (X))
 #endif
 
-/**@brief Set the global log level
+/**@brief Set the global log level, this may be any 
 * @param level, level to log up to, any log level equal to or lower than than
 * this value will be logged */
 void embed_log_level_set(embed_log_level_e level);
 
 /**@brief Get the global log level
-* @return Global log level */
+*  @return Global log level */
 embed_log_level_e embed_log_level_get(void);            
 
 /**@brief Exit system with failure */
 void embed_die(void);
 
-/**@brief fprintf to stderr */
+/**@brief Printf a format string to standard error with a few additional
+ * extras to make things easier. A new line is automatically appended to the
+ * logged line, and log-level/file/function and line information is printed.
+ * Whether something is logged or the log is suppressed can be controlled with
+ * by the 'embed_log_level_set()' function.
+ * @param level, logging level, should be WITHIN 'EMBED_LOG_LEVEL_ALL_OFF' and
+ * 'EMBED_LOG_LEVEL_ALL_ON', which themselves are not valid logging levels. Also
+ * of note, EMBED_LOG_LEVEL_FATAL causes the process to terminate! Even if the
+ * log is not printed because the log level is off, 'exit()' will still be
+ * called if the log level is fatal. 'exit' is called with the 'EXIT_FAILURE'
+ * value.
+ * @param file,  file logging occurs within, should be __FILE__
+ * @param func,  function logging occurs within, should be __func__
+ * @param line,  line logging occurred on, should be __LINE__
+ * @param fmt,   a printf format string
+ * @param ...,   variable length parameter list for 'fmt' */
 void embed_logger(embed_log_level_e level, const char *file, const char *func, unsigned line, const char *fmt, ...); 
 
-/**@brief die on fopen failure */
+/**@brief Open up 'file', and if that fails print out an error message and
+ * call exit with EXIT_FAILURE.
+ * @param file, name of file to open
+ * @param mode, mode to open file in
+ * @return An open file handle, this never returns NULL */
 FILE *embed_fopen_or_die(const char *file, const char *mode);         
 
 /**@brief 'calloc' of size 'sz'
@@ -258,15 +283,15 @@ int embed_save(const embed_t *h, const char *name);
  * @return bytes in h */
 size_t embed_length(embed_t const * const h);            
 
-/**@brief Swap byte order of a 2-byte value 
+/**@brief Swap byte order of a 'cell_t'
  * @param s, value to swap byte order of
- * @return uint16_t with swapped byte order */
-uint16_t embed_swap16(uint16_t s);                                
+ * @return cell_t with swapped byte order */
+cell_t embed_swap(cell_t s);                                
 
 /**@brief Swap byte order of a buffer of 2-byte values
  * @param b, buffer to change endianess of
- * @param l, length of buffer in uint16_t */
-void embed_buffer_swap16(uint16_t *b, size_t l);                   
+ * @param l, length of buffer in cell_t*/
+void embed_buffer_swap(cell_t *b, size_t l);                   
 
 /**@brief Run the virtual machine directly, with custom options.
  * 'embed_options_default()' can be used to get a copy of a structure
@@ -284,7 +309,7 @@ int embed_vm(embed_t *h, embed_opt_t *o);
  * @param h,     initialized Virtual Machines
  * @param value, value to push
  * @return zero on success, negative on failure */
-int embed_push(embed_t *h, uint16_t value);
+int embed_push(embed_t *h, cell_t value);
 
 /**@brief Pop value in 'value', returns negative on failure. This can be
  * called from within the 'embed_callback_t' callback and from outside of
@@ -292,7 +317,7 @@ int embed_push(embed_t *h, uint16_t value);
  * @param h,     initialized Virtual Machine
  * @param value, pointer to value to pop into
  * @return zero on success, negative on failure */
-int embed_pop(embed_t *h, uint16_t *value); 
+int embed_pop(embed_t *h, cell_t *value); 
 
 /**@brief Retrieve a copy of some sensible default options, the default options
  * contain callbacks and file handles that will read data from standard in,
@@ -311,7 +336,7 @@ void embed_reset(embed_t *h);
  * @warning be careful with this!
  * @param h, initialized Virtual Machine image
  * @return point to core image of embed_length() bytes long  */
-uint16_t *embed_core_get(embed_t *h);         
+cell_t *embed_core_get(embed_t *h);         
 
 /**@brief evaluate a string, each line should be less than 80 chars and end in a newline
  * @param h,   an initialized virtual machine
@@ -319,8 +344,19 @@ uint16_t *embed_core_get(embed_t *h);
  * @return zero on success, negative on failure */
 int embed_eval(embed_t *h, const char *str); 
 
-extern const uint8_t embed_default_block[];   /**< default VM image, generated from 'embed-1.blk' */
-extern const size_t embed_default_block_size; /**< size of default VM image */
+/**@brief This array contains the default virtual machine image, generated from
+ * 'embed-1.blk', which is included in the library. It contains a fully working
+ * eForth image */
+extern const uint8_t embed_default_block[];
+
+/**@brief This is size, in bytes, of 'embed_default_block' */
+extern const size_t embed_default_block_size;
+
+#ifndef BUILD_BUG_ON
+/**@brief This is effectively a static_assert for condition
+ * @param constant expression to check */
+#define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
+#endif
 
 #ifdef __cplusplus
 }

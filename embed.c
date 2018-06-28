@@ -11,9 +11,10 @@
 
 #define SHADOW    (7)     /**< start location of shadow registers */
 #define CORE_SIZE (32768) /**< core size in cells */
-typedef uint16_t m_t; /**< The VM is 16-bit, 'uintptr_t' would be more useful */
-typedef  int16_t s_t; /**< used for signed calculation and casting */
-typedef uint32_t d_t; /**< should be double the size of 'm_t' and unsigned */
+
+typedef cell_t        m_t; /**< The VM is 16-bit, 'uintptr_t' would be more useful */
+typedef signed_cell_t s_t; /**< used for signed calculation and casting */
+typedef double_cell_t d_t; /**< should be double the size of 'm_t' and unsigned */
 struct embed_t { m_t m[CORE_SIZE]; }; /**< Embed Forth VM structure */
 
 static embed_log_level_e global_log_level = EMBED_LOG_LEVEL_INFO; /**< Global log level */
@@ -71,10 +72,10 @@ int embed_fputc_cb(int ch, void *file)             { assert(file); return fputc(
 int embed_fgetc_cb(void *file, int *no_data)       { assert(file && no_data); *no_data = 0; return fgetc(file); }
 m_t *embed_core_get(embed_t *h)                    { assert(h);    return h->m; }
 static size_t embed_cells(embed_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
-uint16_t embed_swap16(uint16_t s)                  { return (s >> 8) | (s << 8); }
-void embed_buffer_swap16(uint16_t *b, size_t l)    { assert(b); for(size_t i = 0; i < l; i++) b[i] = embed_swap16(b[i]); }
+m_t embed_swap(m_t s)                              { return (s >> 8) | (s << 8); }
+void embed_buffer_swap(m_t *b, size_t l)           { assert(b); for(size_t i = 0; i < l; i++) b[i] = embed_swap(b[i]); }
 static inline int is_big_endian(void)              { return (*(uint16_t *)"\0\xff" < 0x100); }
-static void embed_normalize(embed_t *h)            { assert(h); if(is_big_endian()) embed_buffer_swap16(h->m, sizeof(h->m)/2); }
+static void embed_normalize(embed_t *h)            { assert(h); if(is_big_endian()) embed_buffer_swap(h->m, sizeof(h->m)/2); }
 
 int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length) {
 	assert(h && buf);
@@ -115,7 +116,6 @@ embed_t *embed_new(void) {
 	return h; 
 }
 
-/**@todo 'embed_new' should load the default block, and return NULL on failure */
 void     embed_free(embed_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
 embed_t *embed_copy(embed_t const * const h)      { assert(h); embed_t *r = embed_new(); if(!r) return NULL; return memcpy(r, h, sizeof(*h)); }
 int      embed_save(const embed_t *h, const char *name) { assert(name); return embed_save_cb(h->m, name, 0, embed_cells(h)); }
@@ -155,7 +155,7 @@ void embed_reset(embed_t *h) {
 	m[0] = m[0+SHADOW], m[1] = m[1+SHADOW], m[2] = m[2+SHADOW], m[3] = m[3+SHADOW];
 }
 
-int embed_push(embed_t *h, uint16_t value) {
+int embed_push(embed_t *h, cell_t value) {
 	assert(h);
 	m_t * const m = h->m;
 	m_t rp = m[2], sp = m[3], sp0 = m[3+SHADOW];
@@ -169,7 +169,7 @@ int embed_push(embed_t *h, uint16_t value) {
 	return 0;
 }
 
-int embed_pop(embed_t *h, uint16_t *value) {
+int embed_pop(embed_t *h, cell_t *value) {
 	assert(h && value);
 	m_t * const m = h->m;
 	m_t rp = m[2], sp = m[3], sp0 = m[3+SHADOW];
@@ -208,13 +208,17 @@ static inline void trace(embed_opt_t *o, m_t *m, m_t pc, m_t instruction, m_t t,
 	if(!(o->options & 1) || !(o->put))
 		return;
 	char buf[32] = { 0 };
-	snprintf(buf, sizeof buf, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, (uint16_t)(m[2+SHADOW]-rp), (uint16_t)(sp-m[3+SHADOW]));
+	snprintf(buf, sizeof buf, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, (cell_t)(m[2+SHADOW]-rp), (cell_t)(sp-m[3+SHADOW]));
 	efputs(o, buf);
 }
 #endif
 
 int embed_vm(embed_t *h, embed_opt_t *o) {
 	assert(h && o);
+
+	BUILD_BUG_ON (sizeof(m_t)    != sizeof(s_t));
+	BUILD_BUG_ON((sizeof(m_t)*2) != sizeof(d_t));
+
 	static const m_t delta[] = { 0, 1, -2, -1 };
 	const m_t l = embed_cells(h), shadow = (!!(o->options & EMBED_VM_USE_SHADOW_REGS))*SHADOW;
 	m_t * const m = h->m;

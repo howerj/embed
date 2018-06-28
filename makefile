@@ -30,7 +30,7 @@ EXE=.exe
 else # assume unixen
 DF=./
 EXE=
-TESTAPPS+= dlopen eforth unix
+TESTAPPS+= eforth unix
 endif
 
 FORTH=${TARGET}${EXE}
@@ -115,7 +115,7 @@ unix: t/unix.c libembed.a embed.h
 
 call: CFLAGS=-O3 -Wall -Wextra -std=c99 -I.
 call: t/call.c libembed.a
-	${CC} ${CFLAGS} $^ -o $@
+	${CC} ${CFLAGS} $^ -lm -o $@
 
 apps: ${TESTAPPS}
 

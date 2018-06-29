@@ -1,9 +1,23 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include "embed.h"
+#include <errno.h>
+#include <stdlib.h>
+#include <assert.h>
 
 #define N (20)
+
+static FILE *fopen_or_die(const char * const file, const char * const mode)
+{
+	assert(file && mode);
+	errno = 0;
+	FILE *r = fopen(file, mode);
+	if(!r) {
+		fprintf(stderr, "unable to open file '%s' (mode = %s): %s\n", file, mode, strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+	return r;
+}
 
 static int header(FILE *out, const char *var, const char *msg)
 {
@@ -37,11 +51,13 @@ const size_t %s_size = %zu;\n\n";
 }
 
 int main(int argc, char **argv) {
-	if(argc != 5)
-		embed_fatal("usage: %s var image.bin image.c message", argv[0]);
+	if(argc != 5) {
+		fprintf(stderr, "usage: %s variable-name image.bin image.c \"comment\"\n", argv[0]);
+		return -1;
+	}
 	const char *var = argv[1];
-	FILE *in  = embed_fopen_or_die(argv[2], "rb"), 
-	     *out = embed_fopen_or_die(argv[3], "wb");
+	FILE *in  = fopen_or_die(argv[2], "rb"), 
+	     *out = fopen_or_die(argv[3], "wb");
 	const char *msg = argv[4];
 	size_t i = 0;
 	uint8_t b[N] = { 0 };

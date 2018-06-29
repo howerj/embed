@@ -842,6 +842,26 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 0 tlocation editor-voc        ( editor vocabulary )
 0 tlocation _forth-wordlist   ( set at the end near the end of the file )
 
+\ System Variables
+
+$2       tconstant cell  ( size of a cell in bytes )
+$0       tvariable >in   ( Hold character pointer when parsing input )
+$0       tvariable state ( compiler state variable )
+$0       tvariable hld   ( Pointer into hold area for numeric output )
+$A       tvariable base  ( Current output radix )
+$0       tvariable span  ( Hold character count received by expect   )
+$8       constant  #vocs ( number of vocabularies in allowed )
+$400     tconstant b/buf ( size of a block )
+0        tvariable blk   ( current blk loaded, set in *cold* )
+#version constant  ver   ( eForth version )
+pad-area tconstant pad   ( pad variable - offset into temporary storage )
+$FFFF    tvariable dpl   ( number of places after fraction )
+0        tvariable current ( WID to add definitions to )
+0        tvariable <literal> ( holds execution vector for literal )
+0        tvariable <boot>  ( execute program at startup )
+0        tvariable <ok>    ( prompt execution vector )
+         ( @todo move <ok>, <boot>, and other words to a system vocabulary )
+
 \ 
 \ ## Target Assembly Words
 \ 
@@ -998,38 +1018,6 @@ there constant inline-start
 : rdrop rdrop fallthrough; compile-only ( --, R: u -- )
 there constant inline-end
 
-\ Finally we can set the *assembler-voc* to variable, we will add to the
-\ assembly vocabulary later, but all of the words defined so far belong in
-\ the assembly vocabulary. Unfortunately, the assembler when run in the
-\ target Forth interpreter will compile calls to the instructions like *+*
-\ or *xor*, only a few words will be inlined. There are potential solutions
-\ to this problem, but they are not worth further complicating the Forth just
-\ yet.
-
-\ *current* contains a pointer to the vocabulary which new words will be
-\ added to when the target is up and running, this will be the forth
-\ vocabulary, or *_forth-wordlist*.
-\
-
-$2       tconstant cell  ( size of a cell in bytes )
-$0       tvariable >in   ( Hold character pointer when parsing input )
-$0       tvariable state ( compiler state variable )
-$0       tvariable hld   ( Pointer into hold area for numeric output )
-$A       tvariable base  ( Current output radix )
-$0       tvariable span  ( Hold character count received by expect   )
-$8       constant  #vocs ( number of vocabularies in allowed )
-$400     tconstant b/buf ( size of a block )
-0        tvariable blk   ( current blk loaded, set in *cold* )
-#version constant  ver   ( eForth version )
-pad-area tconstant pad   ( pad variable - offset into temporary storage )
-$FFFF    tvariable dpl   ( number of places after fraction )
-0        tvariable current ( WID to add definitions to )
-0        tvariable <literal> ( holds execution vector for literal )
-0        tvariable <boot>  ( execute program at startup )
-0        tvariable <ok>    ( prompt execution vector )
-         ( @todo move <ok>, <boot>, and other words to a system vocabulary )
-
-
 \ The following execution vectors would/will be added if there is enough
 \ space, it is very useful to have hooks into the system to change how
 \ the interpreter behaviour works. Being able to change how the Forth
@@ -1137,11 +1125,11 @@ h: cell- cell - ;           ( a -- a : adjust address to previous cell )
 h: swap! swap ! ;           ( a u -- )
 h: zero 0 swap! ;           ( a -- : zero value at address )
 : 1+!   1  h: s+! swap +! ;; ( a -- : increment value at address by 1 )
-: 1-! [-1] s+! ;        ( a -- : decrement value at address by 1 )
+: 1-! [-1] s+! ;            ( a -- : decrement value at address by 1 )
 : 2! ( d a -- ) tuck ! cell+ ! ;      ( n n a -- )
 : 2@ ( a -- d ) dup cell+ @ swap @ ;  ( a -- n n )
-h: get-current current @ ;             ( -- wid )
-h: set-current current ! ;             ( wid -- )
+h: get-current current @ ;            ( -- wid )
+h: set-current current ! ;            ( wid -- )
 : bl =bl ;                            ( -- c )
 : within over- >r - r> u< ;           ( u lo hi -- t )
 h: s>d dup 0< ;                       ( n -- d )
@@ -2782,15 +2770,7 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 \ 
 
 : editor editor-voc +order ;                   ( -- )
-( : assembler root-voc assembler-voc 2 set-order ;     ( -- )
-( : ;code assembler ; immediate                        ( -- )
-( : code postpone : assembler ;                        ( -- )
-
-( xchange _forth-wordlist assembler-voc )
-( : end-code forth postpone ; ; immediate ( -- )
-( xchange assembler-voc _forth-wordlist )
-
-\ 
+ 
 \ ## Block Word Set
 \ 
 \ The block word set abstracts out how access to mass storage works in just
@@ -3042,7 +3022,7 @@ h: bist ( -- u : built in self test )
 h: cold ( -- : performs a cold boot  )
    bist ?dup if negate dup yield? exit then
 \  $10 retrieve z 
-   $10 block b/buf 0 fill
+\  $10 block b/buf 0 fill
    $12 retrieve io! 
    forth
    sp0 cells sp!

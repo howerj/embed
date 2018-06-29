@@ -26,6 +26,7 @@ default: all
 ifeq ($(OS),Windows_NT)
 DF=
 EXE=.exe
+TESTAPPS+= win
 .PHONY: ${TARGET}
 else # assume unixen
 DF=./
@@ -38,8 +39,8 @@ B2C=b2c${EXE}
 
 all: ${FORTH}
 
-${B2C}: t/b2c.o embed.o
-	${CC} ${CFLAGS} $^ -o $@
+${B2C}: t/b2c.o
+	${CC} ${CFLAGS} $< -o $@
 
 core.gen.c: ${B2C} embed-1.blk
 	${DF}${B2C} embed_default_block embed-1.blk $@ "eForth Image"
@@ -91,6 +92,9 @@ docs: ${TARGET}.pdf ${TARGET}.htm
 
 ### Release Distribution ##################################################### 
 
+embed.blk: embed-1.blk
+	cp $< $@
+
 dist: lib${TARGET}.so lib${TARGET}.a ${TARGET}.pdf embed.1 ${FORTH} ${TARGET}.h embed.blk
 	tar zcf ${TARGET}.tgz $^
 
@@ -103,7 +107,7 @@ cpp: t/cpp.cpp libembed.a embed.h
 	${CXX} ${CPPFLAGS} -I. -o $@ $^
 
 eforth: CC=musl-gcc
-eforth: CFLAGS=-Wall -Wextra -Os -fno-stack-protector -static -std=c99 -DNDEBUG
+eforth: CFLAGS=-Wall -Wextra -Os -fno-stack-protector -static -std=c99 -DNDEBUG 
 eforth: LDFLAGS=-Wl,-O1
 eforth: embed.c image.c main.c embed.h
 	${CC} ${CFLAGS} $^ -o $@
@@ -111,6 +115,10 @@ eforth: embed.c image.c main.c embed.h
 
 unix: CFLAGS=-Wall -Wextra -std=gnu99 -I.
 unix: t/unix.c libembed.a embed.h
+	${CC} ${CFLAGS} $^ -o $@
+
+win: CFLAGS=-Wall -Wextra -std=gnu99 -I.
+win: t/win.c libembed.a embed.h
 	${CC} ${CFLAGS} $^ -o $@
 
 call: CFLAGS=-O3 -Wall -Wextra -std=c99 -I.

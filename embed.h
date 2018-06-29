@@ -326,6 +326,12 @@ int embed_pop(embed_t *h, cell_t *value);
  * @return returns a structure, not a pointer to a structure */
 embed_opt_t embed_options_default(void);
 
+/**@brief write a string to output specified in 'o'
+ * @param o, options structure containing place to write to
+ * @param s, string to write
+ * @return negative on failure, number of characters written otherwise */
+int embed_puts(embed_opt_t const * const o, const char *s);
+
 /**@brief Reset the virtual machine image, this means that the stack pointers,
  * top of stack register and program counter will be set to the defaults
  * contained within 'shadow' registers.

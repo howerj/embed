@@ -272,7 +272,7 @@ int embed_vm(embed_t * const h, embed_opt_t * const o) {
 			case 28: if(o->callback) { 
 					 mw(m, 0, pc), mw(m, 1, t), mw(m, 2, rp), mw(m, 3, sp); 
 					 r = o->callback(h, o->param);
-					 pc   = mr(m, 0), T  = mr(m, 1), rp = mr(m, 2), sp = mr(m, 3); 
+					 pc = mr(m, 0), T = mr(m, 1), rp = mr(m, 2), sp = mr(m, 3); 
 					 if(r) { pc = 4; T = r; }
 				 } else { pc=4; T=21; } break;
 			case 29: T = o->options; o->options = t; break;

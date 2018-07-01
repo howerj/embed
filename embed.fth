@@ -166,40 +166,40 @@ only forth definitions hex
 variable meta          ( Metacompilation vocabulary )
 meta +order definitions
 
-variable assembler.1   ( Target assembler vocabulary )
-variable target.1      ( Target dictionary )
-variable tcp           ( Target dictionary pointer )
-variable tlast         ( Last defined word in target )
-variable tdoVar        ( Location of doVar in target )
-variable tdoConst      ( Location of doConst in target )
-variable tdoNext       ( Location of doNext in target )
-variable tdoPrintString ( Location of .string in target )
-variable tdoStringLit  ( Location of string-literal in target )
-variable fence         ( Do not peephole optimize before this point )
-1984 constant #version ( Version number )
-5000 constant #target  ( Memory location where the target image will be built )
-2000 constant #max     ( Max number of cells in generated image )
-2    constant =cell    ( Target cell size )
--1   constant optimize ( Turn optimizations on [-1] or off [0] )
+variable assembler.1         ( Target assembler vocabulary )
+variable target.1            ( Target dictionary )
+variable tcp                 ( Target dictionary pointer )
+variable tlast               ( Last defined word in target )
+variable tdoVar              ( Location of doVar in target )
+variable tdoConst            ( Location of doConst in target )
+variable tdoNext             ( Location of doNext in target )
+variable tdoPrintString      ( Location of .string in target )
+variable tdoStringLit        ( Location of string-literal in target )
+variable fence               ( Do not peephole optimize before this point )
+1984 constant #version       ( Version number )
+5000 constant #target        ( Location where target image will be built )
+2000 constant #max           ( Max number of cells in generated image )
+2    constant =cell          ( Target cell size )
+-1   constant optimize       ( Turn optimizations on [-1] or off [0] )
 0    constant swap-endianess ( if true, swap the endianess )
 $4280 constant pad-area      ( area for pad storage )
 variable header -1 header !  ( if true target headers generated )
-$7FFF constant (rp0)   ( start of return stack )
-$4400 constant (sp0)   ( start of variable stack )
+$7FFF constant (rp0)         ( start of return stack )
+$4400 constant (sp0)         ( start of variable stack )
 
-( 1   constant verbose   ( verbosity level, higher is more verbose )
+( 1   constant verbose ( verbosity level, higher is more verbose )
 #target #max 0 fill    ( Erase the target memory location )
 
-: ]asm assembler.1 +order ; immediate        ( -- )
+: ]asm assembler.1 +order ; immediate    ( -- )
 : a: current @ assembler.1 current ! : ; ( "name" -- wid link )
-: a; [compile] ; current ! ; immediate     ( wid link -- )
+: a; [compile] ; current ! ; immediate   ( wid link -- )
 
 : ( [char] ) parse 2drop ; immediate ( "comment" -- discard until parenthesis )
 : \ source drop @ >in ! ; immediate  ( "comment" -- discard until end of line )
-: there tcp @ ;         ( -- a : target dictionary pointer value )
-: tc! #target + c! ;    ( u a -- : store character in target )
-: tc@ #target + c@ ;    ( a -- u : retrieve character from target )
-: [last] tlast @ ;      ( -- a : last defined word in target )
+: there tcp @ ;                      ( -- a : target dictionary pointer value )
+: tc! #target + c! ;                 ( u a -- : store character in target )
+: tc@ #target + c@ ;                 ( a -- u : retrieve character in target )
+: [last] tlast @ ;                   ( -- a : last defined word in target )
 : low  swap-endianess 0= if 1+ then ; ( b -- b : low byte at address )
 : high swap-endianess    if 1+ then ; ( b -- b : high byte at address)
 : t! over $FF and over high tc! swap 8 rshift swap low tc! ; ( u a -- )
@@ -325,10 +325,10 @@ a: #cpu    $1D00 a; ( CPU information )
 \ without one of these operations (generally) do not affect the stacks.
 a: d+1     $0001 or a; ( increment variable stack by one )
 a: d-1     $0003 or a; ( decrement variable stack by one )
-( a: d-2   $0002 or a; ( decrement variable stack by two )
+( a: d-2   $0002 or a; ( decrement variable stack by two, not used )
 a: r+1     $0004 or a; ( increment variable stack by one )
 a: r-1     $000C or a; ( decrement variable stack by one )
-( a: r-2   $0008 or a; ( decrement variable stack by two )
+( a: r-2   $0008 or a; ( decrement variable stack by two, not used )
 
 \ All of these instructions execute after the ALU and stack delta operations
 \ have been performed except r->pc, which occurs before. They form part of
@@ -630,59 +630,60 @@ a: return ( -- : Compile a return into the target )
 \ metacompiler, when one of these words is used in the meta-compiled program
 \ it will be implemented in assembly.
 
-: nop     ]asm  #t       alu asm[ ;
-: dup     ]asm  #t       t->n   d+1   alu asm[ ;
-: over    ]asm  #n       t->n   d+1   alu asm[ ;
-: invert  ]asm  #~t      alu asm[ ;
-: um+     ]asm  #t+n     alu asm[ ;
-: +       ]asm  #t+n     n->t   d-1   alu asm[ ;
-: um*     ]asm  #t*n     alu asm[    ;
-: *       ]asm  #t*n     n->t   d-1   alu asm[ ;
-: swap    ]asm  #n       t->n   alu asm[ ;
-: nip     ]asm  #t       d-1    alu asm[ ;
-: drop    ]asm  #n       d-1    alu asm[ ;
-: >r      ]asm  #n       t->r   d-1   r+1   alu asm[ ;
-: r>      ]asm  #r       t->n   d+1   r-1   alu asm[ ;
-: r@      ]asm  #r       t->n   d+1   alu asm[ ;
-: @       ]asm  #[t]     alu asm[ ;
-: !       ]asm  #n->[t]  d-1    alu asm[ ;
-: rshift  ]asm  #n>>t    d-1    alu asm[ ;
-: lshift  ]asm  #n<<t    d-1    alu asm[ ;
-: =       ]asm  #t==n    d-1    alu asm[ ;
-: u<      ]asm  #nu<t    d-1    alu asm[ ;
-: <       ]asm  #n<t     d-1    alu asm[ ;
-: and     ]asm  #t&n     d-1    alu asm[ ;
-: xor     ]asm  #t^n     d-1    alu asm[ ;
-: or      ]asm  #t|n     d-1    alu asm[ ;
-: sp@     ]asm  #sp@     t->n   d+1   alu asm[ ;
-: sp!     ]asm  #sp!     alu asm[ ;
-: 1-      ]asm  #t-1     alu asm[ ;
-: rp@     ]asm  #rp@     t->n   d+1   alu asm[ ;
-: rp!     ]asm  #rp!     d-1    alu asm[ ;
-: 0=      ]asm  #t==0    alu asm[ ;
-: yield?  ]asm  #bye     alu asm[ ;
-: rx?     ]asm  #rx      t->n   d+1   alu asm[ ;
-: tx!     ]asm  #tx      n->t   d-1   alu asm[ ;
-: (save)  ]asm  #save    d-1    alu asm[ ;
-: um/mod  ]asm  #um/mod  t->n   alu asm[ ;
-: /mod    ]asm  #/mod    t->n   alu asm[ ;
-: /       ]asm  #/mod    d-1    alu asm[ ;
-: mod     ]asm  #/mod    n->t   d-1   alu asm[ ;
-: vm      ]asm  #vm             alu asm[ ;
-: cpu-xchg ]asm  #cpu            alu asm[ ;
-: cpu!    ]asm #cpu n->t d-1 alu asm[ ;
-: rdrop   ]asm  #t       r-1    alu asm[ ;
+(               ALU     t->n t->r n->t rp  sp   NB. 'r->pc' in 'exit'  )
+: nop      ]asm #t                             alu asm[ ;
+: dup      ]asm #t      t->n               d+1 alu asm[ ;
+: over     ]asm #n      t->n               d+1 alu asm[ ;
+: invert   ]asm #~t                            alu asm[ ;
+: um+      ]asm #t+n                           alu asm[ ;
+: +        ]asm #t+n              n->t     d-1 alu asm[ ;
+: um*      ]asm #t*n                           alu asm[ ;
+: *        ]asm #t*n              n->t     d-1 alu asm[ ;
+: swap     ]asm #n      t->n                   alu asm[ ;
+: nip      ]asm #t                         d-1 alu asm[ ;
+: drop     ]asm #n                         d-1 alu asm[ ;
+: >r       ]asm #n           t->r      r+1 d-1 alu asm[ ;
+: r>       ]asm #r      t->n           r-1 d+1 alu asm[ ;
+: r@       ]asm #r      t->n               d+1 alu asm[ ;
+: @        ]asm #[t]                           alu asm[ ;
+: !        ]asm #n->[t]                    d-1 alu asm[ ;
+: rshift   ]asm #n>>t                      d-1 alu asm[ ;
+: lshift   ]asm #n<<t                      d-1 alu asm[ ;
+: =        ]asm #t==n                      d-1 alu asm[ ;
+: u<       ]asm #nu<t                      d-1 alu asm[ ;
+: <        ]asm #n<t                       d-1 alu asm[ ;
+: and      ]asm #t&n                       d-1 alu asm[ ;
+: xor      ]asm #t^n                       d-1 alu asm[ ;
+: or       ]asm #t|n                       d-1 alu asm[ ;
+: sp@      ]asm #sp@    t->n               d+1 alu asm[ ;
+: sp!      ]asm #sp!                           alu asm[ ;
+: 1-       ]asm #t-1                           alu asm[ ;
+: rp@      ]asm #rp@    t->n               d+1 alu asm[ ;
+: rp!      ]asm #rp!                       d-1 alu asm[ ;
+: 0=       ]asm #t==0                          alu asm[ ;
+: yield?   ]asm #bye                           alu asm[ ;
+: rx?      ]asm #rx     t->n               d+1 alu asm[ ;
+: tx!      ]asm #tx               n->t     d-1 alu asm[ ;
+: (save)   ]asm #save                      d-1 alu asm[ ;
+: um/mod   ]asm #um/mod t->n                   alu asm[ ;
+: /mod     ]asm #/mod   t->n                   alu asm[ ;
+: /        ]asm #/mod                      d-1 alu asm[ ;
+: mod      ]asm #/mod             n->t     d-1 alu asm[ ;
+: vm       ]asm #vm                            alu asm[ ;
+: cpu-xchg ]asm #cpu                           alu asm[ ;
+: cpu!     ]asm #cpu              n->t     d-1 alu asm[ ;
+: rdrop    ]asm #t                     r-1     alu asm[ ;
 \ Some words can be implemented in a single instruction which have no
 \ analogue within Forth.
-: dup@    ]asm  #[t]     t->n   d+1 alu asm[ ;
-: dup0=   ]asm  #t==0    t->n   d+1 alu asm[ ;
-: dup>r   ]asm  #t       t->r   r+1 alu asm[ ;
-: 2dup=   ]asm  #t==n    t->n   d+1 alu asm[ ;
-: 2dupxor ]asm  #t^n     t->n   d+1 alu asm[ ;
-: 2dup<   ]asm  #n<t     t->n   d+1 alu asm[ ;
-: rxchg   ]asm  #r       t->r       alu asm[ ;
-: over-and  ]asm  #t&n      alu asm[ ;
-: over-xor  ]asm  #t^n      alu asm[ ;
+: dup@     ]asm #[t]    t->n               d+1 alu asm[ ;
+: dup0=    ]asm #t==0   t->n               d+1 alu asm[ ;
+: dup>r    ]asm #t           t->r      r+1     alu asm[ ;
+: 2dup=    ]asm #t==n   t->n               d+1 alu asm[ ;
+: 2dupxor  ]asm #t^n    t->n               d+1 alu asm[ ;
+: 2dup<    ]asm #n<t    t->n               d+1 alu asm[ ;
+: rxchg    ]asm #r             t->r            alu asm[ ;
+: over-and ]asm #t&n                           alu asm[ ;
+: over-xor ]asm #t^n                           alu asm[ ;
 
 \ *for* needs the new definition of *>r* to work correctly.
 : for >r begin ;
@@ -1296,8 +1297,9 @@ h: non-blocking? cpu@ 2 and 0= ; ( -- t : non blocking mode on? )
 : key ( -- c )
     begin
       <key> @execute dup [-1] <> ?exit
-      non-blocking? if bye then 0= until ; \ @todo yield VM
-      \ non-blocking? if bye then -1 1 yield? 2drop again ;
+      \ @todo Use 'rx?' non-block return value, not 'non-blocking?', this
+      \ would mean the 'non blocking' option could be removed.
+      non-blocking? if bye then [-1] 1 yield? 2drop drop again ;
 
 \ */string*, *+string* and *count* are for manipulating strings, *count*
 \ words best on counted strings which have a length prefix, but can be used
@@ -1594,10 +1596,10 @@ h: radix base@ dup 2 - $23 u< ?exit decimal $28 -throw ; ( -- u )
 \ This combination of checking catches most errors that occur and makes sure
 \ they do not propagate.
 
-: hold  hld @ 1- dup hld ! c! fallthrough;             ( c -- )
+: hold  hld @ 1- dup hld ! c! fallthrough;     ( c -- )
 h: ?hold hld @ pad $80 - u> ?exit $11 -throw ; ( -- )
-h: extract dup>r um/mod rxchg um/mod r> rot ;          ( ud ud -- ud u )
-h: digit 9 over < 7 and + [char] 0 + ;                 ( u -- c )
+h: extract dup>r um/mod rxchg um/mod r> rot ;  ( ud ud -- ud u )
+h: digit 9 over < 7 and + [char] 0 + ;         ( u -- c )
 
 \ The quartet formed by "<# # #s #>" look intimidating to the new comer, but
 \ is quite simple. They allow the format of numeric output to be controlled
@@ -1650,8 +1652,8 @@ h: (u.) 0 <# #s #> ;             ( u -- b u : turn *u* into number string )
 h: adjust over- spaces type ;    ( b n n -- )
 h: d5u.r dup fallthrough;        ( u -- u )
 h: 5u.r 5 u.r ;                  ( u -- )
-( :  .r >r (.)( r> adjust ;       ( n n -- : print n, right justified by +n )
-: u.  (u.) h: blt space type ;;          ( u -- : print unsigned number )
+( :  .r >r (.)( r> adjust ;      ( n n -- : print n, right justified by +n )
+: u.  (u.) h: blt space type ;;  ( u -- : print unsigned number )
 :  .  radix $A xor if u. exit then (.) blt ; ( n -- print number )
 ( : >base swap base @ >r base ! execute r> base ! ; )
 ( : d. $a  '  . >base ; )
@@ -1779,7 +1781,7 @@ h: tap dup echo over c! 1+ ; ( bot eot cur c -- bot eot cur )
 \ buffer.
 
 h: delete? dup =bs = swap =del = or 0= ; ( c -- t : delete key pressed? )
-h: ktap ( bot eot cur c -- bot eot cur )
+h: ktap                                  ( bot eot cur c -- bot eot cur )
  dup =cr xor
  if delete? \ =bs xor
    if =bl tap else ^h then
@@ -1818,9 +1820,9 @@ h: raw? cpu@ 4 and 0<> ; ( c -- t : raw terminal mode? )
 \ user and stores the length of the resulting string in *span*.
 \ 
 
-: expect <expect> @execute span ! drop ;                     ( b u -- )
+: expect <expect> @execute span ! drop ;   ( b u -- )
 : query tib tib-length <expect> @execute #tib ! drop-0 fallthrough;
-h: in! >in ! ; ( u -- )
+h: in! >in ! ;                             ( u -- )
 
 \ *query* stores its results in the Terminal Input Buffer (TIB), which is way
 \ the word *tib* gets its name. The TIB is a simple data structure which
@@ -2292,10 +2294,10 @@ h: (smudge) nfa $80 swap toggle ; ( pwd -- )
 \ is jumped over.
 \
 
-h: count+ count + ;
+h: count+ count + ;         ( b -- b : advance address over counted string )
 h: do$ 2r> dup count+ aligned >r swap >r ; ( -- a )
 h: string-literal do$ nop ; ( -- a : do string NB. nop to fool optimizer )
-h: .string do$ print ; ( -- : print string  )
+h: .string do$ print ;      ( -- : print string  )
 
 \ To allow the meta-compilers version of *."* and *$"* to work we will need
 \ to populate two variables in the metacompiler with the correct actions.
@@ -2360,7 +2362,7 @@ h: ?error ( n -- : perform actions on error )
 h: (ok) state@ ?exit ."  ok" cr ;  ( -- : default state aware prompt )
 ( : ok <ok> @execute ; )
 
-h: eval ( -- )
+h: eval ( -- : evaluation loop, get token, evaluate, loop, prompt )
   begin
     token dup c@
   while
@@ -2407,7 +2409,7 @@ h: set-input <ok> ! id ! in! #tib 2! ;     ( n1...n5 -- )
 \ Open and reading from different files is also not needed, it is handled
 \ by the virtual machine.
 
-h: quite? 8 cpu@ and 0<> ;
+h: quite? 8 cpu@ and 0<> ; ( -- t : are we operating in quite mode? )
 : io! preset fallthrough;  ( -- : initialize I/O )
 h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
 h: hand 
@@ -2769,7 +2771,7 @@ h: (order)                                      ( w wid*n n -- wid*n w n )
 \ defined later, it requires *+order* to work.
 \ 
 
-: editor editor-voc +order ;                   ( -- )
+: editor editor-voc +order ; ( -- : load editor vocabulary )
  
 \ ## Block Word Set
 \ 
@@ -2907,7 +2909,7 @@ h: c/l/ ( c/l / ) 6 rshift ;            ( u -- u )
 h: line c/l* swap block + c/l ;         ( k u -- a u )
 h: loadline line evaluate ;             ( k u -- )
 : load 0 l/b-1 for 2dup 2>r loadline 2r> 1+ next 2drop ; ( k -- )
-h: pipe [char] | emit ;                      ( -- )
+h: pipe [char] | emit ;                 ( -- )
 ( h: .line line -trailing $type ;       ( k u -- )
 h: .border 3 spaces c/l [char] - nchars cr ; ( -- )
 h: #line dup 2 u.r ;                    ( u -- u : print line number )
@@ -3125,8 +3127,8 @@ h: name ( cwf -- a | 0 )
 h: ?instruction ( i m e -- i t )
    >r over-and r> = ;
 
-h: .name name ?dup if print then ; ( a -- )
-h: .instruction ( u -- )
+h: .name name ?dup if print then ; ( a -- : find word by address, and print )
+h: .instruction                    ( u -- : decompile a single instruction )
    0x8000  0x8000 ?instruction if [char] L emit $7FFF and u. exit then
    $6000   $6000  ?instruction if [char] A emit drop ( space .alu ) exit then
    $6000   $4000  ?instruction if [char] C emit space .name  exit then
@@ -3204,7 +3206,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 
 : .s depth begin ?dup while dup pick . 1- repeat ."  <sp" cr ; ( -- )
 
-h: dm+ chars for aft dup@ space 5u.r cell+ then next ;   ( a u -- a )
+h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
 ( h: dc+ chars for aft dup@ space decompile cell+ then next ; ( a u -- a )
 
 : dump ( a u -- )

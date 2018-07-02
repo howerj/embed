@@ -8,8 +8,11 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <windows.h>
 
-static int getch_wrapper(int fd, bool *eagain) /* Set terminal to raw mode */
+static bool a_tty = false;
+
+static int getch_wrapper(bool *eagain)
 {
 	bool again = false;
 	int ch = EOF;
@@ -24,9 +27,13 @@ static int getch_wrapper(int fd, bool *eagain) /* Set terminal to raw mode */
 static int win_getch(void *file, int *no_data)
 {
 	assert(no_data); /*zero is a valid file descriptor*/
-	int fd = (int)(intptr_t)file;
+	FILE *in = (FILE*)file;
 	bool eagain = false;
-	int r = getch_wrapper(fd, &eagain);
+	if(in) {
+		*no_data = 0;
+		return fgetc(in);
+	}
+	int r = getch_wrapper(&eagain);
 	*no_data = eagain ? -1 : 0;
 	return r;
 }
@@ -42,17 +49,20 @@ int main(void)
 {
 	int r;
 	embed_vm_option_e options = 0;
+	FILE *in = stdin;
 
-	//if(isatty(fd)) {
-		fprintf(stdout, "TTY RAW/NO-BLOCKING - UART Simulation\n");
+	if(_isatty(_fileno(stdin))) {
+		embed_info("TTY RAW/NO-BLOCKING - UART Simulation");
 		options |= EMBED_VM_RX_NON_BLOCKING | EMBED_VM_RAW_TERMINAL;
-	//} else {
-	//	fprintf(stdout, "NOT A TTY\n");
-	//}
+		a_tty = true;
+		in = NULL;
+	} else {
+		embed_info("NOT A TTY");
+	}
 
 	embed_opt_t o = {
 		.get      = win_getch, .put   = win_putch, .save = embed_save_cb,
-		.in       = 0,         .out   = stdout,    .name = NULL, 
+		.in       = in,        .out   = stdout,    .name = NULL, 
 		.callback = NULL,      .param = NULL,
 		.options  = options
 	};
@@ -61,8 +71,8 @@ int main(void)
 	if(!h)
 		embed_fatal("embed: allocate failed");
 	/**@todo fix yield in Forth image so this works */
-	for(r = 0; (r = embed_vm(h, &o)) > 0; /*usleep(10 * 1000uLL)*/)
-		;
+	for(r = 0; (r = embed_vm(h, &o)) > 0; Sleep(10/*milliseconds*/))
+		/*fputc('.', stdout)*/ /*do nothing*/;
 	return r;
 }
 

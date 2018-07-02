@@ -214,20 +214,20 @@ $4400 constant (sp0)         ( start of variable stack )
   [char] " word count dup tc, 1- for count tc, next drop talign update-fence ;
 : tcells =cell * ;             ( u -- a )
 : tbody 1 tcells + ;           ( a -- a )
-\ : tcfa cfa ;
-\ : tnfa nfa ;
+: tcfa cfa ;
+: tnfa nfa ;
 : meta! ! ;                    ( u a --  )
 : dump-hex #target there $10 + dump ; ( -- )
-: locations ( -- : list all words and locations in target dictionary )
-  target.1 @
-  begin
-    ?dup
-  while
-    dup
-    nfa count type space dup
-    cfa >body @ u. cr
-    $3FFF and @
-  repeat ;
+( : locations ( -- : list all words and locations in target dictionary )
+(  target.1 @ )
+(  begin ) 
+(    ?dup ) 
+(  while ) 
+(    dup )
+(    nfa count type space dup )
+(    cfa >body @ u. cr )
+(    $3FFF and @ )
+(  repeat ; )
 : display ( -- : display metacompilation and target information )
 (  verbose 0= if exit then )
   hex
@@ -423,8 +423,8 @@ a: return ( -- : Compile a return into the target )
 \ meta-compilers definitions.
 \
  
-: compile-only tlast @ t@ $8000 or tlast @ t! ; ( -- )
-: immediate tlast @ t@ $4000 or tlast @ t! ;    ( -- )
+: compile-only tlast @ tnfa t@ $20 or tlast @ tnfa t! ; ( -- )
+: immediate    tlast @ tnfa t@ $40 or tlast @ tnfa t! ; ( -- )
 
 \ *mcreate* creates a word in the metacompilers dictionary, not the targets.
 \ For each word we create in the meta-compiled Forth we will need to create
@@ -1336,25 +1336,11 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
 ( : random ( -- u : pseudo random number )
 (  seed @ 0= seed toggle seed @ 0 ccitt dup seed ! ; )
 
-\ *address* and *@address* are for use with the previous word point in the word
-\ header,  the top two bits for other purposes (a *compile-only* and an
-\ *immediate* word bit). This makes traversing the dictionary a little more
-\ tricker than normal, and affects functions like *words* and *search-wordlist*
-\ Code can only exist in the first 16KiB of space anyway, so the top two bits
-\ cannot be used for anything else. It is debatable as to what the best way
-\ of marking words as immediate is, to use unused bits in a word header, or to
-\ place *immediate* words in a special vocabulary which a minority of Forths
-\ do. Most Forths use the *unused-bits-in-word-header* approach.
-\
-
-h: @address @ fallthrough;             ( a -- a )
-h: address $3FFF and ;                 ( a -- a : mask off address bits )
-
 \ *last* gets a pointer to the most recently defined word, which is used to
 \ implement words like *recurse*, as well as in words which must traverse the
 \ current word list.
 
-h: last get-current @address ;         ( -- pwd )
+h: last get-current @ ;         ( -- pwd )
 
 \ A few character emitting words will now be defined, it should be obvious
 \ what these words do, *emit* is the word that forms the basis of all these
@@ -1958,19 +1944,21 @@ h: in! >in ! ;                             ( u -- )
 \ *nfa* and *cfa* both take a pointer to the *PWD* field and adjust it to
 \ point to different sections of the word.
 
-: nfa address cell+ ; ( pwd -- nfa : move to name field address)
-: cfa nfa dup c@ + cell+ down ; ( pwd -- cfa )
+h: word.count count fallthrough; ( nfa -- u : get a words length )
+h: word.length $1F and ; 
+: nfa cell+ ; ( pwd -- nfa : move to name field address)
+: cfa nfa dup c@ word.length + cell+ down ; ( pwd -- cfa )
 
 \ *.id* prints out a words name field.
 
-h: .id dup nfa print space ;          ( pwd -- pwd : print out a word )
+h: .id dup nfa word.count type space ; ( pwd -- pwd : print out a word )
 
 \ *immediate?*, *compile-only?* and *inline?* are the tests words that
 \ all take a pointer to the *PWD* field.
 
-h: immediate? $4000 fallthrough;  ( pwd -- t : is word immediate? )
-h: set? swap @ and 0<> ;          ( a u -- t : it any of 'u' set? )
-h: compile-only? 0x8000 set? ;    ( pwd -- t : is word compile only? )
+h: immediate? nfa $40 fallthrough; ( pwd -- t : is word immediate? )
+h: set? swap @ and 0<> ;           ( a u -- t : it any of 'u' set? )
+h: compile-only? nfa $20 set? ;    ( pwd -- t : is word compile only? )
 h: inline? inline-start inline-end within ; ( pwd -- t : is word inline? )
 
 \ Now we know the structure of the dictionary we can define some words that
@@ -1999,12 +1987,12 @@ h: searcher ( a wid -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word in a WID )
   begin
     dup
   while
-    dup nfa count r@ count compare 0=
+    dup nfa count $9F ( $1F + $80 ) and r@ count compare 0=
     if ( found! )
       rdrop
       dup immediate? 1 or negate exit
     then
-    nip dup @address
+    nip dup@
   repeat
   rdrop 2drop-0 ;
 
@@ -2241,7 +2229,7 @@ h: ?compile dup compile-only? 0= ?exit source type $E -throw ;
 \ of dictionary manipulation words.
 \ NB. *compile* only works for words, instructions, and numbers below $8000
 : compile  r> dup@ , cell+ >r ; compile-only ( --:Compile next compiled word )
-: immediate $4000 last fallthrough; ( -- : previous word immediate )
+: immediate $40 last nfa fallthrough; ( -- : previous word immediate )
 h: toggle tuck @ xor swap! ;        ( u a -- : xor value at addr with u )
 ( : compile-only 0x8000 last toggle ; )
 
@@ -2502,7 +2490,7 @@ h: ?unique ( a -- a : print a message if a word definition is not unique )
   dup get-current searcher 0= ?exit
     ( source type )
   space
-  2drop last-def @ nfa print  ."  redefined" cr ;
+  2drop last-def @ nfa word.count type ."  redefined" cr ;
 h: ?nul ( b -- : check for zero length strings )
    dup c@ ?exit $A -throw ;
 
@@ -2516,7 +2504,7 @@ h: find-cfa find-token cfa ;                         ( -- xt, <string> )
 : ; ( ?quit ) ?check =exit , postpone [ fallthrough; immediate compile-only
 h: get-current! ?dup if get-current ! exit then ; ( -- wid )
 : : align here dup last-def ! ( "name", -- colon-sys )
-  last , token ?nul ?unique count+ cp! magic postpone ] ; ( NB. need postpone!)
+  last , token ?nul ?unique count+ cp! magic postpone ] ;
 : begin here  ; immediate compile-only   ( -- a )
 : again chars , ; immediate compile-only ( a -- )
 : until $4000 or postpone again ; immediate compile-only ( a --, NB. again !? )
@@ -2705,7 +2693,7 @@ h: not-hidden? nfa c@ $80 and 0= ; ( pwd -- )
 h: .words
     begin
       ?dup
-    while dup not-hidden? if .id then @address repeat cr ;
+    while dup not-hidden? if .id then @ repeat cr ;
 : words
   get-order begin ?dup while swap dup cr u. colon-space @ .words 1- repeat ;
 
@@ -3096,13 +3084,13 @@ h: normal-running hi quit ;                                ( -- : boot word )
 h: validate over cfa <> if drop-0 exit then nfa ; ( pwd cfa -- nfa | 0 )
 
 h: search-for-cfa ( wid cfa -- nfa : search for CFA in a word list )
-  address cells >r
+  cells >r
   begin
-    dup
+    dup 
   while
-    address dup @address over r@ -rot within
-    if dup @address r@ validate ?dup if rdrop nip exit then then
-    address @
+    dup@ over r@ -rot within
+    if dup@ r@ validate ?dup if rdrop nip exit then then
+    @
   repeat rdrop ;
 
 h: name ( cwf -- a | 0 )
@@ -3117,17 +3105,18 @@ h: name ( cwf -- a | 0 )
 \ h: neg? dup 2 and if $FFFE or then ;
 \ h: .alu ( u -- )
 \   dup ." alu(" 8 rshift $1F and 2 u.r ." ) " 
-\   dup $03 and ." d("          neg? . ." ) " 
-\   dup $0C and ." r(" 2 rshift neg? . ." ) "
-\   dup $10 and if ." r->p " then
-\   dup $20 and if ." n->t " then
+\   dup $80 and if ." t->n " then 
 \   dup $40 and if ." t->r " then
-\   dup $80 and if ." t->n " then drop ;
-
+\   dup $20 and if ." n->t " then
+\   dup $10 and if ." r->p " then
+\   dup $0C and ." r(" 2 rshift neg? . ." ) "
+\       $03 and ." d("          neg? . ." ) " ;
+ 
 h: ?instruction ( i m e -- i t )
    >r over-and r> = ;
 
-h: .name name ?dup if print then ; ( a -- : find word by address, and print )
+( a -- : find word by address, and print )
+h: .name name ?dup if word.count type then ; 
 h: .instruction                    ( u -- : decompile a single instruction )
    0x8000  0x8000 ?instruction if [char] L emit $7FFF and u. exit then
    $6000   $6000  ?instruction if [char] A emit drop ( space .alu ) exit then

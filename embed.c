@@ -25,7 +25,7 @@ void embed_die(void)                              { exit(EXIT_FAILURE); }
 
 static void _embed_logger(embed_log_level_e level, const char *file, const char *func, unsigned line, const char *fmt, va_list arg) {
 	assert(file && func && fmt && level < EMBED_LOG_LEVEL_ALL_ON);
-	if(level >= embed_log_level_get())
+	if(level > embed_log_level_get())
 		goto end;
 	static const char *str[] = {
 		[EMBED_LOG_LEVEL_ALL_OFF]  =  "all-off",
@@ -211,12 +211,39 @@ embed_opt_t embed_options_default(void) {
 #ifdef NDEBUG
 #define trace(OPT,M,PC,INSTRUCTION,T,RP,SP)
 #else
+static int extend(uint16_t dd) { return dd & 2 ? (s_t)(dd | 0xFFFE) : dd; }
+
+static int disassemble(m_t instruction, char *output, size_t length)
+{
+	if(0x8000 & instruction) {
+		return snprintf(output, length, "literal %04x", (unsigned)(0x1FFF & instruction));
+	} else if ((0xE000 & instruction) == 0x6000) {
+		const char *ttn    =  instruction & 0x80 ? "t->n  " : "      ";
+		const char *ttr    =  instruction & 0x40 ? "t->r  " : "      ";
+		const char *ntt    =  instruction & 0x20 ? "n->t  " : "      ";
+		const char *rtp    =  instruction & 0x10 ? "r->pc " : "      ";
+		const unsigned alu = (instruction >> 8) & 0x1F;
+		const int rd       = extend((instruction >> 2) & 0x3);
+		const int dd       = extend((instruction     ) & 0x3);
+		return snprintf(output, length, "alu     %02x    %s%s%s%s rd(%2d) dd(%2d)", alu, ttn, ttr, ntt, rtp, rd, dd);
+	} else if (0x4000 & instruction) {
+		return snprintf(output, length, "call    %04x", (unsigned)((0x1FFF & instruction)*2));
+	} else if (0x2000 & instruction) {
+		return snprintf(output, length, "0branch %04x", (unsigned)((0x1FFF & instruction)*2));
+	} else {
+		return snprintf(output, length, "branch  %04x", (unsigned)(instruction*2));
+	}
+}
+
 static inline void trace(embed_opt_t const * const o, m_t const * const m, m_t pc, m_t instruction, m_t t, m_t rp, m_t sp) {
 	if(!(o->options & EMBED_VM_TRACE_ON) || !(o->put))
 		return;
-	char buf[32] = { 0 };
-	snprintf(buf, sizeof buf, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, (cell_t)(mr(m, 2+SHADOW)-rp), (cell_t)(sp-mr(m, 3+SHADOW)));
+	char buf[64] = { 0 };
+	snprintf(buf, sizeof buf, "[ %4x %4x %4x %2x %2x : ", pc-1, instruction, t, (cell_t)(mr(m, 2+SHADOW)-rp), (cell_t)(sp-mr(m, 3+SHADOW)));
 	embed_puts(o, buf);
+	disassemble(instruction, buf, sizeof buf);
+	embed_puts(o, buf);
+	embed_puts(o, " ]\n");
 }
 #endif
 

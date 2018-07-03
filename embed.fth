@@ -1186,16 +1186,6 @@ h: @execute @ ?dup if execute exit then ;  ( cfa -- )
   lshift over @
   $FF r> 8 xor lshift and or swap! ;
 
-\ *command?* will be used later for words that are state aware. State awareness
-\ and whether the interpreter is in command mode, or compile mode, as well as
-\ immediate words, will require a lot of explanation for the beginner until
-\ they are understood. This is best done elsewhere. *command?* is used to
-\ determine if the interpreter is in command mode or not, it returns true
-\ if it is.
-\
-
-h: command? state@ 0= ;               ( -- t )
-
 \ *here*, *align*, *cp!* and *allow* all manipulate the dictionary pointer,
 \ which is a common operation. *align* aligns the pointer up to the next
 \ cell boundary, and *cp!* sets the dictionary pointer to a value whilst
@@ -1987,7 +1977,7 @@ h: searcher ( a wid -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word in a WID )
   begin
     dup
   while
-    dup nfa count $9F ( $1F + $80 ) and r@ count compare 0=
+    dup nfa count $9F ( $1F:word-length + $80:hidden ) and r@ count compare 0=
     if ( found! )
       rdrop
       dup immediate? 1 or negate exit
@@ -2201,7 +2191,7 @@ h: $compile dup inline? if cfa @ , exit then cfa compile, ; ( pwd -- )
 h: not-found source type $D -throw ; ( -- : throw 'word not found' )
 
 h: ?compile dup compile-only? 0= ?exit source type $E -throw ;
-: (literal) command? ?exit postpone literal ; ( u -- u | )
+: (literal) state@ 0= ?exit postpone literal ; ( u -- u | )
 : interpret ( ??? a -- ??? : The command/compiler loop )
   \ dup count type space ( <- for tracing the parser )
   find ?dup if
@@ -2500,7 +2490,7 @@ h: find-cfa find-token cfa ;                         ( -- xt, <string> )
 : ' find-cfa state@ if postpone literal exit then ; immediate
 : [compile] find-cfa compile, ; immediate compile-only  ( --, <string> )
 : [char] char postpone literal ; immediate compile-only ( --, <string> )
-( h: ?quit command? if $38 -throw exit then ; )
+( h: ?quit state@ 0= if $38 -throw exit then ; )
 : ; ( ?quit ) ?check =exit , postpone [ fallthrough; immediate compile-only
 h: get-current! ?dup if get-current ! exit then ; ( -- wid )
 : : align here dup last-def ! ( "name", -- colon-sys )
@@ -3083,12 +3073,13 @@ h: normal-running hi quit ;                                ( -- : boot word )
 
 h: validate over cfa <> if drop-0 exit then nfa ; ( pwd cfa -- nfa | 0 )
 
-h: search-for-cfa ( wid cfa -- nfa : search for CFA in a word list )
-  cells >r
+h: address $1FFF and ; ( u -- u : mask off address bits )
+h: search-for-cfa ( wid cfa -- nfa | 0 : search for CFA in a word list )
+  cells address >r
   begin
     dup 
   while
-    dup@ over r@ -rot within
+    dup@ over r@ -rot  within
     if dup@ r@ validate ?dup if rdrop nip exit then then
     @
   repeat rdrop ;
@@ -3102,15 +3093,15 @@ h: name ( cwf -- a | 0 )
      swap r@ search-for-cfa ?dup if >r 1- ndrop r> rdrop exit then
    1- repeat rdrop ;
 
-\ h: neg? dup 2 and if $FFFE or then ;
-\ h: .alu ( u -- )
-\   dup ." alu(" 8 rshift $1F and 2 u.r ." ) " 
-\   dup $80 and if ." t->n " then 
-\   dup $40 and if ." t->r " then
-\   dup $20 and if ." n->t " then
-\   dup $10 and if ." r->p " then
-\   dup $0C and ." r(" 2 rshift neg? . ." ) "
-\       $03 and ." d("          neg? . ." ) " ;
+( h: neg? dup 2 and if $FFFE or then ; )
+( h: .alu  ( u -- ) 
+(   dup ." alu{" 8 rshift $1F and 2 u.r ." } "  )
+(   dup $80 and if ." t->n " then  )
+(   dup $40 and if ." t->r " then )
+(   dup $20 and if ." n->t " then )
+(   dup $10 and if ." r->p " then )
+(   dup $0C and ." r{" 2 rshift neg? . ." } " )
+(       $03 and ." d{"          neg? . ." } " ; )
  
 h: ?instruction ( i m e -- i t )
    >r over-and r> = ;
@@ -3122,7 +3113,7 @@ h: .instruction                    ( u -- : decompile a single instruction )
    $6000   $6000  ?instruction if [char] A emit drop ( space .alu ) exit then
    $6000   $4000  ?instruction if [char] C emit space .name  exit then
    $6000   $2000  ?instruction if [char] Z emit space .name  exit then
-   drop [char] B emit ;
+   [char] B emit space .name ;
 
 h: decompiler ( previous current -- : decompile starting at address )
   >r
@@ -3193,8 +3184,8 @@ h: decompiler ( previous current -- : decompile starting at address )
 (   rdepth for aft r@  rpick then next \ NB. Prints out it's own loop counter )
 (   rdepth for aft u. then next ; )
 
-: .s depth begin ?dup while dup pick . 1- repeat ."  <sp" cr ; ( -- )
 
+: .s depth begin ?dup while dup pick . 1- repeat ."  <sp" cr ; ( -- )
 h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
 ( h: dc+ chars for aft dup@ space decompile cell+ then next ; ( a u -- a )
 

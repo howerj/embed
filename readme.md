@@ -1,25 +1,24 @@
 # embed: A tiny embeddable Forth interpreter
 
-| Project   | Embed Forth VM and eForth Image |
-| --------- | ------------------------------- |
-| Author    | Richard James Howe              |
-| Copyright | 2017-2018 Richard James Howe    |
-| License   | MIT                             |
-| Email     | howe.r.j.89@gmail.com           |
+| Project   | Embed Forth VM and eForth Image   |
+| --------- | --------------------------------- |
+| Author    | Richard James Howe                |
+| Copyright | 2017-2018 Richard James Howe      |
+| License   | MIT                               |
+| Email     | howe.r.j.89@gmail.com             |
+| Website   | <https://github.com/howerj/embed> |
 
-Available at <https://github.com/howerj/embed>
-
-This project contains a tiny virtual machine (VM) optimized to execute 
+This project contains a tiny 16-bit Virtual Machine (VM) optimized to execute 
 [Forth][]. It is powerful and well developed enough to be self hosted, 
 the VM and Forth interpreter image can be used to recreate a new image from
 source (which is in [embed.fth][]). [embed.fth][] contains a more complete
-description of the Forth interpreter, the virtual machine (which is only ~200
+description of the Forth interpreter, the virtual machine (which is only ~400
 Lines of C code) and how a Forth "meta-compiler" works.
 
 The virtual machine is available as a library, as well, so it can be
 **embedded** into another project, hence the project name. The virtual machine
-([embed.c][] and [embed.h][]), the eForth image ([embed.blk][] and [image.c][]), 
-and the metacompiler ([embed.fth][]) are all licensed under the [MIT License][].
+([embed.c][] and [embed.h][]), the eForth image ([image.c][]), and the metacompiler 
+([embed.fth][]) are all licensed under the [MIT License][].
 
 Feel free to [email me][] about any problems, or [open up an issue on GitHub][].
 
@@ -29,10 +28,10 @@ To build the project you will need a [C compiler][], and [make][]. The
 system should build under [Linux][] and [Windows][] (MinGW). After installing
 [make][] and a [C99][] compiler, simply type "make" to build the
 Forth virtual machine. An image containing a working Forth
-implementation is contained within [embed.blk][], there is also one built into
+implementation is contained within [image.c][], which is built into
 the executable.
 
-Linux:
+Linux/Unixen:
 
 	./embed
 
@@ -53,21 +52,21 @@ following command should build the project:
 
 	cc -std=c99 main.c embed.c image.c -o embed
 
-Generating a new image is easy as well:
+Generating a new image is easy as well (using the built in image):
 
-	./embed -o new.blk -i embed.blk embed.fth
+	./embed -o new.blk embed.fth
 
 We can then use the new image to generate a further image:
 
 	./embed -o new2.blk -i new.blk embed.fth
 
-Ad infinitum, the two newly generated images should be byte for byte equal
-([embed.blk][] may differ as the latest image might not be checked in).
+Ad infinitum, the two newly generated images should be byte for byte equal.
+
 
 Unit tests can be ran typing:
 
-	make tests                            # Using make
-	./embed unit.blk embed.blk t/unit.fth # manual invocation
+	make tests                     # Using make
+	./embed -o unit.blk t/unit.fth # manual invocation
 
 ## Project Organization
 
@@ -75,19 +74,34 @@ Unit tests can be ran typing:
 * [embed.h][]: The Embed Virtual Machine library interface
 * [main.c][]: Test driver for the Virtual Machine Library
 * [image.c][]: A Forth interpreter image, C code
-* [embed.blk][]: A Forth interpreter image, Binary
 * [embed.fth][]: A meta compiler and a Forth interpreter
 * [unit.fth][]: Unit tests for the eForth image
 
-## To Do
+## Example Programs and Tests
+
+Example programs and tests exist under the 't/' directory, these include test
+programs written in C that can extend the virtual machine with new
+functionality or change the input and out mechanisms to the virtual machine.
+
+* [call.c][]:  Extends the virtual machine with floating point operations
+* [unix.c][]:  Unix non-blocking and raw terminal I/O handling test
+* [win.c][]:   Windows equivalent of [unix.c][].
+* [cpp.cpp][]: C++ test program to make sure library header is C++ compatible
+
+## Project Goals
+
+The goal of the project is to create a VM which is tiny, embeddable, 
+customizable through callbacks and most importantly self-hosting. It achieves
+all of these goals, but might fall short.
 
 * [x] Self-Hosting Metacompiler
 * [x] Man pages
 * [x] Document project
 * [x] Forth Unit tests
-* [ ] C Unit tests
+* [ ] C Unit tests, to test the library API
 * [x] C Test programs
-  * [ ] Test applications that integrate with OpenGL, and Windows/Unix non-block I/O 
+  * [x] Test applications for Windows/Unix non-block I/O, and callback
+    extensions.
 * [ ] Virtual Machine and eForth Image/Metacompiler that uses 'uintptr\_t'
 
 [MIT License]: LICENSE
@@ -97,6 +111,10 @@ Unit tests can be ran typing:
 [image.c]: image.c
 [unit.fth]: t/unit.fth
 [embed.fth]: embed.fth
+[call.c]: t/call.c
+[unix.c]: t/unix.c
+[win.c]: t/win.c
+[cpp.cpp]: t/cpp.cpp
 [C compiler]: https://gcc.gnu.org/
 [make]: https://www.gnu.org/software/make/
 [Windows]: https://en.wikipedia.org/wiki/Microsoft_Windows

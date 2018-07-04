@@ -23,6 +23,7 @@ void embed_log_level_set(embed_log_level_e level) { global_log_level = level; }
 embed_log_level_e embed_log_level_get(void)       { return global_log_level; }
 void embed_die(void)                              { exit(EXIT_FAILURE); }
 
+/*NB. Logging and other helper functions probably do not belong in this library */
 static void _embed_logger(embed_log_level_e level, const char *file, const char *func, unsigned line, const char *fmt, va_list arg) {
 	assert(file && func && fmt && level < EMBED_LOG_LEVEL_ALL_ON);
 	if(level > embed_log_level_get())

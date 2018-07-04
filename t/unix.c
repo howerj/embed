@@ -1,3 +1,35 @@
+/**@brief Embed Unix UART simulation, for Unix
+ * @license MIT
+ * @author Richard James Howe
+ * @file unix.c
+ *
+ * See <https://github.com/howerj/embed>
+ *
+ * This program demonstrates using the embed library with a non-blocking source
+ * of keyboard input, this allows a virtual machine image to yield when it has
+ * nothing to do. There is a Windows equivalent to this in a file called
+ * 'win.c'.
+ * 
+ * The program implements a custom callback that the virtual machine can use
+ * which gets input from a file descriptor that might be a terminal, if it is,
+ * then it will set that file descriptor into raw mode, and non-blocking mode
+ * (which is separate from raw mode).
+ *
+ * In non blocking mode if the user has not hit a key the call back sets its
+ * 'no_data' parameter to a non-zero value, indicating to the program running
+ * under the virtual machine that there is no data - at this time. If the user
+ * has hit a key, it returns the key value and 'no_data' should be set to zero.
+ *
+ * This program also tests that the default virtual machine image handles raw
+ * mode correctly. Unlike handling a non-blocking input source, the virtual
+ * machine needs to be told explicitly that the terminal is acting in raw mode.
+ * This mode means that input is unbuffered and input characters are not echoed
+ * back to the user by the terminal handling program - instead the eForth image
+ * must echo back characters and handle character deletion.
+ *
+ * See <https://unix.stackexchange.com/questions/21752> for the difference
+ * between 'raw' and 'cooked' modes. */
+
 #include "embed.h"
 
 #define _POSIX_C_SOURCE 200809L
@@ -13,8 +45,9 @@
 static struct termios old, new;
 static int fd = -1;
 
-static int getch(int fd, bool *eagain) /* Set terminal to raw mode */
-{
+#define ESCAPE (27) /**< ASCII Escape Character */
+
+static int getch(int fd, bool *eagain) { /* Set terminal to raw mode */
 	uint8_t b = 0;
 	bool again = false;
 	errno = 0;
@@ -25,8 +58,7 @@ static int getch(int fd, bool *eagain) /* Set terminal to raw mode */
 	return r == 1 ? (int)b : EOF;
 }
 
-static int raw(int fd)
-{
+static int raw(int fd) {
 	errno = 0;
 	if(tcgetattr(fd, &old) < 0)
 		return -1;
@@ -43,47 +75,46 @@ static int raw(int fd)
 	return 0;
 }
 
-static void cooked(void)
-{
+static void cooked(void) {
 	tcsetattr(fd, TCSANOW, &old);
 }
 
-static int unix_getch(void *file, int *no_data)
-{
+static int unix_getch(void *file, int *no_data) {
 	assert(no_data); /*zero is a valid file descriptor*/
 	int fd = (int)(intptr_t)file;
 	bool eagain = false;
 	int r = getch(fd, &eagain);
 	*no_data = eagain ? -1 : 0;
+	r = r == ESCAPE ? EOF : r;
 	return r;
 }
 
-static int unix_putch(int ch, void *file)
-{
+static int unix_putch(int ch, void *file) {
 	int r = fputc(ch, file);
 	fflush(file);
 	return r;
 }
 
-int main(void)
-{
+int main(void) {
 	int r;
 	embed_vm_option_e options = 0;
+	FILE *out = stdout;
 
 	fd = STDIN_FILENO;
 	if(isatty(fd)) {
-		fprintf(stdout, "TTY RAW/NO-BLOCKING - UART Simulation\n");
-		options |= EMBED_VM_RX_NON_BLOCKING | EMBED_VM_RAW_TERMINAL;
+		embed_info("TTY RAW/NO-BLOCKING - UART Simulation", out);
+		embed_info("Hit ESCAPE or type 'bye' to quit", out);
+		options |= EMBED_VM_RAW_TERMINAL;
 		if(raw(fd) < 0)
 			embed_fatal("failed to set terminal attributes: %s", strerror(errno));
 		atexit(cooked);
 	} else {
-		fprintf(stdout, "NOT A TTY\n");
+		embed_info("NOT A TTY", out);
 	}
 
 	embed_opt_t o = {
 		.get      = unix_getch,           .put   = unix_putch, .save = embed_save_cb,
-		.in       = (void*)(intptr_t)fd,  .out   = stdout,     .name = NULL, 
+		.in       = (void*)(intptr_t)fd,  .out   = out,     .name = NULL, 
 		.callback = NULL,                 .param = NULL,
 		.options  = options
 	};
@@ -91,9 +122,14 @@ int main(void)
 	embed_t *h = embed_new();
 	if(!h)
 		embed_fatal("embed: allocate failed");
-	/**@todo fix yield in Forth image so this works */
-	for(r = 0; (r = embed_vm(h, &o)) > 0; usleep(10 * 1000uLL))
-		;
+	/* NB. The eForth image will return '1' if there is more work to do,
+	 * '0' on successful exit (with no more work to do) and negative on an
+	 * error (with no more work to do). This is however only by convention,
+	 * another image that is not the default image is free to return
+	 * whatever it likes. Also, we call 'usleep()' here, but we could do
+	 * other work if we wanted to. */
+	for(r = 0; (r = embed_vm(h, &o)) > 0; )
+		usleep(10 * 1000uLL);
 	return r;
 }
 

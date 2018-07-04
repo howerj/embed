@@ -1,3 +1,14 @@
+/**@brief Convert a binary file into a C data structure
+ * @file b2c.c
+ * @author Richard James Howe
+ * @license MIT
+ *
+ * This is a simple utility to convert a file into a C data structure, it tries
+ * to pack the structure as densely as possible by using decimal (hexadecimal
+ * requires a '0x' for each character) and by placing as many bytes on a 80
+ * character line as is possible.
+ */
+
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -5,10 +16,9 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#define N (20)
+#define N (20) /**< column with is N*4 */
 
-static FILE *fopen_or_die(const char * const file, const char * const mode)
-{
+static FILE *fopen_or_die(const char * const file, const char * const mode) {
 	assert(file && mode);
 	errno = 0;
 	FILE *r = fopen(file, mode);
@@ -19,8 +29,7 @@ static FILE *fopen_or_die(const char * const file, const char * const mode)
 	return r;
 }
 
-static int header(FILE *out, const char *var, const char *msg)
-{
+static int header(FILE *out, const char *var, const char *msg) {
 	const char *fmt  ="\
 /* %s */\n\
 #include <stdint.h>\n\
@@ -30,8 +39,7 @@ const uint8_t %s[] = {\n";
 	return fprintf(out, fmt, msg, var);
 }
 
-static int line(FILE *out, const uint8_t *b, size_t n, size_t rrr)
-{
+static int line(FILE *out, const uint8_t *b, size_t n, size_t rrr) {
 	int r = rrr;
 	for(size_t i = 0; i < n; i++) {
 		r += fprintf(out, "%u,", b[i]);
@@ -43,16 +51,35 @@ static int line(FILE *out, const uint8_t *b, size_t n, size_t rrr)
 	return r;
 }
 
-static int tail(FILE *out, size_t total, const char *var)
-{
+static int tail(FILE *out, size_t total, const char *var) {
 	const char *fmt = "\n};\n\n\
 const size_t %s_size = %zu;\n\n";
 	return fprintf(out, fmt, var, total);
 }
 
+static void help(FILE *output, const char *arg0)
+{
+	static const char usage[] = "\
+usage: %s variable-name image.bin image.c \"comment\"\n\n\
+b2c - convert a binary to a C data structure\n\n\
+All four options must be given to the program, they are:\n\n\
+\t* variable-name  C variable name for the byte array to be generated. Two\n\
+\t                 variables will be generated, the array with the name \n\
+\t                 specified and a variable with the name specified and a\n\
+\t                 postfix of '_size' containing the arrays size.\n\
+\t* image.bin      Any file, does not have to be binary, this file will\n\
+\t                 be converted into the byte array.\n\
+\t* image.c        The C file to generate.\n\
+\t* \"comment\"    This string will be place within a comment in the\n\
+\t                 file generated\n\n\
+LICENSE:   MIT\n\
+COPYRIGHT: Richard James Howe (2018)\n\n";
+	fprintf(output, usage, arg0);
+}
+
 int main(int argc, char **argv) {
 	if(argc != 5) {
-		fprintf(stderr, "usage: %s variable-name image.bin image.c \"comment\"\n", argv[0]);
+		help(stderr, argv[0]);
 		return -1;
 	}
 	const char *var = argv[1];

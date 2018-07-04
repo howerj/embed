@@ -1,4 +1,3 @@
-0 <ok> !
 \ This is a Forth test bench for: <https://github.com/howerj/embed>, it also
 \ contains extensions to the base interpreter, such as floating point support.
 \
@@ -1043,6 +1042,8 @@ T{ min-int min-int m* min-int sm/rem ->  0 min-int }T
 T{ min-int max-int m* min-int sm/rem ->  0 max-int }T
 T{ min-int max-int m* max-int sm/rem ->  0 min-int }T
 T{ max-int max-int m* max-int sm/rem ->  0 max-int }T
+
+
 
 T{ :noname 2 6 + ; execute -> 8 }T
 

@@ -25,7 +25,7 @@ void embed_die(void)                              { exit(EXIT_FAILURE); }
 
 static void _embed_logger(embed_log_level_e level, const char *file, const char *func, unsigned line, const char *fmt, va_list arg) {
 	assert(file && func && fmt && level < EMBED_LOG_LEVEL_ALL_ON);
-	if(level >= embed_log_level_get())
+	if(level > embed_log_level_get())
 		goto end;
 	static const char *str[] = {
 		[EMBED_LOG_LEVEL_ALL_OFF]  =  "all-off",
@@ -211,12 +211,39 @@ embed_opt_t embed_options_default(void) {
 #ifdef NDEBUG
 #define trace(OPT,M,PC,INSTRUCTION,T,RP,SP)
 #else
+static int extend(uint16_t dd) { return dd & 2 ? (s_t)(dd | 0xFFFE) : dd; }
+
+static int disassemble(m_t instruction, char *output, size_t length)
+{
+	if(0x8000 & instruction) {
+		return snprintf(output, length, "literal %04x", (unsigned)(0x1FFF & instruction));
+	} else if ((0xE000 & instruction) == 0x6000) {
+		const char *ttn    =  instruction & 0x80 ? "t->n  " : "      ";
+		const char *ttr    =  instruction & 0x40 ? "t->r  " : "      ";
+		const char *ntt    =  instruction & 0x20 ? "n->t  " : "      ";
+		const char *rtp    =  instruction & 0x10 ? "r->pc " : "      ";
+		const unsigned alu = (instruction >> 8) & 0x1F;
+		const int rd       = extend((instruction >> 2) & 0x3);
+		const int dd       = extend((instruction     ) & 0x3);
+		return snprintf(output, length, "alu     %02x    %s%s%s%s rd(%2d) dd(%2d)", alu, ttn, ttr, ntt, rtp, rd, dd);
+	} else if (0x4000 & instruction) {
+		return snprintf(output, length, "call    %04x", (unsigned)((0x1FFF & instruction)*2));
+	} else if (0x2000 & instruction) {
+		return snprintf(output, length, "0branch %04x", (unsigned)((0x1FFF & instruction)*2));
+	} else {
+		return snprintf(output, length, "branch  %04x", (unsigned)(instruction*2));
+	}
+}
+
 static inline void trace(embed_opt_t const * const o, m_t const * const m, m_t pc, m_t instruction, m_t t, m_t rp, m_t sp) {
 	if(!(o->options & EMBED_VM_TRACE_ON) || !(o->put))
 		return;
-	char buf[32] = { 0 };
-	snprintf(buf, sizeof buf, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, (cell_t)(mr(m, 2+SHADOW)-rp), (cell_t)(sp-mr(m, 3+SHADOW)));
+	char buf[64] = { 0 };
+	snprintf(buf, sizeof buf, "[ %4x %4x %4x %2x %2x : ", pc-1, instruction, t, (cell_t)(mr(m, 2+SHADOW)-rp), (cell_t)(sp-mr(m, 3+SHADOW)));
 	embed_puts(o, buf);
+	disassemble(instruction, buf, sizeof buf);
+	embed_puts(o, buf);
+	embed_puts(o, " ]\n");
 }
 #endif
 
@@ -224,10 +251,10 @@ int embed_vm(embed_t * const h, embed_opt_t * const o) {
 	assert(h && o);
 	BUILD_BUG_ON (sizeof(m_t)    != sizeof(s_t));
 	BUILD_BUG_ON((sizeof(m_t)*2) != sizeof(d_t));
-	static const m_t delta[] = { 0, 1, -2, -1 };
-	const m_t l = embed_cells(h), shadow = (!!(o->options & EMBED_VM_USE_SHADOW_REGS))*SHADOW;
+	static const m_t delta[] = { 0, 1, -2, -1 }; /* two bit signed value */
+	const m_t l = embed_cells(h); 
 	m_t * const m = h->m;
-	m_t pc = mr(m, 0+shadow), t = mr(m, 1+shadow), rp = mr(m, 2+shadow), sp = mr(m, 3+shadow), r = 0;
+	m_t pc = mr(m, 0), t = mr(m, 1), rp = mr(m, 2), sp = mr(m, 3), r = 0;
 	for(d_t d;;) {
 		const m_t instruction = mr(m, pc++);
 		trace(o, m, pc, instruction, t, rp, sp);
@@ -265,7 +292,7 @@ int embed_vm(embed_t * const h, embed_opt_t * const o) {
 			case 21: rp = t >> 1; T = n;       break;
 			case 22: if(o->save) { T = o->save(h->m, o->name, n>>1, ((d_t)t+1)>>1); } else { pc=4; T=21; } break;
 			case 23: if(o->put)  { T = o->put(t, o->out); }                           else { pc=4; T=21; } break; 
-			case 24: if(o->get)  { int nd = 0; T = o->get(o->in, &nd); n = nd; }      else { pc=4; T=21; } break;
+			case 24: if(o->get)  { int nd = 0; mw(m, ++sp, t); T = o->get(o->in, &nd); t = T; n = nd; } else { pc=4; T=21; } break;
 			case 25: if(t)       { d = mr(m, --sp)|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t)       { T=(s_t)n/t; t=(s_t)n%t; n=t; }                     else { pc=4; T=10; } break;
 			case 27: if(n)       { mw(m, sp, 0); r = t; goto finished; } break;
@@ -276,7 +303,7 @@ int embed_vm(embed_t * const h, embed_opt_t * const o) {
 					 if(r) { pc = 4; T = r; }
 				 } else { pc=4; T=21; } break;
 			case 29: T = o->options; o->options = t; break;
-			default: pc = 4; T=21;                   break;
+			default: pc = 4; T=21; /* not implemented */ break;
 			}
 			sp += delta[ instruction       & 0x3];
 			rp -= delta[(instruction >> 2) & 0x3];

@@ -1,17 +1,15 @@
-/*! This file shows how you can extend the embed virtual machine using its
+/**@brief Example program for custom callbacks with the Embed library
+ * @license MIT
+ * @author Richard James Howe
+ * @file call.c
+ *
+ * See <https://github.com/howerj/embed> for more information.
+ *
+ * This file shows how you can extend the embed virtual machine using its
  * library API to add double and floating point words to that are accessible
  * via the eForth image.
  *
- * @todo Implement extracting strings and putting strings into the interpreter
- * @todo To save forth dictionary space, the search could be done external to
- * the virtual machine for words that have not been found. The virtual
- * machine/eForth image would pass a string to the callback if it cannot find 
- * a word and the callback would search for the word, and return a token the
- * virtual machine can use to execute the word by calling the callback with
- * modified arguments.
- * @todo Use C++ templates instead, or even 'tgmath.h', perhaps even
- * <https://stackoverflow.com/questions/16522341/pseudo-generics-in-c>
- */
+ * @todo Implement extracting strings and putting strings into the interpreter */
 
 #include "embed.h"
 #include <errno.h>
@@ -157,8 +155,8 @@ static inline double_cell_t udpop(vm_extension_t * const v) {
 	return d;
 }
 
-static inline sdc_t dpop(vm_extension_t * const v)                       { return udpop(v); }
-static inline void    dpush(vm_extension_t * const v, const sdc_t value) { udpush(v, value); }
+static inline sdc_t dpop(vm_extension_t * const v)                     { return udpop(v); }
+static inline void  dpush(vm_extension_t * const v, const sdc_t value) { udpush(v, value); }
 
 typedef union { vm_float_t f; double_cell_t d; } fd_u;
 

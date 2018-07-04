@@ -251,10 +251,10 @@ int embed_vm(embed_t * const h, embed_opt_t * const o) {
 	assert(h && o);
 	BUILD_BUG_ON (sizeof(m_t)    != sizeof(s_t));
 	BUILD_BUG_ON((sizeof(m_t)*2) != sizeof(d_t));
-	static const m_t delta[] = { 0, 1, -2, -1 };
-	const m_t l = embed_cells(h), shadow = (!!(o->options & EMBED_VM_USE_SHADOW_REGS))*SHADOW;
+	static const m_t delta[] = { 0, 1, -2, -1 }; /* two bit signed value */
+	const m_t l = embed_cells(h); 
 	m_t * const m = h->m;
-	m_t pc = mr(m, 0+shadow), t = mr(m, 1+shadow), rp = mr(m, 2+shadow), sp = mr(m, 3+shadow), r = 0;
+	m_t pc = mr(m, 0), t = mr(m, 1), rp = mr(m, 2), sp = mr(m, 3), r = 0;
 	for(d_t d;;) {
 		const m_t instruction = mr(m, pc++);
 		trace(o, m, pc, instruction, t, rp, sp);
@@ -292,7 +292,7 @@ int embed_vm(embed_t * const h, embed_opt_t * const o) {
 			case 21: rp = t >> 1; T = n;       break;
 			case 22: if(o->save) { T = o->save(h->m, o->name, n>>1, ((d_t)t+1)>>1); } else { pc=4; T=21; } break;
 			case 23: if(o->put)  { T = o->put(t, o->out); }                           else { pc=4; T=21; } break; 
-			case 24: if(o->get)  { int nd = 0; T = o->get(o->in, &nd); n = nd; }      else { pc=4; T=21; } break;
+			case 24: if(o->get)  { int nd = 0; mw(m, ++sp, t); T = o->get(o->in, &nd); t = T; n = nd; } else { pc=4; T=21; } break;
 			case 25: if(t)       { d = mr(m, --sp)|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t)       { T=(s_t)n/t; t=(s_t)n%t; n=t; }                     else { pc=4; T=10; } break;
 			case 27: if(n)       { mw(m, sp, 0); r = t; goto finished; } break;
@@ -303,7 +303,7 @@ int embed_vm(embed_t * const h, embed_opt_t * const o) {
 					 if(r) { pc = 4; T = r; }
 				 } else { pc=4; T=21; } break;
 			case 29: T = o->options; o->options = t; break;
-			default: pc = 4; T=21;                   break;
+			default: pc = 4; T=21; /* not implemented */ break;
 			}
 			sp += delta[ instruction       & 0x3];
 			rp -= delta[(instruction >> 2) & 0x3];

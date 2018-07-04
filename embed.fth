@@ -662,7 +662,7 @@ a: return ( -- : Compile a return into the target )
 : rp!      ]asm #rp!                       d-1 alu asm[ ;
 : 0=       ]asm #t==0                          alu asm[ ;
 : yield?   ]asm #bye                           alu asm[ ;
-: rx?      ]asm #rx     t->n               d+1 alu asm[ ;
+: rx?      ]asm #rx     t->n      n->t     d+1 alu asm[ ;
 : tx!      ]asm #tx               n->t     d-1 alu asm[ ;
 : (save)   ]asm #save                      d-1 alu asm[ ;
 : um/mod   ]asm #um/mod t->n                   alu asm[ ;
@@ -921,7 +921,7 @@ $FFFF    tvariable dpl   ( number of places after fraction )
 : 1-       1-       ; ( u -- u : decrement top of stack )
 : 0=       0=       ; ( u -- t : if top of stack equal to zero )
 ( h: yield?  yield?   ; ( u -- !!! : exit VM with *u* as return value )
-h: rx?     rx?      ; ( -- c | -1 : fetch a single character, or EOF )
+h: rx?     rx?      ; ( -- c t | -1 t : fetch a single character, or EOF )
 h: tx!     tx!      ; ( c -- : transmit single character )
 : (save)   (save)   ; ( u1 u2 -- u : save memory from u1 to u2 inclusive )
 : um/mod   um/mod   ; ( d  u2 -- rem div : mixed unsigned divide/modulo )
@@ -1279,17 +1279,16 @@ h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 \ method used to get data can be changed.
 \
 \ It calls *bye* if the End of File character is returned (-1, which is
-\ outside the normal byte range).
+\ outside the normal byte range). It also calls *yield?* directly, instead
+\ of through *bye*, with a value to indicate that the virtual machine should
+\ yield to the process that called the virtual machine, in C, so it can do
+\ other work as there is no input available at the moment, and it loops until
+\ there is some input. All of this is transparent to the user of *key*.
 \
 
-h: non-blocking? cpu@ 2 and 0= ; ( -- t : non blocking mode on? )
-
-: key ( -- c )
-    begin
-      <key> @execute dup [-1] <> ?exit
-      \ @todo Use 'rx?' non-block return value, not 'non-blocking?', this
-      \ would mean the 'non blocking' option could be removed.
-      non-blocking? if bye then [-1] 1 yield? 2drop drop again ;
+: key ( -- c : return a  )
+    begin <key> @execute dup if nip [-1] 1 yield? 2drop then 0= until
+    dup [-1] <> ?exit bye ;
 
 \ */string*, *+string* and *count* are for manipulating strings, *count*
 \ words best on counted strings which have a length prefix, but can be used
@@ -1760,9 +1759,9 @@ h: delete? dup =bs = swap =del = or 0= ; ( c -- t : delete key pressed? )
 h: ktap                                  ( bot eot cur c -- bot eot cur )
  dup =cr xor
  if delete? \ =bs xor
-   if =bl tap else ^h then
-   exit
- then drop nip dup ;
+   if =bl tap exit then ^h exit 
+ then fallthrough;
+h: drop-nip-dup drop nip dup ;
 
 \ *accept* takes an buffer input buffer and returns a pointer and line length
 \ once a line of text has been fully entered. A line is considered fully
@@ -1785,7 +1784,7 @@ h: raw? cpu@ 4 and 0<> ; ( c -- t : raw terminal mode? )
 	\ =bl - 95 u< if tap else <tap> @execute then
 	ktap? if tap else <tap> @execute then
     else ( the terminal takes care of it )
-	=lf xor if tap else drop nip dup then
+	=lf xor if tap else drop-nip-dup then
     then
   repeat drop over- ;
 
@@ -1856,15 +1855,27 @@ h: in! >in ! ;                             ( u -- )
 \ containing the name of the Forth word, it is stored as a counted string, 
 \ which is what *pack$* was defined for.
 \
-\ The *PWD* field is not just a simple pointer, as already mentioned, it is
-\ also used to store information about the word, the top two most bits store
-\ whether a word is compile only (the top most bit) meaning the word should
-\ only be used within a word definition, being compiled into it, and whether
-\ or not the word is an immediate word or not (the second highest bit in the
-\ *PWD* field). Another property of a word is whether it is an inline word
-\ or not, which is a property of the location of where the word is defined,
-\ and applies to words like *r@* and *r>*, this is done by checking to see
-\ if the word is between two sentinel values.
+\ The *NFA* field is not just a simple counted string, the maximum length
+\ of a word string is 31 characters, this means that the top three bits are
+\ available for use for other purposes. The top bit is used as the hidden
+\ word field, if set the word will not be found when searching through the
+\ dictionary. The next bit after the topmost bit is the 'immediate' bit, if
+\ set then the word is an *immediate* word, the bit after that is for whether
+\ a word is *compile-only*, if set then the word should only be used compiled
+\ into a word and never at run time. Previously the two top most bits in the
+\ *PWD* field were used for the *immediate* and *compile-only* bits, as those
+\ bits in the address field were unused, which complicated iterating through
+\ the dictionaries linked list. In the current scheme, word access is
+\ complicated, but this is largely hidden behind standard words.
+\
+\ As an aside, We do not need a 'hidden' bit, we could just set the length to 
+\ zero however we would not be able to un-hide words. Zero length word
+\ definitions are not allowed, so this would work.
+\
+\ Another property of a word is whether it is an inline word or not, which is 
+\ a property of the location of where the word is defined, and applies to words
+\ like *r@* and *r>*, this is done by checking to see  if the word is between 
+\ two sentinel values.
 \
 \ Immediate and compiling words are a very important concept in Forth, and it
 \ is possible for the programmer to define their own immediate words. The
@@ -2166,7 +2177,7 @@ h: token =bl word ;                      ( -- a )
 \ 
 \ *immediate*, *compile-only* and *smudge* work by setting bits in the
 \ word header. *immediate* and *compile-only* should be familiar by now, they
-\ set bits in the *PWD* field of a words header. *smudge* works by toggling
+\ set bits in the *NFA* field of a words header. *smudge* works by toggling
 \ a bit in the name fields length byte, which by virtue of how searching
 \ works means that the word will not be found in the dictionary any more.
 \ *smudge* is *not* used to hide the word being currently defined until the

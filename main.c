@@ -25,6 +25,7 @@ static int run(embed_t *h, embed_vm_option_e opt, bool load, FILE *in, FILE *out
 	if(load)
 		if(load_default_or_file(h, iblk) < 0)
 			embed_fatal("embed: load failed (input = %s)", iblk ? iblk : "(null)");
+	embed_reset(h); /* reset virtual machine in between calls to it, this might be undesired behavior */
 	return embed_forth_opt(h, opt, in, out, oblk);
 }
 
@@ -65,7 +66,7 @@ static char *next(int *i, const int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-	embed_vm_option_e option = EMBED_VM_USE_SHADOW_REGS;
+	embed_vm_option_e option = 0;
 	char *oblk = NULL, *iblk = NULL;
 	FILE *in = stdin, *out = stdout;
 	bool ran = false, stop = false;

@@ -74,7 +74,6 @@ typedef enum {
 	EMBED_VM_RX_NON_BLOCKING = 1u << 1, /**< embed_fgetc_t passed in does not block (EOF = no data, not End Of File) */
 	EMBED_VM_RAW_TERMINAL    = 1u << 2, /**< raw terminal mode */
 	EMBED_VM_QUITE_ON        = 1u << 3, /**< turn off 'okay' prompt and welcome message */
-	EMBED_VM_USE_SHADOW_REGS = 1u << 4, /**< use shadow registers on entry */
 } embed_vm_option_e; /**< VM option enum */
 
 typedef struct {

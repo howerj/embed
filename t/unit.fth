@@ -675,9 +675,6 @@ variable verbose  ( verbosity level of the tests )
 
 only forth definitions test +order
 
-\ @todo update forth syntax highlighting file for 'T{' and '}T'
-\ in the <https://github.com/howerj/forth.vim> project
-
 : }T depth vsp0 @ - vsp @ 2* ?stacks vsp @ ?equal pass .pass ;
 : -> depth vsp0 @ - vsp ! ;
 : T{ depth vsp0 ! total 1+! ;

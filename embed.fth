@@ -1952,7 +1952,7 @@ h: word.length $1F and ;
 
 \ *.id* prints out a words name field.
 
-h: .id dup nfa word.count type space ; ( pwd -- pwd : print out a word )
+h: .id nfa word.count type space ; ( pwd -- : print out a word )
 
 \ *immediate?*, *compile-only?* and *inline?* are the tests words that
 \ all take a pointer to the *PWD* field.
@@ -2226,8 +2226,6 @@ h: ?compile dup compile-only? 0= ?exit source type $E -throw ;
   then
   r> not-found ; \ not a word or number, it's an error!
 
-\ @todo Move word option bits to the name field count byte, simplifying a lot
-\ of dictionary manipulation words.
 \ NB. *compile* only works for words, instructions, and numbers below $8000
 : compile  r> dup@ , cell+ >r ; compile-only ( --:Compile next compiled word )
 : immediate $40 last nfa fallthrough; ( -- : previous word immediate )
@@ -2337,12 +2335,13 @@ h: preset tib-start #tib cell+ ! 0 in! id zero ;  ( -- : reset input )
 : ] [-1] state ! ;                                ( -- : compile mode )
 : [   state zero ; immediate                      ( -- : command mode )
 
+h: empty sp0 cells sp! ; ( 0..n -- : empty variable stack )
 h: ?error ( n -- : perform actions on error )
   ?dup if
     .             ( print error number )
     [char] ? emit ( print '?' )
     cr            ( and terminate the line )
-    sp0 cells sp! ( empty the stack )
+    empty         ( empty the variable stack )
     preset        ( reset I/O streams )
     postpone [    ( back into interpret mode )
     exit
@@ -2491,7 +2490,7 @@ h: ?unique ( a -- a : print a message if a word definition is not unique )
   dup get-current searcher 0= ?exit
     ( source type )
   space
-  2drop last-def @ nfa word.count type ."  redefined" cr ;
+  2drop last-def @ .id ." redefined" cr ;
 h: ?nul ( b -- : check for zero length strings )
    dup c@ ?exit $A -throw ;
 
@@ -2611,9 +2610,10 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit h: !, ! , ;;
 
 h: trace-execute cpu! >r ; ( u xt -- )
 : trace ( "name" -- : trace a word )
-  find-cfa cpu@ dup>r 1 or trace-execute r> cpu! ;
+  find-cfa cpu@ dup>r 1 or ( ' ) trace-execute ( catch ) r> cpu! ( throw ) ;
 
-\ Annotated example output of running *trace* on *+* is shown:
+\ Annotated example output of running *trace* on *+* is shown (excluding
+\ instruction decoding output):
 \
 \	2 2 trace +              ( '+' has the address $5c )
 \	[  7b9 6147   5c  8  3 ] ( 'trace-execute' executing '>r' )
@@ -2694,7 +2694,7 @@ h: not-hidden? nfa c@ $80 and 0= ; ( pwd -- )
 h: .words
     begin
       ?dup
-    while dup not-hidden? if .id then @ repeat cr ;
+    while dup not-hidden? if dup .id then @ repeat cr ;
 : words
   get-order begin ?dup while swap dup cr u. colon-space @ .words 1- repeat ;
 
@@ -3016,7 +3016,7 @@ h: cold ( -- : performs a cold boot  )
 \  $10 block b/buf 0 fill
    $12 retrieve io! 
    forth
-   sp0 cells sp!
+   empty
    rp0 cells rp!
    <boot> @execute ;
 
@@ -3121,9 +3121,9 @@ h: ?instruction ( i m e -- i t )
 h: .name name ?dup if word.count type then ; 
 h: .instruction                    ( u -- : decompile a single instruction )
    0x8000  0x8000 ?instruction if [char] L emit $7FFF and u. exit then
-   $6000   $6000  ?instruction if [char] A emit drop ( space .alu ) exit then
-   $6000   $4000  ?instruction if [char] C emit space .name  exit then
-   $6000   $2000  ?instruction if [char] Z emit space .name  exit then
+    $6000   $6000 ?instruction if [char] A emit drop ( space .alu ) exit then
+    $6000   $4000 ?instruction if [char] C emit space .name  exit then
+    $6000   $2000 ?instruction if [char] Z emit space .name  exit then
    [char] B emit space .name ;
 
 h: decompiler ( previous current -- : decompile starting at address )
@@ -3154,7 +3154,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 : see ( --, <string> : decompile a word )
   token finder ?not-found
   swap      2dup= if drop here then >r
-  cr colon-space .id dup cr
+  cr colon-space dup .id dup cr
   cfa r> decompiler space [char] ; emit
   dup compile-only? if ."  compile-only" then
   dup inline?       if ."  inline"       then

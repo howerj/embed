@@ -71,9 +71,8 @@ typedef int (*embed_callback_t)(embed_t *h, void *param);
 
 typedef enum {
 	EMBED_VM_TRACE_ON        = 1u << 0, /**< turn tracing on */
-	EMBED_VM_RX_NON_BLOCKING = 1u << 1, /**< embed_fgetc_t passed in does not block (EOF = no data, not End Of File) */
-	EMBED_VM_RAW_TERMINAL    = 1u << 2, /**< raw terminal mode */
-	EMBED_VM_QUITE_ON        = 1u << 3, /**< turn off 'okay' prompt and welcome message */
+	EMBED_VM_RAW_TERMINAL    = 1u << 1, /**< raw terminal mode */
+	EMBED_VM_QUITE_ON        = 1u << 2, /**< turn off 'okay' prompt and welcome message */
 } embed_vm_option_e; /**< VM option enum */
 
 typedef struct {
@@ -332,8 +331,7 @@ embed_opt_t embed_options_default(void);
 int embed_puts(embed_opt_t const * const o, const char *s);
 
 /**@brief Reset the virtual machine image, this means that the stack pointers,
- * top of stack register and program counter will be set to the defaults
- * contained within 'shadow' registers.
+ * top of stack register and program counter will be set to the defaults.
  * @param h, initialized Virtual machine image to reset  */
 void embed_reset(embed_t *h);
 

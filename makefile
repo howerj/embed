@@ -31,7 +31,7 @@ TESTAPPS+= win
 else # assume unixen
 DF=./
 EXE=
-TESTAPPS+= eforth unix
+TESTAPPS+= unix
 endif
 
 FORTH=${TARGET}${EXE}
@@ -134,7 +134,7 @@ clean:
 	${RM} *.o *.a *.so *.pdf *.htm
 	${RM} *.gen.c
 	${RM} *.tgz
-	${RM} ${TESTAPPS}
+	${RM} ${TESTAPPS} eforth
 
 ### EOF ###################################################################### 
 

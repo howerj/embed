@@ -1,4 +1,3 @@
-0 <ok> !
 \ This is a Forth test bench for: <https://github.com/howerj/embed>, it also
 \ contains extensions to the base interpreter, such as floating point support.
 \

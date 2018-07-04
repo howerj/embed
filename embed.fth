@@ -1773,7 +1773,7 @@ h: drop-nip-dup drop nip dup ;
 \
 
 h: ktap? dup =bl - 95 u< swap =del <> and ; ( c -- t : possible ktap? )
-h: raw? cpu@ 4 and 0<> ; ( c -- t : raw terminal mode? )
+h: raw? cpu@ 2 and 0<> ; ( c -- t : raw terminal mode? )
 : accept ( b u -- b u )
   over+ over
   begin
@@ -2398,7 +2398,7 @@ h: set-input <ok> ! id ! in! #tib 2! ;     ( n1...n5 -- )
 \ Open and reading from different files is also not needed, it is handled
 \ by the virtual machine.
 
-h: quite? 8 cpu@ and 0<> ; ( -- t : are we operating in quite mode? )
+h: quite? 4 cpu@ and 0<> ; ( -- t : are we operating in quite mode? )
 : io! preset fallthrough;  ( -- : initialize I/O )
 h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
 h: hand 

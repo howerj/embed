@@ -575,6 +575,7 @@ static vm_extension_t *vm_extension_new(void) {
 	v->o                = embed_opt_get(v->h);
 	v->o.callback       = callback_selector;
 	v->o.param          = v;
+	embed_opt_set(v->h, v->o);
 
 	if(callbacks_add(v->h, true, v->callbacks, v->callbacks_length) < 0)
 		goto fail; /**@todo use embed_debug throughout? */

@@ -112,6 +112,23 @@ int bitmap_foreach(bitmap_t *b, bitmap_foreach_callback_t cb, void *param)
 static bitmap_t *read_map  = NULL;
 static bitmap_t *write_map = NULL;
 
+/**@todo Improve MMU interface
+ *
+ * It should be possible to raise exceptions when an MMU operation fails, and
+ * also provide a handle to the MMU functions to work with these functions.
+ *
+ * The MMU functions could also use pages like a normal MMU, and map those
+ * pages to ROM, RAM and NVRAM.
+ *
+ * NB. It would be good if the 'embed.c' library only included example callbacks
+ * that touched and read from memory and did not require any allocation to
+ * enhance portability. This would require some significant API changes.
+ *
+ * I also do not like the way the 'embed_opt_t' structure is handled, this
+ * should probably be changed so the structure is not copied all over the
+ * place and instead be done by passing pointers.
+ */
+
 static cell_t  mmu_read_cb(cell_t const * const m, cell_t addr) {
 	assert(!(0x8000 & addr));
 	bitmap_set(read_map, addr);
@@ -120,14 +137,34 @@ static cell_t  mmu_read_cb(cell_t const * const m, cell_t addr) {
 
 static void mmu_write_cb(cell_t * const m, cell_t addr, cell_t value) {
 	assert(!(0x8000 & addr));
+	/*if(m[addr] != value)*/
 	bitmap_set(write_map, addr);
 	m[addr] = value;
+}
+
+#ifndef MIN
+#define MIN(X, Y) ((X) > (Y) ? (Y) : (X))
+#endif
+
+static bitmap_t *bitmap_union(bitmap_t *a, bitmap_t *b)
+{
+	const size_t al = bitmap_bits(a), bl = bitmap_bits(b);
+	bitmap_t *u = (al > bl) ? bitmap_copy(a) : bitmap_copy(b);
+	if(!u)
+		return NULL;
+	bitmap_t *m = (al > bl) ? b : a;
+	const size_t ml = MIN(al, bl);
+	for(size_t i = 0; i < ml; i++)
+		if(bitmap_get(m, i))
+			bitmap_set(u, i);
+	return u;
 }
 
 static void bitmap_print_range(bitmap_t *b, FILE *out)
 {
 	assert(b);
 	assert(out);
+	size_t total = 0;
 	for(size_t i = 0; i < bitmap_bits(b);) {
 		size_t start = i, end = i, j = i;
 		if(!bitmap_get(b, i)) {
@@ -141,13 +178,17 @@ static void bitmap_print_range(bitmap_t *b, FILE *out)
 		end = bitmap_get(b, j) ? j :
 			j > (i+1)      ? j-1 : i;
 		if(start == end) {
-			fprintf(out, "%zu\n", end);
+			total++;
+			fprintf(out, "    1\t%zu\n", end);
 		} else {
 			assert(end >= start);
-			fprintf(out, "%zu-%zu\n", start, end);
+			const size_t range = (end - start) + 1;
+			total += range;
+			fprintf(out, "%5zu\t%zu-%zu\n", range, start, end);
 		}
 		i = j;
 	}
+	fprintf(out, "total: %zu\n", total);
 }
 
 /*static int bitmap_print(bitmap_t *b, size_t bit, void *param)
@@ -163,11 +204,17 @@ static int bitmap_report(const char *name, bitmap_t *read_map, bitmap_t *write_m
 	assert(name);
 	assert(read_map);
 	assert(write_map);
+	bitmap_t *u = bitmap_union(read_map, write_map);
+	if(!u)
+		embed_fatal("report: union allocation failed");
 	FILE *report = embed_fopen_or_die(name, "wb");
 	fprintf(report, "write:\n");
 	bitmap_print_range(write_map, report);
 	fprintf(report, "read:\n");
 	bitmap_print_range(read_map, report);
+	fprintf(report, "rw:\n");
+	bitmap_print_range(u, report);
+	bitmap_free(u);
 	fclose(report);
 	return 0;
 }

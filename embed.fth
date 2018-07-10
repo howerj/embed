@@ -185,9 +185,9 @@ variable fence               ( Do not peephole optimize before this point )
 -1   constant optimize       ( Turn optimizations on [-1] or off [0] )
 0    constant swap-endianess ( if true, swap the endianess )
 $4100 constant pad-area      ( area for pad storage )
+$7FFF constant (rp0)         ( start of return stack in *cells* )
+$2400 constant (sp0)         ( start of variable stack in *cells* )
 variable header -1 header !  ( if true target headers generated )
-$7FFF constant (rp0)         ( start of return stack )
-$4400 constant (sp0)         ( start of variable stack )
 
 ( 1   constant verbose ( verbosity level, higher is more verbose )
 #target #max 0 fill    ( Erase the target memory location )
@@ -207,6 +207,7 @@ $4400 constant (sp0)         ( start of variable stack )
 : t! over $FF and over high tc! swap 8 rshift swap low tc! ; ( u a -- )
 : t@ dup high tc@ swap low tc@ 8 lshift or ; ( a -- u )
 : 2/ 1 rshift ;                ( u -- u : non-standard definition divide by 2 )
+: 2* 1 lshift ;                ( u -- u : multiple by two, non-standard )
 : talign there 1 and tcp +! ;  ( -- : align target dictionary pointer value )
 : tc, there tc! 1 tcp +! ;     ( c -- : write byte into target dictionary )
 : t,  there t!  =cell tcp +! ; ( u -- : write cell into target dictionary )
@@ -715,8 +716,8 @@ $40   constant word-length ( maximum length of a word )
 $40   constant c/l         ( characters per line in a block )
 $10   constant l/b         ( lines in a block )
 $F    constant l/b-1       ( lines in a block, less one )
-(rp0) constant rp0         ( start of return stack )
-(sp0) constant sp0         ( start of variable stack )
+(rp0) 2* constant rp0      ( start of return stack )
+(sp0) 2* constant sp0      ( start of variable stack )
 $2BAD constant magic       ( magic number for compiler security )
 $F    constant #highest    ( highest bit in cell )
 
@@ -841,29 +842,29 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ updated during the metacompilation process.
 \
 
-0 tlocation cp                ( Dictionary Pointer: Set at end of file )
 0 tlocation root-voc          ( root vocabulary )
 0 tlocation editor-voc        ( editor vocabulary )
-0 tlocation _forth-wordlist   ( set at the end near the end of the file )
 
 \ System Variables
-
+#version constant  ver   ( eForth version )
+pad-area tconstant pad   ( pad variable - offset into temporary storage )
+$8       constant  #vocs ( number of vocabularies in allowed )
 $2       tconstant cell  ( size of a cell in bytes )
+$400     tconstant b/buf ( size of a block )
+
+0        tlocation cp    ( Dictionary Pointer: Set at end of file )
+0        tlocation _forth-wordlist ( set at the end near the end of the file )
 $0       tvariable >in   ( Hold character pointer when parsing input )
 $0       tvariable state ( compiler state variable )
 $0       tvariable hld   ( Pointer into hold area for numeric output )
 $A       tvariable base  ( Current output radix )
 $0       tvariable span  ( Hold character count received by expect   )
-$8       constant  #vocs ( number of vocabularies in allowed )
-$400     tconstant b/buf ( size of a block )
 0        tvariable blk   ( current blk loaded, set in *cold* )
-#version constant  ver   ( eForth version )
-pad-area tconstant pad   ( pad variable - offset into temporary storage )
 $FFFF    tvariable dpl   ( number of places after fraction )
-0        tvariable current ( WID to add definitions to )
+0        tvariable current   ( WID to add definitions to )
 0        tvariable <literal> ( holds execution vector for literal )
-0        tvariable <boot>  ( execute program at startup )
-0        tvariable <ok>    ( prompt execution vector )
+0        tvariable <boot>    ( execute program at startup )
+0        tvariable <ok>      ( prompt execution vector )
          ( @todo move <ok>, <boot>, and other words to a system vocabulary )
 
 \ 
@@ -933,6 +934,7 @@ h: tx!     tx!      ; ( c -- : transmit single character )
 : mod      mod      ; ( u1 u2 -- u : remainder of u1 divided by u2 )
 : vm       vm       ; ( ??? -- ??? : perform arbitrary VM call )
 ( h: cpu!    cpu!     ; ( u -- : set CPU options register )
+
 \ 
 \ ### Forth Implementation of Arithmetic Functions
 \
@@ -1374,9 +1376,9 @@ h: colon-space [char] : emit space ;   ( -- )
 \   : pick ?dup if swap >r 1- pick r> swap exit then dup ;
 \
 
-h: vrelative cells sp@ swap - ;  ( u -- u : position relative to sp )
-: depth sp0 vrelative chars 1- ; ( -- u : get current depth )
-: pick vrelative @ ;             ( vn...v0 u -- vn...v0 vu )
+h: vrelative sp@ swap - ;  ( u -- u : position relative to sp )
+: depth sp0 vrelative cell- chars ; ( -- u : get current depth )
+: pick cells vrelative @ ;             ( vn...v0 u -- vn...v0 vu )
 
 \ *ndrop* removes a variable number of items off the variable stack, which
 \ is sometimes needed for cleaning things up before exiting a word.
@@ -2078,8 +2080,6 @@ h: digit? ( c base -- u f )
 \ store where the decimal place occurred in the input.
 \
 
-( $2e tvariable fsp )
-
 h: number? ( a u -- d -1 | a u 0 )
   [-1] dpl !
   base@ >r
@@ -2338,7 +2338,7 @@ h: preset tib-start #tib cell+ ! 0 in! id zero ;  ( -- : reset input )
 : ] [-1] state ! ;                                ( -- : compile mode )
 : [   state zero ; immediate                      ( -- : command mode )
 
-h: empty sp0 cells sp! ; ( 0..n -- : empty variable stack )
+h: empty sp0 sp! ; ( 0..n -- : empty variable stack )
 h: ?error ( n -- : perform actions on error )
   ?dup if
     .             ( print error number )
@@ -3020,7 +3020,7 @@ h: cold ( -- : performs a cold boot  )
    $12 retrieve io! 
    forth
    empty
-   rp0 cells rp!
+   rp0 rp!
    <boot> @execute ;
 
 \ *hi* prints out the welcome message, the version number, sets the numeric
@@ -3562,25 +3562,27 @@ Bill Muench with some modifications to the model.
 The eForth model imposes extra semantics to certain areas of memory, along
 with the virtual machine.
 
-	| Address       | Block  | Meaning                        |
-	| ------------- | ------ | ------------------------------ |
-	| $0000         |   0    | Initial Program Counter (PC)   |
-	| $0002         |   0    | Initial Top of Stack Register  |
-	| $0004         |   0    | Initial Return Stack Register  |
-	| $0006         |   0    | Initial Var. Stack Register    |
-	| $0008         |   0    | Instruction exception vector   |
-	| $000A         |   0    | VM Options bits                |
-	| $000C         |   0    | VM memory in cells             |
-	| $000E         |   0    | VM memory Reserved             |
-	| $0010         |   0    | VM memory Reserved             |
-	| $0012-$001C   |   0    | eForth Header                  |
-	| $001E-EOD     |  0-?   | The dictionary                 |
-	| EOD-$3FFF     |  ?-15  | Compilation and Numeric Output |
-	| $4000         |   16   | Interpreter variable storage   |
-	| $4280         |   16   | Pad area                       |
-	| $4400         |   17   | Start of variable stack        |
-	| $4800-$FBFF   | 18-63  | Empty blocks for user data     |
-	| $FC00-$FFFF   |   0    | Return stack block             |
+	| Address       | Block  | Meaning                           |
+	| ------------- | ------ | --------------------------------- |
+	| $0000         |   0    | Initial Program Counter (PC)      |
+	| $0002         |   0    | Initial Top of Stack Register     |
+	| $0004         |   0    | Initial Return Stack Register     |
+	| $0006         |   0    | Initial Var. Stack Register       |
+	| $0008         |   0    | Instruction exception vector      |
+	| $000A         |   0    | VM Options bits                   |
+	| $000C         |   0    | VM memory in cells                |
+	| $000E         |   0    | Shadow PC,  Not set by VM on exit |
+	| $0010         |   0    | Shadow T,   Not set by VM on exit |
+	| $0012         |   0    | Shadow RP0, Not set by VM on exit |
+	| $0014         |   0    | Shadow SP0, Not set by VM on exit |
+	| $0016-$001C   |   0    | eForth Header                     |
+	| $001E-EOD     |  0-?   | The dictionary                    |
+	| EOD-$3FFF     |  ?-15  | Compilation and Numeric Output    |
+	| $4000         |   16   | Interpreter variable storage      |
+	| $4280         |   16   | Pad area                          |
+	| $4400         |   17   | Start of variable stack           |
+	| $4800-$FBFF   | 18-63  | Empty blocks for user data        |
+	| $FC00-$FFFF   |   0    | Return stack block                |
 
 ## Error Codes
 

@@ -31,6 +31,7 @@
  * between 'raw' and 'cooked' modes. */
 
 #include "embed.h"
+#include "util.h"
 
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
@@ -112,14 +113,13 @@ int main(void) {
 		embed_info("NOT A TTY", out);
 	}
 
-	embed_opt_t o = {
-		.get      = unix_getch,           .put   = unix_putch, .save = embed_save_cb,
-		.in       = (void*)(intptr_t)fd,  .out   = out,     .name = NULL, 
-		.callback = NULL,                 .param = NULL,
-		.options  = options
-	};
+	embed_opt_t o = embed_opt_default();
+	o.get      = unix_getch,           o.put   = unix_putch, o.save = embed_save_cb,
+	o.in       = (void*)(intptr_t)fd,  o.out   = out,
+	o.options  = options;
 
 	embed_t *h = embed_new();
+	embed_opt_set(h, o);
 	if(!h)
 		embed_fatal("embed: allocate failed");
 	/* NB. The eForth image will return '1' if there is more work to do,
@@ -128,7 +128,7 @@ int main(void) {
 	 * another image that is not the default image is free to return
 	 * whatever it likes. Also, we call 'usleep()' here, but we could do
 	 * other work if we wanted to. */
-	for(r = 0; (r = embed_vm(h, &o)) > 0; )
+	for(r = 0; (r = embed_vm(h)) > 0; )
 		usleep(10 * 1000uLL);
 	return r;
 }

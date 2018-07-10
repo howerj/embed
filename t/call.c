@@ -12,6 +12,7 @@
  * @todo Implement extracting strings and putting strings into the interpreter */
 
 #include "embed.h"
+#include "util.h"
 #include <errno.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -229,7 +230,7 @@ static int cb_dprint(vm_extension_t * const v) {
 		return eclr(v);
 	char buf[80] = { 0 };
 	snprintf(buf, sizeof(buf)-1, "%ld", d); /**@bug does not respect eForth base */
-	embed_puts(&v->o, buf);
+	embed_puts(v->h, buf);
 	return eclr(v);
 }
 
@@ -239,7 +240,7 @@ static int cb_flt_print(vm_extension_t * const v) {
 	if(eget(v))
 		return eclr(v);
 	snprintf(buf, sizeof(buf)-1, "%e", flt);
-	embed_puts(&v->o, buf);
+	embed_puts(v->h, buf);
 	return eclr(v);
 }
 
@@ -571,7 +572,7 @@ static vm_extension_t *vm_extension_new(void) {
 
 	v->callbacks_length = number_of_callbacks(), 
 	v->callbacks        = callbacks;
-	v->o                = embed_options_default();
+	v->o                = embed_opt_get(v->h);
 	v->o.callback       = callback_selector;
 	v->o.param          = v;
 
@@ -587,7 +588,7 @@ fail:
 
 static int vm_extension_run(vm_extension_t *v) {
 	assert(v);
-	return embed_vm(v->h, &v->o);
+	return embed_vm(v->h);
 }
 
 static void vm_extension_free(vm_extension_t *v) {

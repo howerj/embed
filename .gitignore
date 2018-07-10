@@ -1,7 +1,9 @@
 *~
 *.a
 b2c
+*.bin
 *.blk
+call
 cpp
 dlopen
 eforth
@@ -9,10 +11,11 @@ embed
 *.exe
 *.gen.c
 *.htm
+*.log
 *.md
+mmu
 *.o
 *.pdf
-call
 *.so
 *.tgz
 *.txt

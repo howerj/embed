@@ -50,7 +50,7 @@ little about [Forth][] itself.
 If you do not have a copy of [make][], but do have a [C99][] compiler, the
 following command should build the project:
 
-	cc -std=c99 main.c embed.c image.c -o embed
+	cc -std=c99 main.c embed.c image.c util.c -o embed
 
 Generating a new image is easy as well (using the built in image):
 

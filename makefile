@@ -17,7 +17,8 @@ CMP=cmp
 AR=ar
 ARFLAGS=rcs
 RM=rm -fv
-TESTAPPS=cpp call
+TESTAPPS=cpp call mmu
+TRACER=
 
 .PHONY: all clean run cross double-cross default tests docs apps dist
 
@@ -45,13 +46,18 @@ ${B2C}: t/b2c.o
 core.gen.c: ${B2C} embed-1.blk
 	${DF}${B2C} embed_default_block embed-1.blk $@ "eForth Image"
 
+
+embed.o: embed.c embed.h
+
+util.o: util.c util.h
+
 lib${TARGET}.a: ${TARGET}.o image.o
 	${AR} ${ARFLAGS} $@ $^
 
 lib${TARGET}.so: ${TARGET}.o image.o
 	${CC} -shared -o $@ $^
 
-${FORTH}: main.o lib${TARGET}.a ${TARGET}.h
+${FORTH}: main.o util.o lib${TARGET}.a 
 	${CC} $^ ${LDFLAGS} -o $@
 
 ### Meta Compilation ######################################################### 
@@ -68,7 +74,7 @@ double-cross: ${META2}
 	${CMP} ${META1} ${META2}
 
 run: cross
-	${DF}${FORTH} -o ${TEMP} -i ${META1}
+	${TRACER} ${DF}${FORTH} -o ${TEMP} -i ${META1}
 
 ### Unit Tests ############################################################### 
 
@@ -100,30 +106,31 @@ dist: lib${TARGET}.so lib${TARGET}.a ${TARGET}.pdf embed.1 ${FORTH} ${TARGET}.h 
 
 ### Test Applications ######################################################## 
 
-dlopen: t/dlopen.c libembed.so embed.h
-	${CC} ${CFLAGS} $< -ldl -o $@
-
-cpp: t/cpp.cpp libembed.a embed.h
+cpp: t/cpp.cpp util.o libembed.a
 	${CXX} ${CPPFLAGS} -I. -o $@ $^
 
 eforth: CC=musl-gcc
 eforth: CFLAGS=-Wall -Wextra -Os -fno-stack-protector -static -std=c99 -DNDEBUG 
 eforth: LDFLAGS=-Wl,-O1
-eforth: embed.c image.c main.c embed.h
+eforth: embed.c image.c util.c main.c
 	${CC} ${CFLAGS} $^ -o $@
 	strip $@
 
-unix: CFLAGS=-Wall -Wextra -std=gnu99 -I.
-unix: t/unix.c libembed.a embed.h
+unix: CFLAGS=-O2 -Wall -Wextra -std=gnu99 -I.
+unix: t/unix.c libembed.a util.o
 	${CC} ${CFLAGS} $^ -o $@
 
 win: CFLAGS=-Wall -Wextra -std=gnu99 -I.
-win: t/win.c libembed.a embed.h
+win: t/win.c libembed.a util.o
 	${CC} ${CFLAGS} $^ -o $@
 
 call: CFLAGS=-O3 -Wall -Wextra -std=c99 -I.
-call: t/call.c libembed.a
+call: t/call.c libembed.a util.o
 	${CC} ${CFLAGS} $^ -lm -o $@
+
+mmu: CFLAGS=-O2 -Wall -Wextra -std=c99 -I.
+mmu: t/mmu.c libembed.a util.o
+	${CC} ${CFLAGS} $^ -o $@
 
 apps: ${TESTAPPS}
 

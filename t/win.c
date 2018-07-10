@@ -15,6 +15,7 @@
  * MinGW. */
 
 #include "embed.h"
+#include "util.h"
 #include <assert.h>
 #include <conio.h>
 #include <errno.h>
@@ -71,17 +72,18 @@ int main(void) {
 		embed_info("NOT A TTY");
 	}
 
-	embed_opt_t o = {
-		.get      = win_getch, .put   = win_putch, .save = embed_save_cb,
-		.in       = in,        .out   = stdout,    .name = NULL, 
-		.callback = NULL,      .param = NULL,
-		.options  = options
-	};
+	embed_opt_t o = embed_opt_default();
+	o.get      = unix_getch,           o.put   = unix_putch, o.save = embed_save_cb,
+	o.in       = (void*)(intptr_t)fd,  o.out   = out,
+	o.options  = options;
+
+	embed_t *h = embed_new();
+	embed_opt_set(h, o);
 
 	embed_t *h = embed_new();
 	if(!h)
 		embed_fatal("embed: allocate failed");
-	for(r = 0; (r = embed_vm(h, &o)) > 0; Sleep(10/*milliseconds*/))
+	for(r = 0; (r = embed_vm(h)) > 0; Sleep(10/*milliseconds*/))
 		/*fputc('.', stdout)*/ /*do nothing*/;
 	return r;
 }

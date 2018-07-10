@@ -162,6 +162,8 @@
 \ namespaces and are generally talked about that much, they are especially
 \ useful (in fact pretty much required) for writing a metacompiler.
 
+.( FORTH META COMPILATION START ) cr
+
 only forth definitions hex
 variable meta          ( Metacompilation vocabulary )
 meta +order definitions
@@ -182,7 +184,7 @@ variable fence               ( Do not peephole optimize before this point )
 2    constant =cell          ( Target cell size )
 -1   constant optimize       ( Turn optimizations on [-1] or off [0] )
 0    constant swap-endianess ( if true, swap the endianess )
-$4280 constant pad-area      ( area for pad storage )
+$4100 constant pad-area      ( area for pad storage )
 variable header -1 header !  ( if true target headers generated )
 $7FFF constant (rp0)         ( start of return stack )
 $4400 constant (sp0)         ( start of variable stack )
@@ -237,9 +239,9 @@ $4400 constant (sp0)         ( start of variable stack )
 (     ." TARGET DICTIONARY: " cr )
 (     locations )
 (   then )
-  ." HOST:   "  here        . cr
-  ." TARGET: "  there       . cr
-  ." HEADER: "  #target $30 dump cr ;
+  ." HOST:   " here        . cr
+  ." TARGET: " there       . cr
+  ." HEADER: " #target $30 dump cr ;
 
 $26 constant (header-options)
 
@@ -251,8 +253,8 @@ $26 constant (header-options)
 : finished ( -- : save target image and display statistics )
    display
    only forth definitions hex
-   ." SAVING... " save-hex ." DONE! " cr
-   ." STACK> " .s cr ;
+   ." SAVING..." save-hex ." DONE" cr
+   ." STACK>" .s cr ;
 
 \ ### The Assembler
 
@@ -730,15 +732,16 @@ $4012 constant <emit>      ( c -- : emit character )
 $4014 constant <expect>    ( "accept" vector )
 $4016 constant <tap>       ( "tap" vector, for terminal handling )
 $4018 constant <echo>      ( c -- : emit character )
-$4110 constant context     ( holds current context for search order )
-$4122 constant #tib        ( Current count of terminal input buffer )
-$4124 constant tib-buf     ( ... and address )
-$4126 constant tib-start   ( backup tib-buf value )
-\ $4280 == pad-area
+$401A constant context     ( holds current context for search order )
+  ( area for context is #vocs large )
+$402A constant #tib        ( Current count of terminal input buffer )
+$402C constant tib-buf     ( ... and address )
+$402E constant tib-start   ( backup tib-buf value )
+\ $4100 == pad-area
 
-\ $C    constant vm-options   ( Virtual machine options register )
-$1E   constant header-length  ( location of length in header )
-$20   constant header-crc     ( location of CRC in header )
+\ $C  constant vm-options    ( Virtual machine options register )
+$1E   constant header-length ( location of length in header )
+$20   constant header-crc    ( location of CRC in header )
 (header-options) constant header-options ( location of options bits in header )
 
 target.1         +order ( Add target word dictionary to search order )

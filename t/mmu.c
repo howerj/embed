@@ -1,3 +1,17 @@
+/**@brief Embed library Memory Management Unit (MMU) test program
+ * @license MIT
+ * @author Richard James Howe
+ * @file mmu.c
+ *
+ * See <https://github.com/howerj/embed> for more information.
+ *
+ * This test program implements custom MMU read and write functions that log
+ * the locations the virtual machine reads and writes to, this can be useful
+ * for creating a memory map that would allow sections of memory to be placed
+ * into Read Only Memory (ROM) to save on space.
+ *
+ */
+
 #include "util.h"
 #include "embed.h"
 #include <stdint.h>
@@ -8,13 +22,17 @@
 #include <stdbool.h>
 #include <string.h>
 
-typedef unsigned bitmap_unit;
-#define BITS (sizeof(bitmap_unit)*CHAR_BIT)
+#define MMU_REPORT ("mmu.log")
+
+/* ================= Bit Map Routines : Start ============================= */
+
+typedef unsigned bitmap_unit_t;
+#define BITS (sizeof(bitmap_unit_t)*CHAR_BIT)
 #define MASK (BITS-1)
 
 typedef struct {
 	size_t bits;
-	bitmap_unit map[];
+	bitmap_unit_t map[];
 } bitmap_t;
 
 /**@todo assert bit index in range */
@@ -23,13 +41,19 @@ size_t bitmap_units(size_t bits) {
 	return bits/BITS + !!(bits & MASK);
 }
 
+size_t bitmap_bits(bitmap_t *b)
+{
+	assert(b);
+	return b->bits;
+}
+
 size_t bitmap_sizeof(bitmap_t *b) {
 	assert(b);
-	return sizeof(*b) + bitmap_units(b->bits)*sizeof(bitmap_unit);
+	return sizeof(*b) + bitmap_units(b->bits)*sizeof(bitmap_unit_t);
 }
 
 bitmap_t *bitmap_new(size_t bits) {
-	size_t length = bitmap_units(bits)*sizeof(bitmap_unit);
+	size_t length = bitmap_units(bits)*sizeof(bitmap_unit_t);
 	/**@todo detect overflow */
 	bitmap_t *r = calloc(sizeof(bitmap_t) + length, 1);
 	if(!r)
@@ -83,29 +107,73 @@ int bitmap_foreach(bitmap_t *b, bitmap_foreach_callback_t cb, void *param)
 	return 0;
 }
 
+/* ================= Bit Map Routines : End =============================== */
 
 static bitmap_t *read_map  = NULL;
 static bitmap_t *write_map = NULL;
 
 static cell_t  mmu_read_cb(cell_t const * const m, cell_t addr) {
+	assert(!(0x8000 & addr));
 	bitmap_set(read_map, addr);
 	return m[addr];
 }
 
 static void mmu_write_cb(cell_t * const m, cell_t addr, cell_t value) {
+	assert(!(0x8000 & addr));
 	bitmap_set(write_map, addr);
 	m[addr] = value;
 }
 
-static int bitmap_print(bitmap_t *b, size_t bit, void *param)
+static void bitmap_print_range(bitmap_t *b, FILE *out)
+{
+	assert(b);
+	assert(out);
+	for(size_t i = 0; i < bitmap_bits(b);) {
+		size_t start = i, end = i, j = i;
+		if(!bitmap_get(b, i)) {
+			i++;
+			continue;
+		}
+
+		for(j = i; j < bitmap_bits(b); j++)
+			if(!bitmap_get(b, j))
+				break;
+		end = bitmap_get(b, j) ? j :
+			j > (i+1)      ? j-1 : i;
+		if(start == end) {
+			fprintf(out, "%zu\n", end);
+		} else {
+			assert(end >= start);
+			fprintf(out, "%zu-%zu\n", start, end);
+		}
+		i = j;
+	}
+}
+
+/*static int bitmap_print(bitmap_t *b, size_t bit, void *param)
 {
 	FILE *out = (FILE*)param;
 	if(bitmap_get(b, bit))
 		return fprintf(out, "%zu\n", bit) > 0;
 	return 0;
+}*/
+
+static int bitmap_report(const char *name, bitmap_t *read_map, bitmap_t *write_map)
+{
+	assert(name);
+	assert(read_map);
+	assert(write_map);
+	FILE *report = embed_fopen_or_die(name, "wb");
+	fprintf(report, "write:\n");
+	bitmap_print_range(write_map, report);
+	fprintf(report, "read:\n");
+	bitmap_print_range(read_map, report);
+	fclose(report);
+	return 0;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+	int r = 0;
 	read_map  = bitmap_new(UINT16_MAX);
 	write_map = bitmap_new(UINT16_MAX);
 	if(!read_map || !write_map)
@@ -116,12 +184,29 @@ int main(void) {
 	o.write = mmu_write_cb;
 
 	embed_t *h = embed_new();
-	embed_opt_set(h, o);
 	if(!h)
 		embed_fatal("embed: allocate failed");
-	const int r = embed_vm(h);
+	embed_opt_set(h, o);
+
+	if(argc > 1) {
+		o.options |= EMBED_VM_QUITE_ON;
+		for(int i = 1; i < argc; i++) {
+			FILE *in = embed_fopen_or_die(argv[i], "rb");
+			o.in = in;
+			embed_opt_set(h, o);
+			r = embed_vm(h);
+			fclose(in);
+			o.in = stdin;
+			embed_opt_set(h, o);
+			if(r < 0)
+				return r;
+		}
+	} else {
+		r = embed_vm(h);
+	}
+
 	embed_free(h);
-	bitmap_foreach(write_map, bitmap_print, stdout);
+	bitmap_report(MMU_REPORT, read_map, write_map);
 	bitmap_free(read_map);
 	bitmap_free(write_map);
 	return r;

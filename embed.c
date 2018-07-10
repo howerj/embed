@@ -172,7 +172,7 @@ embed_opt_t embed_opt_default(void) {
 }
 
 #ifdef NDEBUG
-#define trace(OPT,M,PC,INSTRUCTION,T,RP,SP)
+#define trace(VM,PC,INSTRUCTION,T,RP,SP)
 #else
 static int extend(uint16_t dd) { return dd & 2 ? (s_t)(dd | 0xFFFE) : dd; }
 

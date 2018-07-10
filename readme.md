@@ -103,6 +103,7 @@ all of these goals, but might fall short.
   * [x] Test applications for Windows/Unix non-block I/O, and callback
     extensions.
 * [ ] Virtual Machine and eForth Image/Metacompiler that uses 'uintptr\_t'
+* [ ] Port the library to a small microcontroller
 
 [MIT License]: LICENSE
 [embed.c]: embed.c

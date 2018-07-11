@@ -84,6 +84,14 @@ typedef cell_t (*embed_mmu_read_t)(cell_t const * const m, cell_t addr);
  * @param value, value to write to 'addr' */
 typedef void (*embed_mmu_write_t)(cell_t * const m, cell_t addr, cell_t value);
 
+/**@brief This function is called by the virtual machine to determine whether
+ * the virtual machine should yield or not, it can be used to limit time spent
+ * in the virtual machine.
+ * @param param, arbitrary data to supply to the yield function
+ * @return returns non zero if virtual machine should yield, and zero if it
+ * should continue */
+typedef int (*embed_yield_t)(void *param);
+
 typedef enum {
 	EMBED_VM_TRACE_ON        = 1u << 0, /**< turn tracing on */
 	EMBED_VM_RAW_TERMINAL    = 1u << 1, /**< raw terminal mode */
@@ -97,14 +105,14 @@ typedef struct {
 	embed_mmu_write_t write;    /**< callback to write location to virtual machine memory */
 	embed_mmu_read_t  read;     /**< callback to read location from virtual machine memory */
 	embed_callback_t  callback; /**< arbitrary user supplied callback */
-	void *in,                   /**< first argument to 'getc' */
-	     *out,                  /**< second argument to 'putc' */
-	     *param;                /**< first argument to 'callback' */
+	embed_yield_t     yield;    /**< callback to force the virtual machine to yield */
+	void	*in,                /**< first argument to 'getc' */
+		*out,               /**< second argument to 'putc' */
+		*param,             /**< first argument to 'callback' */
+		*yields;            /**< parameter to yield */
 	const void *name;           /**< second argument to 'save' */
 	embed_vm_option_e options;  /**< virtual machine options register */
 } embed_opt_t; /**< Embed VM options structure for customizing behavior */
-
-/* Default Callback which can be passed to options */
 
 /**@brief Saves to a file called 'name', this is the default callback to save
  * an image to disk with the 'save' ALU instruction.
@@ -129,11 +137,17 @@ int embed_fputc_cb(int ch, void *file);
 int embed_fgetc_cb(void *file, int *no_data);         /**< 'file' is a 'FILE*', like 'stdin' */
 
 /**@brief alternative 'embed_fgetc_t' to read data from a string
- * @param string_ptr, pointer to character array ('char**') to read from
+ * @param string_ptr, pointer to character array ('char**') to read from, this
+ * should be an ASCII NUL terminated string.
  * @param no_data, if there is no data to be at the moment but there might be
  * some in the future -1 will be written to 'no_data'.
  * @return EOF on failure, unsigned char value on success */
-int embed_sgetc_cb(void *string_ptr, int *no_data);   /**< 'string_ptr' is a 'char **' to ASCII NUL terminated string */
+int embed_sgetc_cb(void *string_ptr, int *no_data);  
+
+/**@brief The default yield callback, this function never yields.
+ * @param param, unused
+ * @return always returns false */
+int embed_yield_cb(void *param);
 
 /**@brief Default callback for reading virtual machine memory, this is equivalent to
  * returning 'm[addr]'.

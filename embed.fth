@@ -1108,7 +1108,7 @@ h: cpu@    0 cpu-xchg dup cpu! ; ( -- u : get CPU options register )
 h: ?exit if rdrop exit then ; ( u --, R: xt -- xt| : conditional return )
 : 2drop drop drop ;         ( n n -- )
 : 1+ 1 + ;                  ( n -- n : increment a value  )
-: negate invert 1+ ;        ( n -- n : negate a number )
+: negate 1- invert ;        ( n -- n : negate a number )
 : - negate + ;              ( n1 n2 -- n : subtract n1 from n2 )
 h: over- over - ;           ( u u -- u u )
 h: over+ over + ;           ( u1 u2 -- u1 u1+2 )
@@ -1327,9 +1327,6 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
    string@ r> swap ccitt >r +string
   repeat r> nip ;
 
-( : random ( -- u : pseudo random number )
-(  seed @ 0= seed toggle seed @ 0 ccitt dup seed ! ; )
-
 \ *last* gets a pointer to the most recently defined word, which is used to
 \ implement words like *recurse*, as well as in words which must traverse the
 \ current word list.
@@ -1345,7 +1342,6 @@ h: last get-current @ ;         ( -- pwd )
 \ necessary in a hosted Forth to have such a mechanism, but it can be turned
 \ on when needed with a VM CPU option, when we see *^h* and *ktap*.
 \
-
 
 h: echo <echo> @execute ;              ( c -- )
 : emit <emit> @execute ;               ( c -- : write out a char )
@@ -1969,26 +1965,26 @@ h: inline? inline-start inline-end within ; ( pwd -- t : is word inline? )
 
 \ Now we know the structure of the dictionary we can define some words that
 \ work with it. We will define *find* and *search-wordlist*, which will
-\ be derived from *finder* and *searcher*. *searcher* will attempt to
-\ find a word in a specific word list, and *find* will attempt to find a
-\ word in all the word lists in the current order.
+\ be derived from *(find)* and *(search-wordlist)*. *(search-wordlist)* will 
+\ attempt to find a word in a specific word list, and *find* will attempt to 
+\ find a word in all the word lists in the current order.
 \
-\ *searcher* and *finder* both return as much information about the words
-\ they find as possible, if they find them. *searcher* returns
+\ *(search-wordlist)* and *(find)* both return as much information about the 
+\ words they find as possible, if they find them. *(search-wordlist)* returns
 \ the *PWD* of the word that points to the found word, the *PWD* of the
 \ found word and a number indicating whether the found word is immediate
 \ (1) or a compiling word (-1). It returns zero, the original counted string,
 \ and another zero if the word could not be found in its first argument, a word
 \ list (wid). The word is provided as a counted string in the second argument
-\ to *searcher*.
+\ to *(search-wordlist)*.
 \
-\ *finder* wraps up *searcher* and applies it to all the words in the
-\ search order. It returns the same values as *searcher* if a word is found,
-\ returns the original counted word string address if it was not found, as
-\ well as zeros.
+\ *(find)* wraps up *(search-wordlist)* and applies it to all the words in the
+\ search order. It returns the same values as *(search-wordlist)* if a word is 
+\ found, returns the original counted word string address if it was not found, 
+\ as well as zeros.
 \
 
-h: searcher ( a wid -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word in a WID )
+h: (search-wordlist) ( a wid -- PWD PWD 1|PWD PWD -1|0 a 0: find word in WID )
   swap >r dup
   begin
     dup
@@ -2002,28 +1998,28 @@ h: searcher ( a wid -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word in a WID )
   repeat
   rdrop 2drop-0 ;
 
-h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
+h: (find) ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
   >r
   context
   begin
     dup@
   while
-    dup@ @ r@ swap searcher ?dup
+    dup@ @ r@ swap (search-wordlist) ?dup
     if
       >r rot-drop r> rdrop exit
     then
     cell+
   repeat drop-0 r> 0x0000 ;
 
-\ *search-wordlist* and *find* are simple applications of *searcher* and
-\ *finder*, there is a difference between this Forths version of *find* and
+\ *search-wordlist* and *find* are simple applications of *(search-wordlist)* 
+\ and *(find)* there is a difference between this Forths version of *find* and
 \ the standard one, this version of *find* does not return an execution token
 \ but a pointer in the word header which can be turned into an execution token
 \ with *cfa*.
 
-: search-wordlist searcher rot-drop ; ( a wid -- pwd 1 | pwd -1 | a 0 )
+: search-wordlist (search-wordlist) rot-drop ; ( a wid -- PWD 1|PWD -1|a 0 )
 : find ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
-  finder rot-drop ;
+  (find) rot-drop ;
 
 \ 
 \ ## Numeric Input
@@ -2199,8 +2195,8 @@ h: doLit 0x8000 or , ;                 ( n+ -- : compile literal )
   then
   doLit ; compile-only immediate ( turn into literal, write into dictionary )
 
-h: make-callable chars $4000 or ; ( cfa -- instruction )
-: compile, make-callable , ; ( cfa -- : compile a code field address )
+h: make-callable chars $4000 or ;    ( cfa -- instruction )
+: compile, make-callable , ;         ( cfa -- : compile a code field address )
 h: $compile dup inline? if cfa @ , exit then cfa compile, ; ( pwd -- )
 h: not-found source type $D -throw ; ( -- : throw 'word not found' )
 
@@ -2333,25 +2329,49 @@ h: (abort) do$ ?abort ;                                        ( -- )
 \ 
 \ *quit* will be called from the boot word later on.
 \
-
-h: preset tib-start #tib cell+ ! 0 in! id zero ;  ( -- : reset input )
-: ] [-1] state ! ;                                ( -- : compile mode )
-: [   state zero ; immediate                      ( -- : command mode )
-
-h: empty sp0 sp! ; ( 0..n -- : empty variable stack )
-h: ?error ( n -- : perform actions on error )
-  ?dup if
-    .             ( print error number )
-    [char] ? emit ( print '?' )
-    cr            ( and terminate the line )
-    empty         ( empty the variable stack )
-    preset        ( reset I/O streams )
-    postpone [    ( back into interpret mode )
-    exit
-  then ;
+\ ### I/O Control
+\ 
+\ The I/O control section is a relic from eForth that is not really needed
+\ in a hosted Forth, at least one where the terminal emulator used handles
+\ things like line editing. It is left in here so it can be quickly be added
+\ back in if this Forth were to be ported to an embed environment, one in
+\ which communications with the Forth took place over a UART.
+\
+\ Open and reading from different files is also not needed, it is handled
+\ by the virtual machine.
 
 h: (ok) state@ ?exit ."  ok" cr ;  ( -- : default state aware prompt )
 ( : ok <ok> @execute ; )
+
+h: preset tib-start #tib cell+ ! 0 in! id zero ;  ( -- : reset input )
+
+h: quite? 4 cpu@ and 0<> ; ( -- t : are we operating in quite mode? )
+: io! preset fallthrough;  ( -- : initialize I/O )
+h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
+h: hand 
+   quite? 0= ' (ok) and
+   ' drop ' tap 
+   raw? if 2drop
+     ' emit  ' ktap 
+   then fallthrough;
+h: xio  ' accept <expect> ! <tap> ! <echo> ! <ok> ! ;
+h: pace 11 emit ;
+: file ' pace ' drop ' ktap xio ; 
+
+: ] [-1] state !    ;                                ( -- : compile mode )
+: [      state zero ; immediate                      ( -- : command mode )
+
+h: empty sp0 sp! ; ( 0..n -- : empty variable stack )
+h: ?error ( n -- : perform actions on error )
+  ?dup 0= ?exit
+  .             ( print error number )
+  [char] ? emit ( print '?' )
+  cr            ( and terminate the line )
+  empty         ( empty the variable stack )
+  fallthrough; 
+h: prequit      ( perform actions needed to start 'quit' off )
+  preset        ( reset I/O streams )
+  postpone [ ;  ( back into interpret mode )
 
 h: eval ( -- : evaluation loop, get token, evaluate, loop, prompt )
   begin
@@ -2366,7 +2386,7 @@ h: eval ( -- : evaluation loop, get token, evaluate, loop, prompt )
 \ processes any errors that occur, if any.
 
 ( : @echo source type cr ; ( -- : can be used to monitor input )
-: quit preset postpone [ begin query ( @echo ) ' eval catch ?error again ; 
+: quit prequit begin query ( @echo ) ' eval catch ?error again ; 
 
 \ *evaluate* is used to evaluate a string of text as if it were typed in by
 \ the programmer. It takes an address and its length, this is used in the
@@ -2387,32 +2407,6 @@ h: set-input <ok> ! id ! in! #tib 2! ;     ( n1...n5 -- )
   ' eval catch
   r> 2r> 2r> set-input
   throw ;
-
-\ 
-\ ## I/O Control
-\ 
-\ The I/O control section is a relic from eForth that is not really needed
-\ in a hosted Forth, at least one where the terminal emulator used handles
-\ things like line editing. It is left in here so it can be quickly be added
-\ back in if this Forth were to be ported to an embed environment, one in
-\ which communications with the Forth took place over a UART.
-\
-\ Open and reading from different files is also not needed, it is handled
-\ by the virtual machine.
-
-h: quite? 4 cpu@ and 0<> ; ( -- t : are we operating in quite mode? )
-: io! preset fallthrough;  ( -- : initialize I/O )
-h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
-h: hand 
-   quite? if 0 else ' (ok) then
-   raw? if 
-     ' emit  ' ktap 
-   else 
-     ' drop ' tap 
-   then fallthrough;
-h: xio  ' accept <expect> ! <tap> ! <echo> ! <ok> ! ;
-h: pace 11 emit ;
-: file ' pace ' drop ' ktap xio ; 
 
 \ 
 \ ## Control Structures and Defining words
@@ -2490,7 +2484,7 @@ h: pace 11 emit ;
 h: ?check ( magic-number -- : check for magic number on the stack )
    magic = ?exit $16 -throw ;
 h: ?unique ( a -- a : print a message if a word definition is not unique )
-  dup get-current searcher 0= ?exit
+  dup get-current (search-wordlist) 0= ?exit
     ( source type )
   space
   2drop last-def @ .id ." redefined" cr ;
@@ -3155,7 +3149,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ 
 
 : see ( --, <string> : decompile a word )
-  token finder ?not-found
+  token (find) ?not-found
   swap      2dup= if drop here then >r
   cr colon-space dup .id dup cr
   cfa r> decompiler space [char] ; emit

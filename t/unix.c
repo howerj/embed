@@ -103,14 +103,15 @@ int main(void) {
 
 	fd = STDIN_FILENO;
 	if(isatty(fd)) {
-		embed_info("TTY RAW/NO-BLOCKING - UART Simulation", out);
-		embed_info("Hit ESCAPE or type 'bye' to quit", out);
+		embed_info("TTY RAW/NO-BLOCKING - UART Simulation");
+		embed_info("Hit ESCAPE or type 'bye' to quit");
 		options |= EMBED_VM_RAW_TERMINAL;
 		if(raw(fd) < 0)
 			embed_fatal("failed to set terminal attributes: %s", strerror(errno));
 		atexit(cooked);
 	} else {
-		embed_info("NOT A TTY", out);
+		embed_info("NOT A TTY");
+		options |= EMBED_VM_QUITE_ON;
 	}
 
 	embed_opt_t o = embed_opt_default();
@@ -119,9 +120,9 @@ int main(void) {
 	o.options  = options;
 
 	embed_t *h = embed_new();
-	embed_opt_set(h, o);
 	if(!h)
 		embed_fatal("embed: allocate failed");
+	embed_opt_set(h, o);
 	/* NB. The eForth image will return '1' if there is more work to do,
 	 * '0' on successful exit (with no more work to do) and negative on an
 	 * error (with no more work to do). This is however only by convention,

@@ -16,9 +16,12 @@ typedef signed_cell_t s_t; /**< used for signed calculation and casting */
 typedef double_cell_t d_t; /**< should be double the size of 'm_t' and unsigned */
 struct embed_t { embed_opt_t o; m_t m[CORE_SIZE]; }; /**< Embed Forth VM structure */
 
+/* NB. MMU operations could be improved by allowing exceptions to be thrown */
 m_t  embed_mmu_read_cb(m_t const * const m, m_t addr)       { return m[addr]; }
 void embed_mmu_write_cb(m_t * const m, m_t addr, m_t value) { m[addr] = value; }
 
+/* @todo Simplify library so only functions that access memory and not FILE
+ * I/O are defined within this file */
 int embed_fputc_cb(int ch, void *file)             { assert(file); return fputc(ch, file); }
 int embed_fgetc_cb(void *file, int *no_data)       { assert(file && no_data); *no_data = 0; return fgetc(file); }
 m_t *embed_core_get(embed_t *h)                    { assert(h); return h->m; }
@@ -29,6 +32,7 @@ static inline int is_big_endian(void)              { return (*(uint16_t *)"\0\xf
 static void embed_normalize(embed_t *h)            { assert(h); if(is_big_endian()) embed_buffer_swap(h->m, sizeof(h->m)/2); }
 embed_opt_t embed_opt_get(embed_t *h)              { assert(h); return h->o; }
 void embed_opt_set(embed_t *h, embed_opt_t opt)    { assert(h); h->o = opt; }
+int embed_yield_cb(void *param)                    { (void)(param); return 0; }
 
 int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length) {
 	assert(h && buf);
@@ -117,7 +121,7 @@ int embed_puts(embed_t *h, const char *s) {
 	embed_opt_t *o = &(h->o);
 	int r = 0;
 	if(!(o->put))
-		return -21;
+		return -21; /* not implemented */
 	for(int ch = 0; (ch = *s++); r++)
 		if(ch != o->put(ch, o->out))
 			return -1;
@@ -163,10 +167,9 @@ embed_opt_t embed_opt_default(void) {
 	embed_opt_t o = {
 		.get      = embed_fgetc_cb, .put   = embed_fputc_cb, .save = embed_save_cb,
 		.in       = stdin,          .out   = stdout,         .name = NULL, 
-		.callback = NULL,           .param = NULL,
 		.write    = embed_mmu_write_cb,    
 		.read     = embed_mmu_read_cb,
-		.options  = 0
+		.yield    = embed_yield_cb
 	};
 	return o;
 }
@@ -176,8 +179,8 @@ embed_opt_t embed_opt_default(void) {
 #else
 static int extend(uint16_t dd) { return dd & 2 ? (s_t)(dd | 0xFFFE) : dd; }
 
-static int disassemble(m_t instruction, char *output, size_t length)
-{
+static int disassemble(m_t instruction, char *output, size_t length) {
+	assert(output);
 	if(0x8000 & instruction) {
 		return snprintf(output, length, "literal %04x", (unsigned)(0x1FFF & instruction));
 	} else if ((0xE000 & instruction) == 0x6000) {
@@ -220,13 +223,15 @@ int embed_vm(embed_t * const h) {
 	BUILD_BUG_ON((sizeof(m_t)*2) != sizeof(d_t));
 	embed_opt_t *o = &(h->o);
 	static const m_t delta[] = { 0, 1, -2, -1 }; /* two bit signed value */
-	const embed_mmu_read_t  mr = o->read;
-	const embed_mmu_write_t mw = o->write;
-	assert(mr && mw);
+	const embed_mmu_read_t  mr    = o->read;
+	const embed_mmu_write_t mw    = o->write;
+	const embed_yield_t     yield = o->yield;
+	void  *yields = o->yields;
+	assert(mr && mw && yield);
 	const m_t l = embed_cells(h); 
 	m_t * const m = h->m;
 	m_t pc = mr(m, 0), t = mr(m, 1), rp = mr(m, 2), sp = mr(m, 3), r = 0;
-	for(d_t d;;) {
+	for(d_t d;!yield(yields);) {
 		const m_t instruction = mr(m, pc++);
 		trace(h, pc, instruction, t, rp, sp);
 		if((r = -!(sp < l && rp < l && pc < l))) /* critical error */
@@ -237,7 +242,6 @@ int embed_vm(embed_t * const h) {
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
 			m_t n = mr(m, sp), T = t;
 			pc = instruction & 0x10 ? mr(m, rp) >> 1 : pc;
-
 			switch((instruction >> 8u) & 0x1f) {
 			case  0: T = t;                    break;
 			case  1: T = n;                    break;
@@ -274,6 +278,7 @@ int embed_vm(embed_t * const h) {
 					 if(r) { pc = 4; T = r; }
 				 } else { pc=4; T=21; } break;
 			case 29: T = o->options; o->options = t; break;
+			/* NB. A source of entropy and time are missing, which could be added here */
 			default: pc = 4; T=21; /* not implemented */ break;
 			}
 			sp += delta[ instruction       & 0x3];

@@ -263,6 +263,11 @@ int embed_push(embed_t *h, cell_t value);
  * @return zero on success, negative on failure */
 int embed_pop(embed_t *h, cell_t *value); 
 
+/**@brief Return the current variable stack depth
+ * @param h, initialized Virtual Machine
+ * @return The current stack depth in cells */
+size_t embed_depth(embed_t *h);
+
 /**@brief Retrieve a copy of some sensible default options, the default options
  * contain callbacks and file handles that will read data from standard in,
  * write data to standard out and save to disk. You can modify the returned

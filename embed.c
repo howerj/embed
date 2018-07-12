@@ -29,7 +29,7 @@ static size_t embed_cells(embed_t const * const h) { assert(h); return MIN(h->o.
 m_t embed_swap(m_t s)                              { return (s >> 8) | (s << 8); }
 void embed_buffer_swap(m_t *b, size_t l)           { assert(b); for(size_t i = 0; i < l; i++) b[i] = embed_swap(b[i]); }
 static inline int is_big_endian(void)              { return (*(uint16_t *)"\0\xff" < 0x100); }
-static void embed_normalize(embed_t *h)            { assert(h); if(is_big_endian()) embed_buffer_swap(h->m, sizeof(h->m)/2); }
+static void embed_normalize(embed_t *h, size_t l)  { assert(h); if(is_big_endian()) embed_buffer_swap(h->m, l); }
 embed_opt_t embed_opt_get(embed_t *h)              { assert(h); return h->o; }
 void embed_opt_set(embed_t *h, embed_opt_t opt)    { assert(h); h->o = opt; }
 int embed_yield_cb(void *param)                    { (void)(param); return 0; }
@@ -37,14 +37,14 @@ int embed_yield_cb(void *param)                    { (void)(param); return 0; }
 int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length) {
 	assert(h && buf);
 	memcpy(h->m, buf, MIN(sizeof(h->m), length));
-	embed_normalize(h);
+	embed_normalize(h, length/2);
 	return length < 128 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
 }
 
 int embed_load_file(embed_t *h, FILE *input) {
 	assert(h && input);
 	size_t r = fread(h->m, 1, sizeof(h->m), input);
-	embed_normalize(h);
+	embed_normalize(h, r/2);
 	return r < 128 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
 }
 
@@ -111,7 +111,7 @@ int embed_eval(embed_t *h, const char *str) {
 	o_new.options = EMBED_VM_QUITE_ON;
 	embed_opt_set(h, o_new);
 	const int r = embed_vm(h);
-	embed_reset(h);
+	/*embed_reset(h);*/
 	embed_opt_set(h, o_old);
 	return r;
 }
@@ -146,21 +146,32 @@ int embed_push(embed_t *h, m_t value) {
 }
 
 int embed_pop(embed_t *h, m_t *value) {
-	assert(h && value);
+	assert(h);
 	m_t * const m = h->m;
 	const embed_mmu_read_t  mr = h->o.read;
 	const embed_mmu_write_t mw = h->o.write;
 	assert(mr && mw);
 	m_t rp = mr(m, 2), sp = mr(m, 3), sp0 = mr(m, 3+SHADOW);
-	*value = 0;
+	if(value)
+		*value = 0;
 	if(sp < 32 || (sp-1) < sp0)
 		return -4; /* stack underflow */
 	if(sp > (CORE_SIZE-1) || sp > rp)
 		return -3; /* stack overflow */
-	*value = mr(m, 1);
+	if(value)
+		*value = mr(m, 1);
 	mw(m, 1, mr(m, sp--));
 	mw(m, 3, sp);
 	return 0;
+}
+
+size_t embed_depth(embed_t *h)
+{
+	assert(h);
+	m_t * const m = h->m;
+	const embed_mmu_read_t  mr = h->o.read;
+	const m_t sp = mr(m, 3), sp0 = mr(m, 3+SHADOW);
+	return sp - sp0;
 }
 
 embed_opt_t embed_opt_default(void) {

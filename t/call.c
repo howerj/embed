@@ -553,12 +553,18 @@ static int callbacks_add(embed_t * const h, const bool optimize,  callbacks_t *c
 		char line[80] = { 0 };
 		if(!cb[i].use)
 			continue;
-		int r = snprintf(line, sizeof(line) - 1, ": %s %u vm ; %s\n", cb[i].name, (unsigned)i, optimizer);
-		if(r < 0)
+		int r = snprintf(line, sizeof(line), ": %s %u vm ; %s\n", cb[i].name, (unsigned)i, optimizer);
+		assert(strlen(line) < sizeof(line) - 1); 
+		if(r < 0) {
+			embed_error("format error in snprintf (returned %d)", r);
 			return -1;
-		if((r = embed_eval(h, line)) < 0)
+		}
+		if((r = embed_eval(h, line)) < 0) {
+			embed_error("embed: eval returned %d", r);
 			return r;
+		}
 	}
+	embed_reset(h);
 	return 0;
 }
 
@@ -577,8 +583,10 @@ static vm_extension_t *vm_extension_new(void) {
 	v->o.param          = v;
 	embed_opt_set(v->h, v->o);
 
-	if(callbacks_add(v->h, true, v->callbacks, v->callbacks_length) < 0)
-		goto fail; /**@todo use embed_debug throughout? */
+	if(callbacks_add(v->h, true, v->callbacks, v->callbacks_length) < 0) {
+		embed_error("adding callbacks failed");
+		goto fail;
+	}
 
 	return v;
 fail:

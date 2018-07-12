@@ -81,7 +81,11 @@ run: cross
 ${UNIT}: ${FORTH} ${META1} t/unit.fth
 	${DF}${FORTH} -o ${UNIT} -i ${META1} t/unit.fth
 
-tests: ${UNIT}
+unit: t/unit.c libembed.a
+	${CC} ${CFLAGS} $^ -o $@
+
+tests: unit ${UNIT}
+	${DF}unit${EXE}
 
 ### Documentation ############################################################ 
 
@@ -137,7 +141,7 @@ apps: ${TESTAPPS}
 ### Cleanup ################################################################## 
 
 clean:
-	${RM} ${FORTH} ${META1} ${META2} ${TEMP} ${UNIT} ${B2C}
+	${RM} ${FORTH} *.blk ${B2C}
 	${RM} *.o *.a *.so *.pdf *.htm
 	${RM} *.gen.c
 	${RM} *.tgz

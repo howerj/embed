@@ -19,5 +19,6 @@ mmu
 *.so
 *.tgz
 *.txt
+unit
 unix
 vgcore.*

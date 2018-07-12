@@ -624,6 +624,7 @@ a: return ( -- : Compile a return into the target )
 : next tdoNext fetch-xt [a] call t, update-fence ; ( a -- )
 : exit exit, ;                               ( -- )
 : ' [t] literal ;                            ( "name", -- )
+: recurse tlast @ tcfa [a] call ;            ( -- )
 
 \ @bug maximum string length is 64 bytes, not 255 as it should be.
 : ." tdoPrintString fetch-xt [a] call $literal ; ( "string", -- )
@@ -1113,7 +1114,7 @@ h: ?exit if rdrop exit then ; ( u --, R: xt -- xt| : conditional return )
 h: over- over - ;           ( u u -- u u )
 h: over+ over + ;           ( u1 u2 -- u1 u1+2 )
 : aligned dup first-bit + ; ( b -- a )
-: bye -1 0 yield? nop ( $38 -throw ) ; ( -- : leave the interpreter )
+: bye -1 0 yield? 2drop ( $38 -throw ) ; ( -- : leave the interpreter )
 h: cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+  cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;          ( n -- n : convert cells count to address count )
@@ -1290,10 +1291,18 @@ h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 \ other work as there is no input available at the moment, and it loops until
 \ there is some input. All of this is transparent to the user of *key*.
 \
+\ *bye* exits the interpreter in the standard fashion, however the C program
+\ calling the virtual machine is free to run the same image again which will
+\ start off executing at the yield again (which will not yield the second
+\ time as it sets its second parameter to zero the first time) if a call
+\ to reset the virtual machine is not made. The C program may repeatedly do 
+\ this, send the virtual machine input that runs out when it wants to evaluate 
+\ strings of Forth programs.
+\
 
-: key ( -- c : return a  )
+: key ( -- c : return a character )
     begin <key> @execute dup if nip [-1] 1 yield? 2drop then 0= until
-    dup [-1] <> ?exit bye ;
+    dup [-1] <> ?exit drop bye recurse ;
 
 \ */string*, *+string* and *count* are for manipulating strings, *count*
 \ words best on counted strings which have a length prefix, but can be used
@@ -3101,27 +3110,28 @@ h: name ( cwf -- a | 0 )
      swap r@ search-for-cfa ?dup if >r 1- ndrop r> rdrop exit then
    1- repeat rdrop ;
 
-( h: neg? dup 2 and if $FFFE or then ; )
+( h: neg? dup 2 and if $FFFE or then ;  )
 ( h: .alu  ( u -- ) 
-(   dup ." alu{" 8 rshift $1F and 2 u.r ." } "  )
-(   dup $80 and if ." t->n " then  )
-(   dup $40 and if ." t->r " then )
-(   dup $20 and if ." n->t " then )
-(   dup $10 and if ." r->p " then )
-(   dup $0C and ." r{" 2 rshift neg? . ." } " )
-(       $03 and ." d{"          neg? . ." } " ; )
+(   dup 8 rshift $1F and space 5u.r space )
+(   dup $80 and if ." t->n  " then   )
+(   dup $40 and if ." t->r  " then  )
+(   dup $20 and if ." n->t  " then  )
+(   dup $10 and if ." r->pc " then  )
+(   dup $0C and [char] r emit 2 rshift neg? . space )
+(       $03 and [char] d emit          neg? . ;  )
  
 h: ?instruction ( i m e -- i t )
    >r over-and r> = ;
 
 ( a -- : find word by address, and print )
-h: .name name ?dup if word.count type then ; 
+h: .name dup address 1 lshift space 5u.r space  ( a -- )
+         name ?dup if word.count type then ; 
 h: .instruction                    ( u -- : decompile a single instruction )
-   0x8000  0x8000 ?instruction if [char] L emit $7FFF and u. exit then
-    $6000   $6000 ?instruction if [char] A emit drop ( space .alu ) exit then
-    $6000   $4000 ?instruction if [char] C emit space .name  exit then
-    $6000   $2000 ?instruction if [char] Z emit space .name  exit then
-   [char] B emit space .name ;
+   0x8000  0x8000 ?instruction if [char] L emit $7FFF and space 5u.r exit then
+    $6000   $6000 ?instruction if [char] A emit  drop ( .alu ) exit then
+    $6000   $4000 ?instruction if [char] C emit .name exit then
+    $6000   $2000 ?instruction if [char] Z emit .name exit then
+   [char] B emit .name ;
 
 h: decompiler ( previous current -- : decompile starting at address )
   >r

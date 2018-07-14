@@ -34,12 +34,12 @@ static inline void _unit_test(int failed, const char *expr_str, const char *file
 }
 
 static inline void unit_test_finish(void) {
-	fprintf(UNIT_TEST_OUTPUT, "\n\nTests passed/total: %u/%u\n", unit_tests_passed, unit_tests_run);
+	fprintf(UNIT_TEST_OUTPUT, "Tests passed/total: %u/%u\n", unit_tests_passed, unit_tests_run);
 	if(unit_tests_run != unit_tests_passed) {
 		fprintf(UNIT_TEST_OUTPUT, "[FAILED]\n");
 		exit(EXIT_FAILURE);
 	}
-	fprintf(UNIT_TEST_OUTPUT, "[SUCCESS] (all tests passed)\n");
+	fprintf(UNIT_TEST_OUTPUT, "[SUCCESS]\n");
 }
 
 #define unit_test_start()      _unit_test_start(__FILE__, __func__, __LINE__)

@@ -1789,7 +1789,10 @@ h: raw? cpu@ 2 and 0<> ; ( c -- t : raw terminal mode? )
   begin
     2dupxor
   while
-    key dup 
+    \ we need to be wary of 'key', because it calls 'bye' when input
+    \ is exhausted it is an exit and potential entry point into the program,
+    \ so we should try to keep the stack elements from 'accept' hidden
+    >r 2>r key 2r> rot r> swap dup 
     raw? if ( we need to handle echoing, and handling delete keys )
 	\ =bl - 95 u< if tap else <tap> @execute then
 	ktap? if tap else <tap> @execute then

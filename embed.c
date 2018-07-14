@@ -112,6 +112,8 @@ int embed_eval(embed_t *h, const char *str) {
 	embed_opt_set(h, o_new);
 	const int r = embed_vm(h);
 	/*embed_reset(h);*/
+	/*embed_pop(h, NULL);
+	embed_pop(h, NULL);*/
 	embed_opt_set(h, o_old);
 	return r;
 }

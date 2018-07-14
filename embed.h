@@ -215,6 +215,12 @@ int embed_load_file(embed_t *h, FILE *input);
  * @return zero on success, negative on failure */
 int embed_save(const embed_t *h, const char *name);
 
+/**@brief Load the default configuration options for the embed virtual machine
+ * and the default image as well.
+ * @param h, an uninitialized 
+ * @return returns non-zero on failure, and zero on success */
+int embed_default(embed_t *h);
+
 /**@brief Length in bytes of core memory 
  * @param h, initialized Virtual Machine image
  * @return bytes in h */

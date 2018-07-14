@@ -1114,7 +1114,7 @@ h: ?exit if rdrop exit then ; ( u --, R: xt -- xt| : conditional return )
 h: over- over - ;           ( u u -- u u )
 h: over+ over + ;           ( u1 u2 -- u1 u1+2 )
 : aligned dup first-bit + ; ( b -- a )
-: bye -1 0 yield? 2drop ( $38 -throw ) ; ( -- : leave the interpreter )
+: bye 0 [-1] yield? drop ( $38 -throw ) ; ( -- : leave the interpreter )
 h: cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+  cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;          ( n -- n : convert cells count to address count )
@@ -1301,7 +1301,7 @@ h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 \
 
 : key ( -- c : return a character )
-    begin <key> @execute dup if nip [-1] 1 yield? 2drop then 0= until
+    begin <key> @execute dup if nip 1 [-1] yield? drop then 0= until
     dup [-1] <> ?exit drop bye recurse ;
 
 \ */string*, *+string* and *count* are for manipulating strings, *count*
@@ -1383,7 +1383,7 @@ h: colon-space [char] : emit space ;   ( -- )
 
 h: vrelative sp@ swap - ;  ( u -- u : position relative to sp )
 : depth sp0 vrelative cell- chars ; ( -- u : get current depth )
-: pick cells vrelative @ ;             ( vn...v0 u -- vn...v0 vu )
+: pick cells vrelative @ ;          ( vn...v0 u -- vn...v0 vu )
 
 \ *ndrop* removes a variable number of items off the variable stack, which
 \ is sometimes needed for cleaning things up before exiting a word.

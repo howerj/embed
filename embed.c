@@ -46,6 +46,12 @@ int embed_load_file(embed_t *h, FILE *input) {
 	return r < 128 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
 }
 
+int embed_default(embed_t *h) {
+	assert(h);
+	h->o = embed_opt_default();
+	return embed_load_buffer(h, embed_default_block, embed_default_block_size);
+}
+
 int embed_save_cb(const embed_t *h, const void *name, const size_t start, const size_t length) {
 	assert(h);
 	m_t const * const m = embed_core_get((embed_t*)h);
@@ -151,8 +157,7 @@ int embed_pop(embed_t *h, m_t *value) {
 	return 0;
 }
 
-size_t embed_depth(embed_t *h)
-{
+size_t embed_depth(embed_t *h) {
 	assert(h);
 	m_t * const m = h->m;
 	const embed_mmu_read_t  mr = h->o.read;
@@ -240,40 +245,40 @@ int embed_vm(embed_t * const h) {
 			m_t n = mr(m, sp), T = t;
 			pc = instruction & 0x10 ? mr(m, rp) >> 1 : pc;
 			switch((instruction >> 8u) & 0x1f) {
-			case  0: T = t;                    break;
-			case  1: T = n;                    break;
-			case  2: T = mr(m, rp);            break;
-			case  3: T = mr(m, (t>>1)%l);      break;
+			case  0: T = t;                  break;
+			case  1: T = n;                  break;
+			case  2: T = mr(m, rp);          break;
+			case  3: T = mr(m, (t>>1)%l);    break;
 			case  4: mw(m, (t>>1)%l, n); T = mr(m, --sp); break;
 			case  5: d = (d_t)t + n; T = d >> 16; mw(m, sp, d); n = d; break;
 			case  6: d = (d_t)t * n; T = d >> 16; mw(m, sp, d); n = d; break;
-			case  7: T = t&n;                  break;
-			case  8: T = t|n;                  break;
-			case  9: T = t^n;                  break;
-			case 10: T = ~t;                   break;
-			case 11: T = t-1;                  break;
-			case 12: T = -(t == 0);            break;
-			case 13: T = -(t == n);            break;
-			case 14: T = -(n < t);             break;
-			case 15: T = -((s_t)n < (s_t)t);   break;
-			case 16: T = n >> t;               break;
-			case 17: T = n << t;               break;
-			case 18: T = sp << 1;              break;
-			case 19: T = rp << 1;              break;
-			case 20: sp = t >> 1;              break;
-			case 21: rp = t >> 1; T = n;       break;
+			case  7: T = t&n;                break;
+			case  8: T = t|n;                break;
+			case  9: T = t^n;                break;
+			case 10: T = ~t;                 break;
+			case 11: T = t-1;                break;
+			case 12: T = -(t == 0);          break;
+			case 13: T = -(t == n);          break;
+			case 14: T = -(n < t);           break;
+			case 15: T = -((s_t)n < (s_t)t); break;
+			case 16: T = n >> t;             break;
+			case 17: T = n << t;             break;
+			case 18: T = sp << 1;            break;
+			case 19: T = rp << 1;            break;
+			case 20: sp = t >> 1;            break;
+			case 21: rp = t >> 1; T = n;     break;
 			case 22: if(o->save) { T = o->save(h, o->name, n>>1, ((d_t)t+1)>>1); }    else { pc=4; T=21; } break;
 			case 23: if(o->put)  { T = o->put(t, o->out); }                           else { pc=4; T=21; } break; 
 			case 24: if(o->get)  { int nd = 0; mw(m, ++sp, t); T = o->get(o->in, &nd); t = T; n = nd; } else { pc=4; T=21; } break;
 			case 25: if(t)       { d = mr(m, --sp)|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t)       { T=(s_t)n/t; t=(s_t)n%t; n=t; }                     else { pc=4; T=10; } break;
-			case 27: if(n)       { mw(m, sp, 0); r = t; goto finished; } break;
+			case 27: if(t)       { t = 0; sp--; r = n; goto finished; } T = t; break;
 			case 28: if(o->callback) { 
 					 mw(m, 0, pc), mw(m, 1, t), mw(m, 2, rp), mw(m, 3, sp); 
 					 r = o->callback(h, o->param);
 					 pc = mr(m, 0), T = mr(m, 1), rp = mr(m, 2), sp = mr(m, 3); 
 					 if(r) { pc = 4; T = r; }
-				 } else { pc=4; T=21; } break;
+				 } else { pc=4; T=21; }  break;
 			case 29: T = o->options; o->options = t; break;
 			/* NB. A source of entropy and time are missing, which could be added here */
 			default: pc = 4; T=21; /* not implemented */ break;

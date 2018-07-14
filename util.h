@@ -13,6 +13,7 @@
 extern "C" {
 #endif
 
+#include "embed.h"
 #include <stddef.h>
 #include <stdio.h>
 
@@ -72,6 +73,20 @@ void *embed_alloc(size_t sz);
  * @param sz, number of bytes to allocate
  * @return pointer to memory of size 'sz', never returns NULL */
 void *embed_alloc_or_die(size_t sz);                              
+
+/**@brief Make a new Forth VM, and load with default image. The default image
+ * contains a fully working eForth image.
+ * @return a pointer to a new Forth VM, loaded with the default image */
+embed_t  *embed_new(void); 
+
+/**@brief Copy existing instance of a Forth VM 
+ * @param h,     initialized Virtual Machine image
+ * @return a copy of h, or NULL on failure */
+embed_t  *embed_copy(embed_t const * const h); 
+
+/**@brief Free a Forth VM
+ * @param h,     initialized Virtual Machine image to free */
+void embed_free(embed_t *h);                                      
 
 #ifndef NDEBUF
 #define embed_fatal(...)   embed_logger(EMBED_LOG_LEVEL_FATAL,   __FILE__, __func__, __LINE__, __VA_ARGS__)

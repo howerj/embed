@@ -19,6 +19,11 @@ static inline void _unit_test_start(const char *file, const char *func, unsigned
 	fprintf(UNIT_TEST_OUTPUT, "Start tests: %s in %s:%d\n\n", func, file, line);
 }
 
+static inline void _unit_test_statement(const char *expr_str)
+{
+	fprintf(UNIT_TEST_OUTPUT, "   STATE: %s\n", expr_str);
+}
+
 static inline void _unit_test(int failed, const char *expr_str, const char *file, const char *func, unsigned line, int die) {
 	if(failed) {
 		fprintf(UNIT_TEST_OUTPUT, "  FAILED: %s (%s:%s:%d)\n", expr_str, file, func, line);
@@ -42,9 +47,10 @@ static inline void unit_test_finish(void) {
 	fprintf(UNIT_TEST_OUTPUT, "[SUCCESS]\n");
 }
 
-#define unit_test_start()      _unit_test_start(__FILE__, __func__, __LINE__)
-#define unit_test(EXPR)        _unit_test(0 == (EXPR), (# EXPR), __FILE__, __func__, __LINE__, 0)
-#define unit_test_verify(EXPR) _unit_test(0 == (EXPR), (# EXPR), __FILE__, __func__, __LINE__, 1)
+#define unit_test_statement(EXPR) do { EXPR; _unit_test_statement( ( # EXPR ) ); } while(0)
+#define unit_test_start()         _unit_test_start(__FILE__, __func__, __LINE__)
+#define unit_test(EXPR)           _unit_test(0 == (EXPR), (# EXPR), __FILE__, __func__, __LINE__, 0)
+#define unit_test_verify(EXPR)    _unit_test(0 == (EXPR), (# EXPR), __FILE__, __func__, __LINE__, 1)
 
 #undef UNIT_TEST_OUTPUT
 

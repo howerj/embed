@@ -9,7 +9,8 @@
  * library API to add double and floating point words to that are accessible
  * via the eForth image.
  *
- * @todo Implement extracting strings and putting strings into the interpreter */
+ * @todo Implement extracting strings and putting strings into the interpreter
+ * @todo Simplify this program given the new API */
 
 #include "embed.h"
 #include "util.h"
@@ -578,10 +579,10 @@ static vm_extension_t *vm_extension_new(void) {
 
 	v->callbacks_length = number_of_callbacks(), 
 	v->callbacks        = callbacks;
-	v->o                = embed_opt_get(v->h);
+	v->o                = *embed_opt_get(v->h);
 	v->o.callback       = callback_selector;
 	v->o.param          = v;
-	embed_opt_set(v->h, v->o);
+	embed_opt_set(v->h, &v->o);
 
 	if(callbacks_add(v->h, true, v->callbacks, v->callbacks_length) < 0) {
 		embed_error("adding callbacks failed");

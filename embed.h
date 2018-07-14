@@ -5,8 +5,7 @@
  *
  *  Do not be afraid to modify things and generally hack around with things,
  *  if you want to port this to a microcontroller you might need to modify
- *  this file and 'embed.c' as well. 
- */
+ *  this file and 'embed.c' as well. */
 #ifndef EMBED_H
 #define EMBED_H
 
@@ -17,13 +16,15 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
+#define EMBED_CORE_SIZE (32768)        /**< core size in cells */
+
 typedef uint16_t cell_t;               /**< Virtual Machine Cell size: 16-bit*/
 typedef  int16_t signed_cell_t;        /**< Virtual Machine Signed Cell */
 typedef uint32_t double_cell_t;        /**< Virtual Machine Double Cell (2*sizeof(cell_t)) */
 typedef  int32_t signed_double_cell_t; /**< Virtual Machine Signed Double Cell */
 
-struct embed_t;                 /**< Forth Virtual Machine State (Opaque) */
-typedef struct embed_t embed_t; /**< Forth Virtual Machine State Type Define (Opaque) */
+struct embed_t;                 /**< Forth Virtual Machine State */
+typedef struct embed_t embed_t; /**< Forth Virtual Machine State Type Define */
 
 /**@brief Function pointer typedef for functions that are to retrieve a
  * character of input from a source. This function should behave the same
@@ -114,6 +115,11 @@ typedef struct {
 	embed_vm_option_e options;  /**< virtual machine options register */
 } embed_opt_t; /**< Embed VM options structure for customizing behavior */
 
+struct embed_t { 
+	embed_opt_t o; 
+	cell_t m[EMBED_CORE_SIZE];  /**< @todo change to pointer to memory */
+}; /**< Embed Forth VM structure */
+
 /**@brief Saves to a file called 'name', this is the default callback to save
  * an image to disk with the 'save' ALU instruction.
  * @param h,       embed virtual machine to save
@@ -162,20 +168,6 @@ cell_t  embed_mmu_read_cb(cell_t const * const m, cell_t addr);
  * @param addr,  address to write to
  * @param value, value to write */
 void embed_mmu_write_cb(cell_t * const m, cell_t addr, cell_t value);
-
-/**@brief Make a new Forth VM, and load with default image. The default image
- * contains a fully working eForth image.
- * @return a pointer to a new Forth VM, loaded with the default image */
-embed_t  *embed_new(void); 
-
-/**@brief Copy existing instance of a Forth VM 
- * @param h,     initialized Virtual Machine image
- * @return a copy of h, or NULL on failure */
-embed_t  *embed_copy(embed_t const * const h); 
-
-/**@brief Free a Forth VM
- * @param h,     initialized Virtual Machine image to free */
-void embed_free(embed_t *h);                                      
 
 /**@brief Run the VM, reading from 'in' and writing to 'out'. This function
  * provides sensibly default options that suite most (but not all) needs for a
@@ -278,12 +270,12 @@ embed_opt_t embed_opt_default(void);
 /**@brief Retrieve a copy of the current options set in 'h'
  * @param h, initialized virtual machine image
  * @return copy of current embed_opt_t structure in 'h' */
-embed_opt_t embed_opt_get(embed_t *h);
+embed_opt_t *embed_opt_get(embed_t *h);
 
 /**@brief Retrieve a copy of the current options set in 'h'
  * @param h, initialized virtual machine image
  * @return copy of current embed_opt_t structure in 'h' */
-void embed_opt_set(embed_t *h, embed_opt_t opt);
+void embed_opt_set(embed_t *h, embed_opt_t *opt);
 
 /**@brief write a string to output specified in the options within 'h'
  * @param h, initialized virtual machine image with options set

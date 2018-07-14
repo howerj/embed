@@ -8,13 +8,11 @@
 #include <string.h>
 
 #define SHADOW    (7)     /**< start location of shadow registers */
-#define CORE_SIZE (32768) /**< core size in cells */
 #define MIN(X, Y) ((X) > (Y) ? (Y) : (X))
 
 typedef cell_t        m_t; /**< The VM is 16-bit, 'uintptr_t' would be more useful */
 typedef signed_cell_t s_t; /**< used for signed calculation and casting */
 typedef double_cell_t d_t; /**< should be double the size of 'm_t' and unsigned */
-struct embed_t { embed_opt_t o; m_t m[CORE_SIZE]; }; /**< Embed Forth VM structure */
 
 /* NB. MMU operations could be improved by allowing exceptions to be thrown */
 m_t  embed_mmu_read_cb(m_t const * const m, m_t addr)       { return m[addr]; }
@@ -25,13 +23,13 @@ void embed_mmu_write_cb(m_t * const m, m_t addr, m_t value) { m[addr] = value; }
 int embed_fputc_cb(int ch, void *file)             { assert(file); return fputc(ch, file); }
 int embed_fgetc_cb(void *file, int *no_data)       { assert(file && no_data); *no_data = 0; return fgetc(file); }
 m_t *embed_core_get(embed_t *h)                    { assert(h); return h->m; }
-static size_t embed_cells(embed_t const * const h) { assert(h); return MIN(h->o.read(h->m, 5), CORE_SIZE); } /* count in cells, not bytes */
+static size_t embed_cells(embed_t const * const h) { assert(h); return MIN(h->o.read(h->m, 5), EMBED_CORE_SIZE); } /* count in cells, not bytes */
 m_t embed_swap(m_t s)                              { return (s >> 8) | (s << 8); }
 void embed_buffer_swap(m_t *b, size_t l)           { assert(b); for(size_t i = 0; i < l; i++) b[i] = embed_swap(b[i]); }
 static inline int is_big_endian(void)              { return (*(uint16_t *)"\0\xff" < 0x100); }
 static void embed_normalize(embed_t *h, size_t l)  { assert(h); if(is_big_endian()) embed_buffer_swap(h->m, l); }
-embed_opt_t embed_opt_get(embed_t *h)              { assert(h); return h->o; }
-void embed_opt_set(embed_t *h, embed_opt_t opt)    { assert(h); h->o = opt; }
+embed_opt_t *embed_opt_get(embed_t *h)             { assert(h); return &h->o; }
+void embed_opt_set(embed_t *h, embed_opt_t *opt)   { assert(h && opt); memcpy(&h->o, opt, sizeof(*opt)); }
 int embed_yield_cb(void *param)                    { (void)(param); return 0; }
 
 int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length) {
@@ -64,20 +62,6 @@ int embed_save_cb(const embed_t *h, const void *name, const size_t start, const 
 	return fclose(out) < 0 ? -62 /* close-file IOR */ : r;
 }
 
-embed_t *embed_new(void) { 
-	embed_t *h = calloc(sizeof(struct embed_t), 1); 
-	if(!h) 
-		return NULL; 
-	if(embed_load_buffer(h, embed_default_block, embed_default_block_size) < 0) {
-		embed_free(h);
-		return NULL;
-	}
-	h->o = embed_opt_default();
-	return h; 
-}
-
-void     embed_free(embed_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
-embed_t *embed_copy(embed_t const * const h)      { assert(h); embed_t *r = embed_new(); if(!r) return NULL; return memcpy(r, h, sizeof(*h)); }
 int      embed_save(const embed_t *h, const char *name) { assert(name); return embed_save_cb(h, name, 0, embed_cells(h)); }
 size_t   embed_length(embed_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
 int      embed_load(embed_t *h, const char *name) { FILE *f = fopen(name, "rb"); if(!f) return -69; int r = embed_load_file(h, f); fclose(f); return r; }
@@ -104,17 +88,17 @@ void embed_reset(embed_t *h) {
 
 int embed_eval(embed_t *h, const char *str) {
 	assert(h && str);
-	embed_opt_t o_old = embed_opt_get(h);
+	embed_opt_t o_old = *embed_opt_get(h);
 	embed_opt_t o_new = o_old;
 	o_new.get = embed_sgetc_cb;
 	o_new.in = &str;
 	o_new.options = EMBED_VM_QUITE_ON;
-	embed_opt_set(h, o_new);
+	embed_opt_set(h, &o_new);
 	const int r = embed_vm(h);
 	/*embed_reset(h);*/
 	/*embed_pop(h, NULL);
 	embed_pop(h, NULL);*/
-	embed_opt_set(h, o_old);
+	embed_opt_set(h, &o_old);
 	return r;
 }
 
@@ -139,7 +123,7 @@ int embed_push(embed_t *h, m_t value) {
 	m_t rp = mr(m, 2), sp = mr(m, 3), sp0 = mr(m, 3+SHADOW);
 	if(sp < 32 || sp < sp0)
 		return -4; /* stack underflow */
-	if(sp > (CORE_SIZE-2) || (sp+1) > rp)
+	if(sp > (EMBED_CORE_SIZE-2) || (sp+1) > rp)
 		return -3; /* stack overflow */
 	mw(m, ++sp, mr(m, 1));
 	mw(m, 1, value);
@@ -158,7 +142,7 @@ int embed_pop(embed_t *h, m_t *value) {
 		*value = 0;
 	if(sp < 32 || (sp-1) < sp0)
 		return -4; /* stack underflow */
-	if(sp > (CORE_SIZE-1) || sp > rp)
+	if(sp > (EMBED_CORE_SIZE-1) || sp > rp)
 		return -3; /* stack overflow */
 	if(value)
 		*value = mr(m, 1);
@@ -319,9 +303,9 @@ int embed_forth_opt(embed_t *h, embed_vm_option_e opt, FILE *in, FILE *out, cons
 	embed_opt_t o_old = embed_opt_default();
 	embed_opt_t o_new = o_old;
 	o_new.in = in, o_new.out = out, o_new.options = opt, o_new.name = block;
-	embed_opt_set(h, o_new);
+	embed_opt_set(h, &o_new);
 	const int r = embed_vm(h);
-	embed_opt_set(h, o_old);
+	embed_opt_set(h, &o_old);
 	return r;
 }
 

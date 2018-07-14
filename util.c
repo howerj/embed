@@ -59,3 +59,28 @@ void *embed_alloc_or_die(size_t sz) {
 	return r;
 }
 
+embed_t *embed_new(void) { 
+	embed_t *h = calloc(sizeof(struct embed_t), 1); 
+	if(!h) 
+		return NULL; 
+	if(embed_load_buffer(h, embed_default_block, embed_default_block_size) < 0) {
+		embed_free(h);
+		return NULL;
+	}
+	h->o = embed_opt_default();
+	return h; 
+}
+
+void embed_free(embed_t *h)  { 
+	assert(h); 
+	memset(h, 0, sizeof(*h)); free(h); 
+}
+
+embed_t *embed_copy(embed_t const * const h) { 
+	assert(h); 
+	embed_t *r = embed_new(); 
+	if(!r) 
+		return NULL; 
+	return memcpy(r, h, sizeof(*h)); 
+}
+

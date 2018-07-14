@@ -81,7 +81,7 @@ run: cross
 ${UNIT}: ${FORTH} ${META1} t/unit.fth
 	${DF}${FORTH} -o ${UNIT} -i ${META1} t/unit.fth
 
-unit: t/unit.c libembed.a
+unit: t/unit.c util.o libembed.a
 	${CC} ${CFLAGS} $^ -o $@
 
 tests: unit ${UNIT}
@@ -121,19 +121,19 @@ eforth: embed.c image.c util.c main.c
 	strip $@
 
 unix: CFLAGS=-O2 -Wall -Wextra -std=gnu99 -I.
-unix: t/unix.c libembed.a util.o
+unix: t/unix.c util.o libembed.a
 	${CC} ${CFLAGS} $^ -o $@
 
 win: CFLAGS=-Wall -Wextra -std=gnu99 -I.
-win: t/win.c libembed.a util.o
+win: t/win.c util.o libembed.a
 	${CC} ${CFLAGS} $^ -o $@
 
 call: CFLAGS=-O3 -Wall -Wextra -std=c99 -I.
-call: t/call.c libembed.a util.o
+call: t/call.c util.o libembed.a
 	${CC} ${CFLAGS} $^ -lm -o $@
 
 mmu: CFLAGS=-O2 -Wall -Wextra -std=c99 -I.
-mmu: t/mmu.c libembed.a util.o
+mmu: t/mmu.c util.o libembed.a 
 	${CC} ${CFLAGS} $^ -o $@
 
 apps: ${TESTAPPS}

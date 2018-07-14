@@ -122,7 +122,7 @@ int main(void) {
 	embed_t *h = embed_new();
 	if(!h)
 		embed_fatal("embed: allocate failed");
-	embed_opt_set(h, o);
+	embed_opt_set(h, &o);
 	/* NB. The eForth image will return '1' if there is more work to do,
 	 * '0' on successful exit (with no more work to do) and negative on an
 	 * error (with no more work to do). This is however only by convention,

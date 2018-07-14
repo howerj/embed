@@ -98,7 +98,7 @@ int main(void) {
 	embed_t *h = embed_new();
 	if(!h)
 		embed_fatal("embed: allocate failed");
-	embed_opt_set(h, o);
+	embed_opt_set(h, &o);
 
 	for(r = 0; (r = embed_vm(h)) > 0; Sleep(10/*milliseconds*/))
 		/*fputc('.', stdout)*/ /*do nothing*/;

@@ -233,18 +233,18 @@ int main(int argc, char **argv) {
 	embed_t *h = embed_new();
 	if(!h)
 		embed_fatal("embed: allocate failed");
-	embed_opt_set(h, o);
+	embed_opt_set(h, &o);
 
 	if(argc > 1) {
 		o.options |= EMBED_VM_QUITE_ON;
 		for(int i = 1; i < argc; i++) {
 			FILE *in = embed_fopen_or_die(argv[i], "rb");
 			o.in = in;
-			embed_opt_set(h, o);
+			embed_opt_set(h, &o);
 			r = embed_vm(h);
 			fclose(in);
 			o.in = stdin;
-			embed_opt_set(h, o);
+			embed_opt_set(h, &o);
 			if(r < 0)
 				return r;
 		}

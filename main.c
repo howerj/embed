@@ -75,6 +75,7 @@ int main(int argc, char **argv)
 	binary(stdin);
 	binary(stdout);
 	binary(stderr);
+
 	embed_t *h = embed_new();
 	if(!h)
 		embed_fatal("embed: new failed");

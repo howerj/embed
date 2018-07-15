@@ -16,6 +16,7 @@ embed
 mmu
 *.o
 *.pdf
+rom
 *.so
 *.tgz
 *.txt

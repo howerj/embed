@@ -73,17 +73,17 @@ typedef int (*embed_callback_t)(embed_t *h, void *param);
 
 /**@brief Function pointer typedef for user supplied callbacks for
  * reading from the Virtual Machines memory 
- * @param  m,    virtual machine memory to read from
+ * @param  h,    initialized Virtual Machine image
  * @param  addr, address of location to read from
  * @return return of MMU read */
-typedef cell_t (*embed_mmu_read_t)(cell_t const * const m, cell_t addr);
+typedef cell_t (*embed_mmu_read_t)(embed_t const * const h, cell_t addr);
 
 /**@brief Function pointer typedef for user supplied callbacks for
  * writing to the Virtual Machines memory
- * @param m,     virtual machine memory to write to
+ * @param h,     initialized Virtual Machine image
  * @param addr,  address of value to write
  * @param value, value to write to 'addr' */
-typedef void (*embed_mmu_write_t)(cell_t * const m, cell_t addr, cell_t value);
+typedef void (*embed_mmu_write_t)(embed_t * const h, cell_t addr, cell_t value);
 
 /**@brief This function is called by the virtual machine to determine whether
  * the virtual machine should yield or not, it can be used to limit time spent
@@ -99,6 +99,7 @@ typedef enum {
 	EMBED_VM_QUITE_ON        = 1u << 2, /**< turn off 'okay' prompt and welcome message */
 } embed_vm_option_e; /**< VM option enum */
 
+/**@todo merge 'embed_t' and 'embed_opt_t' structures? */
 typedef struct {
 	embed_fgetc_t     get;      /**< callback to get a character, behaves like 'fgetc' */
 	embed_fputc_t     put;      /**< callback to output a character, behaves like 'fputc' */
@@ -116,8 +117,8 @@ typedef struct {
 } embed_opt_t; /**< Embed VM options structure for customizing behavior */
 
 struct embed_t { 
-	embed_opt_t o; 
-	cell_t m[EMBED_CORE_SIZE];  /**< @todo change to pointer to memory */
+	embed_opt_t o;             /**< options structure for virtual machine */
+	cell_t m[EMBED_CORE_SIZE]; /**< virtual machine core memory @todo change to pointer to memory */
 }; /**< Embed Forth VM structure */
 
 /**@brief Saves to a file called 'name', this is the default callback to save
@@ -157,17 +158,17 @@ int embed_yield_cb(void *param);
 
 /**@brief Default callback for reading virtual machine memory, this is equivalent to
  * returning 'm[addr]'.
- * @param m,    virtual machine memory to read from
+ * @param h,     initialized Virtual Machine image
  * @param addr, address to read
  * @return read in address */
-cell_t  embed_mmu_read_cb(cell_t const * const m, cell_t addr);
+cell_t  embed_mmu_read_cb(embed_t const * const h, cell_t addr);
 
 /**@brief Default callback for writing to virtual machine memory, this is
  * equivalent to 'm[addr] = value'.
- * @param m,     virtual machine memory to write to
+ * @param h,     initialized Virtual Machine image
  * @param addr,  address to write to
  * @param value, value to write */
-void embed_mmu_write_cb(cell_t * const m, cell_t addr, cell_t value);
+void embed_mmu_write_cb(embed_t * const h, cell_t addr, cell_t value);
 
 /**@brief Run the VM, reading from 'in' and writing to 'out'. This function
  * provides sensibly default options that suite most (but not all) needs for a

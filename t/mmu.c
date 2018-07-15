@@ -8,9 +8,7 @@
  * This test program implements custom MMU read and write functions that log
  * the locations the virtual machine reads and writes to, this can be useful
  * for creating a memory map that would allow sections of memory to be placed
- * into Read Only Memory (ROM) to save on space.
- *
- */
+ * into Read Only Memory (ROM) to save on space.  */
 
 #include "util.h"
 #include "embed.h"
@@ -97,8 +95,7 @@ bool bitmap_get(bitmap_t *b, size_t bit) {
 typedef int (*bitmap_foreach_callback_t)(bitmap_t *b, size_t bit, void *param);
 
 
-int bitmap_foreach(bitmap_t *b, bitmap_foreach_callback_t cb, void *param)
-{
+int bitmap_foreach(bitmap_t *b, bitmap_foreach_callback_t cb, void *param) {
 	const size_t bits = b->bits;
 	int r = 0;
 	for(size_t i = 0; i < bits; i++)
@@ -126,28 +123,26 @@ static bitmap_t *write_map = NULL;
  *
  * I also do not like the way the 'embed_opt_t' structure is handled, this
  * should probably be changed so the structure is not copied all over the
- * place and instead be done by passing pointers.
- */
+ * place and instead be done by passing pointers. */
 
-static cell_t  mmu_read_cb(cell_t const * const m, cell_t addr) {
+static cell_t  mmu_read_cb(embed_t const * const h, cell_t addr) {
 	assert(!(0x8000 & addr));
 	bitmap_set(read_map, addr);
-	return m[addr];
+	return h->m[addr];
 }
 
-static void mmu_write_cb(cell_t * const m, cell_t addr, cell_t value) {
+static void mmu_write_cb(embed_t * const h, cell_t addr, cell_t value) {
 	assert(!(0x8000 & addr));
 	/*if(m[addr] != value)*/
 	bitmap_set(write_map, addr);
-	m[addr] = value;
+	h->m[addr] = value;
 }
 
 #ifndef MIN
 #define MIN(X, Y) ((X) > (Y) ? (Y) : (X))
 #endif
 
-static bitmap_t *bitmap_union(bitmap_t *a, bitmap_t *b)
-{
+static bitmap_t *bitmap_union(bitmap_t *a, bitmap_t *b) {
 	const size_t al = bitmap_bits(a), bl = bitmap_bits(b);
 	bitmap_t *u = (al > bl) ? bitmap_copy(a) : bitmap_copy(b);
 	if(!u)
@@ -160,8 +155,7 @@ static bitmap_t *bitmap_union(bitmap_t *a, bitmap_t *b)
 	return u;
 }
 
-static void bitmap_print_range(bitmap_t *b, FILE *out)
-{
+static void bitmap_print_range(bitmap_t *b, FILE *out) {
 	assert(b);
 	assert(out);
 	size_t total = 0;
@@ -199,8 +193,7 @@ static void bitmap_print_range(bitmap_t *b, FILE *out)
 	return 0;
 }*/
 
-static int bitmap_report(const char *name, bitmap_t *read_map, bitmap_t *write_map)
-{
+static int bitmap_report(const char *name, bitmap_t *read_map, bitmap_t *write_map) {
 	assert(name);
 	assert(read_map);
 	assert(write_map);

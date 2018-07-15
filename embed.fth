@@ -217,8 +217,8 @@ variable header -1 header !  ( if true target headers generated )
   [char] " word count dup tc, 1- for count tc, next drop talign update-fence ;
 : tcells =cell * ;             ( u -- a )
 : tbody 1 tcells + ;           ( a -- a )
-: tcfa cfa ;
-: tnfa nfa ;
+: tcfa cfa ;                   ( PWD -- CFA )
+: tnfa nfa ;                   ( PWD -- NFA )
 : meta! ! ;                    ( u a --  )
 : dump-hex #target there $10 + dump ; ( -- )
 ( : locations ( -- : list all words and locations in target dictionary )
@@ -1636,7 +1636,7 @@ h: (u.) 0 <# #s #> ;             ( u -- b u : turn *u* into number string )
 : u.r >r (u.) r> fallthrough;    ( u +n -- : print u right justified by +n)
 h: adjust over- spaces type ;    ( b n n -- )
 h: d5u.r dup fallthrough;        ( u -- u )
-h: 5u.r 5 u.r ;                  ( u -- )
+h: 5u.r space 5 u.r ;            ( u -- )
 ( :  .r >r (.)( r> adjust ;      ( n n -- : print n, right justified by +n )
 : u.  (u.) h: blt space type ;;  ( u -- : print unsigned number )
 :  .  radix $A xor if u. exit then (.) blt ; ( n -- print number )
@@ -3115,7 +3115,7 @@ h: name ( cwf -- a | 0 )
 
 ( h: neg? dup 2 and if $FFFE or then ;  )
 ( h: .alu  ( u -- ) 
-(   dup 8 rshift $1F and space 5u.r space )
+(   dup 8 rshift $1F and 5u.r space )
 (   dup $80 and if ." t->n  " then   )
 (   dup $40 and if ." t->r  " then  )
 (   dup $20 and if ." n->t  " then  )
@@ -3127,10 +3127,10 @@ h: ?instruction ( i m e -- i t )
    >r over-and r> = ;
 
 ( a -- : find word by address, and print )
-h: .name dup address 1 lshift space 5u.r space  ( a -- )
+h: .name dup address cells 5u.r space  ( a -- )
          name ?dup if word.count type then ; 
 h: .instruction                    ( u -- : decompile a single instruction )
-   0x8000  0x8000 ?instruction if [char] L emit $7FFF and space 5u.r exit then
+   0x8000  0x8000 ?instruction if [char] L emit $7FFF and 5u.r exit then
     $6000   $6000 ?instruction if [char] A emit  drop ( .alu ) exit then
     $6000   $4000 ?instruction if [char] C emit .name exit then
     $6000   $2000 ?instruction if [char] Z emit .name exit then
@@ -3207,7 +3207,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 
 
 : .s depth begin ?dup while dup pick . 1- repeat ."  <sp" cr ; ( -- )
-h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
+h: dm+ chars for aft dup@ 5u.r cell+ then next ;        ( a u -- a )
 ( h: dc+ chars for aft dup@ space decompile cell+ then next ; ( a u -- a )
 
 : dump ( a u -- )

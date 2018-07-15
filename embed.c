@@ -15,15 +15,15 @@ typedef signed_cell_t s_t; /**< used for signed calculation and casting */
 typedef double_cell_t d_t; /**< should be double the size of 'm_t' and unsigned */
 
 /* NB. MMU operations could be improved by allowing exceptions to be thrown */
-m_t  embed_mmu_read_cb(m_t const * const m, m_t addr)       { return m[addr]; }
-void embed_mmu_write_cb(m_t * const m, m_t addr, m_t value) { m[addr] = value; }
+m_t  embed_mmu_read_cb(embed_t const * const h, m_t addr)       { return h->m[addr]; }
+void embed_mmu_write_cb(embed_t * const h, m_t addr, m_t value) { h->m[addr] = value; }
 
 /* @todo Simplify library so only functions that access memory and not FILE
  * I/O are defined within this file */
 int embed_fputc_cb(int ch, void *file)             { assert(file); return fputc(ch, file); }
 int embed_fgetc_cb(void *file, int *no_data)       { assert(file && no_data); *no_data = 0; return fgetc(file); }
 m_t *embed_core_get(embed_t *h)                    { assert(h); return h->m; }
-static size_t embed_cells(embed_t const * const h) { assert(h); return MIN(h->o.read(h->m, 5), EMBED_CORE_SIZE); } /* count in cells, not bytes */
+static size_t embed_cells(embed_t const * const h) { assert(h); return MIN(h->o.read(h, 5), EMBED_CORE_SIZE); } /* count in cells, not bytes */
 m_t embed_swap(m_t s)                              { return (s >> 8) | (s << 8); }
 void embed_buffer_swap(m_t *b, size_t l)           { assert(b); for(size_t i = 0; i < l; i++) b[i] = embed_swap(b[i]); }
 static inline int is_big_endian(void)              { return (*(uint16_t *)"\0\xff" < 0x100); }
@@ -54,7 +54,6 @@ int embed_default(embed_t *h) {
 
 int embed_save_cb(const embed_t *h, const void *name, const size_t start, const size_t length) {
 	assert(h);
-	m_t const * const m = embed_core_get((embed_t*)h);
 	const embed_mmu_read_t  mr = h->o.read;
 	if(!name || !(((length - start) <= length) && ((start + length) <= embed_cells(h))))
 		return -69; /* open-file IOR */
@@ -63,7 +62,7 @@ int embed_save_cb(const embed_t *h, const void *name, const size_t start, const 
 		return -69; /* open-file IOR */
 	int r = 0;
 	for(size_t i = start; i < length; i++)
-		if(fputc(mr(m, i)&255, out) < 0 || fputc(mr(m, i)>>8, out) < 0)
+		if(fputc(mr(h, i)&255, out) < 0 || fputc(mr(h, i)>>8, out) < 0)
 			r = -76; /* write-file IOR */
 	return fclose(out) < 0 ? -62 /* close-file IOR */ : r;
 }
@@ -88,8 +87,7 @@ void embed_reset(embed_t *h) {
 	embed_mmu_read_t  mr = h->o.read;
 	embed_mmu_write_t mw = h->o.write;
 	assert(mr && mw);
-	m_t * const m = h->m;
-	mw(m, 0, mr(m, 0+SHADOW)), mw(m, 1, mr(m, 1+SHADOW)), mw(m, 2, mr(m, 2+SHADOW)), mw(m, 3, mr(m, 3+SHADOW));
+	mw(h, 0, mr(h, 0+SHADOW)), mw(h, 1, mr(h, 1+SHADOW)), mw(h, 2, mr(h, 2+SHADOW)), mw(h, 3, mr(h, 3+SHADOW));
 }
 
 int embed_eval(embed_t *h, const char *str) {
@@ -122,28 +120,26 @@ int embed_puts(embed_t *h, const char *s) {
 
 int embed_push(embed_t *h, m_t value) {
 	assert(h);
-	m_t * const m = h->m;
 	const embed_mmu_read_t  mr = h->o.read;
 	const embed_mmu_write_t mw = h->o.write;
 	assert(mr && mw);
-	m_t rp = mr(m, 2), sp = mr(m, 3), sp0 = mr(m, 3+SHADOW);
+	m_t rp = mr(h, 2), sp = mr(h, 3), sp0 = mr(h, 3+SHADOW);
 	if(sp < 32 || sp < sp0)
 		return -4; /* stack underflow */
 	if(sp > (EMBED_CORE_SIZE-2) || (sp+1) > rp)
 		return -3; /* stack overflow */
-	mw(m, ++sp, mr(m, 1));
-	mw(m, 1, value);
-	mw(m, 3, sp);
+	mw(h, ++sp, mr(h, 1));
+	mw(h, 1, value);
+	mw(h, 3, sp);
 	return 0;
 }
 
 int embed_pop(embed_t *h, m_t *value) {
 	assert(h);
-	m_t * const m = h->m;
 	const embed_mmu_read_t  mr = h->o.read;
 	const embed_mmu_write_t mw = h->o.write;
 	assert(mr && mw);
-	m_t rp = mr(m, 2), sp = mr(m, 3), sp0 = mr(m, 3+SHADOW);
+	m_t rp = mr(h, 2), sp = mr(h, 3), sp0 = mr(h, 3+SHADOW);
 	if(value)
 		*value = 0;
 	if(sp < 32 || (sp-1) < sp0)
@@ -151,17 +147,16 @@ int embed_pop(embed_t *h, m_t *value) {
 	if(sp > (EMBED_CORE_SIZE-1) || sp > rp)
 		return -3; /* stack overflow */
 	if(value)
-		*value = mr(m, 1);
-	mw(m, 1, mr(m, sp--));
-	mw(m, 3, sp);
+		*value = mr(h, 1);
+	mw(h, 1, mr(h, sp--));
+	mw(h, 3, sp);
 	return 0;
 }
 
 size_t embed_depth(embed_t *h) {
 	assert(h);
-	m_t * const m = h->m;
 	const embed_mmu_read_t  mr = h->o.read;
-	const m_t sp = mr(m, 3), sp0 = mr(m, 3+SHADOW);
+	const m_t sp = mr(h, 3), sp0 = mr(h, 3+SHADOW);
 	return sp - sp0;
 }
 
@@ -208,10 +203,9 @@ static inline void trace(embed_t *h, m_t pc, m_t instruction, m_t t, m_t rp, m_t
 	if(!(o->options & EMBED_VM_TRACE_ON) || !(o->put))
 		return;
 	const embed_mmu_read_t  mr = o->read;
-	m_t * const m = h->m;
 	assert(mr);
 	char buf[64] = { 0 };
-	snprintf(buf, sizeof buf, "[ %4x %4x %4x %2x %2x : ", pc-1, instruction, t, (m_t)(mr(m, 2+SHADOW)-rp), (m_t)(sp-mr(m, 3+SHADOW)));
+	snprintf(buf, sizeof buf, "[ %4x %4x %4x %2x %2x : ", pc-1, instruction, t, (m_t)(mr(h, 2+SHADOW)-rp), (m_t)(sp-mr(h, 3+SHADOW)));
 	embed_puts(h, buf);
 	disassemble(instruction, buf, sizeof buf);
 	embed_puts(h, buf);
@@ -231,27 +225,26 @@ int embed_vm(embed_t * const h) {
 	void  *yields = o->yields;
 	assert(mr && mw && yield);
 	const m_t l = embed_cells(h); 
-	m_t * const m = h->m;
-	m_t pc = mr(m, 0), t = mr(m, 1), rp = mr(m, 2), sp = mr(m, 3), r = 0;
+	m_t pc = mr(h, 0), t = mr(h, 1), rp = mr(h, 2), sp = mr(h, 3), r = 0;
 	for(d_t d;!yield(yields);) {
-		const m_t instruction = mr(m, pc++);
+		const m_t instruction = mr(h, pc++);
 		trace(h, pc, instruction, t, rp, sp);
 		if((r = -!(sp < l && rp < l && pc < l))) /* critical error */
 			goto finished;
 		if(0x8000 & instruction) { /* literal */
-			mw(m, ++sp, t);
+			mw(h, ++sp, t);
 			t       = instruction & 0x7FFF;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
-			m_t n = mr(m, sp), T = t;
-			pc = instruction & 0x10 ? mr(m, rp) >> 1 : pc;
+			m_t n = mr(h, sp), T = t;
+			pc = instruction & 0x10 ? mr(h, rp) >> 1 : pc;
 			switch((instruction >> 8u) & 0x1f) {
 			case  0: T = t;                  break;
 			case  1: T = n;                  break;
-			case  2: T = mr(m, rp);          break;
-			case  3: T = mr(m, (t>>1)%l);    break;
-			case  4: mw(m, (t>>1)%l, n); T = mr(m, --sp); break;
-			case  5: d = (d_t)t + n; T = d >> 16; mw(m, sp, d); n = d; break;
-			case  6: d = (d_t)t * n; T = d >> 16; mw(m, sp, d); n = d; break;
+			case  2: T = mr(h, rp);          break;
+			case  3: T = mr(h, (t>>1)%l);    break;
+			case  4: mw(h, (t>>1)%l, n); T = mr(h, --sp); break;
+			case  5: d = (d_t)t + n; T = d >> 16; mw(h, sp, d); n = d; break;
+			case  6: d = (d_t)t * n; T = d >> 16; mw(h, sp, d); n = d; break;
 			case  7: T = t&n;                break;
 			case  8: T = t|n;                break;
 			case  9: T = t^n;                break;
@@ -269,14 +262,14 @@ int embed_vm(embed_t * const h) {
 			case 21: rp = t >> 1; T = n;     break;
 			case 22: if(o->save) { T = o->save(h, o->name, n>>1, ((d_t)t+1)>>1); }    else { pc=4; T=21; } break;
 			case 23: if(o->put)  { T = o->put(t, o->out); }                           else { pc=4; T=21; } break; 
-			case 24: if(o->get)  { int nd = 0; mw(m, ++sp, t); T = o->get(o->in, &nd); t = T; n = nd; } else { pc=4; T=21; } break;
-			case 25: if(t)       { d = mr(m, --sp)|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
+			case 24: if(o->get)  { int nd = 0; mw(h, ++sp, t); T = o->get(o->in, &nd); t = T; n = nd; } else { pc=4; T=21; } break;
+			case 25: if(t)       { d = mr(h, --sp)|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t)       { T=(s_t)n/t; t=(s_t)n%t; n=t; }                     else { pc=4; T=10; } break;
 			case 27: if(t)       { t = 0; sp--; r = n; goto finished; } T = t; break;
 			case 28: if(o->callback) { 
-					 mw(m, 0, pc), mw(m, 1, t), mw(m, 2, rp), mw(m, 3, sp); 
+					 mw(h, 0, pc), mw(h, 1, t), mw(h, 2, rp), mw(h, 3, sp); 
 					 r = o->callback(h, o->param);
-					 pc = mr(m, 0), T = mr(m, 1), rp = mr(m, 2), sp = mr(m, 3); 
+					 pc = mr(h, 0), T = mr(h, 1), rp = mr(h, 2), sp = mr(h, 3); 
 					 if(r) { pc = 4; T = r; }
 				 } else { pc=4; T=21; }  break;
 			case 29: T = o->options; o->options = t; break;
@@ -286,21 +279,21 @@ int embed_vm(embed_t * const h) {
 			sp += delta[ instruction       & 0x3];
 			rp -= delta[(instruction >> 2) & 0x3];
 			if(instruction & 0x80)
-				mw(m, sp, t);
+				mw(h, sp, t);
 			if(instruction & 0x40)
-				mw(m, rp, t);
+				mw(h, rp, t);
 			t = instruction & 0x20 ? n : T;
 		} else if (0x4000 & instruction) { /* call */
-			mw(m, --rp, pc << 1);
+			mw(h, --rp, pc << 1);
 			pc      = instruction & 0x1FFF;
 		} else if (0x2000 & instruction) { /* 0branch */
 			pc = !t ? instruction & 0x1FFF : pc;
-			t  = mr(m, sp--);
+			t  = mr(h, sp--);
 		} else { /* branch */
 			pc = instruction & 0x1FFF;
 		}
 	}
-finished: mw(m, 0, pc), mw(m, 1, t), mw(m, 2, rp), mw(m, 3, sp); /* NB. Shadow registers not modified */
+finished: mw(h, 0, pc), mw(h, 1, t), mw(h, 2, rp), mw(h, 3, sp);
 	return (s_t)r;
 }
 

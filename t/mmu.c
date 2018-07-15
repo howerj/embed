@@ -219,13 +219,14 @@ int main(int argc, char **argv) {
 	if(!read_map || !write_map)
 		embed_fatal("bitmap: allocate failed");
 
-	embed_opt_t o = embed_opt_default();
+	embed_opt_t o = embed_opt_default_hosted();
 	o.read  = mmu_read_cb;
 	o.write = mmu_write_cb;
 
 	embed_t *h = embed_new();
 	if(!h)
 		embed_fatal("embed: allocate failed");
+
 	embed_opt_set(h, &o);
 
 	if(argc > 1) {

@@ -90,7 +90,7 @@ int main(void) {
 		options |= EMBED_VM_QUITE_ON;
 	}
 
-	embed_opt_t o = embed_opt_default();
+	embed_opt_t o = embed_opt_default_hosted();
 	o.get      = win_getch,     o.put   = win_putch,
 	o.in       = in,            o.out   = stdout,
 	o.options  = options;

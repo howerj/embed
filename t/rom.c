@@ -7,6 +7,7 @@
  */
 
 #include "embed.h"
+#include "util.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -77,8 +78,8 @@ static void rom_write_cb(embed_t * const h, cell_t addr, cell_t value) {
 
 int main(void) {
 	static embed_t h;
-	embed_default(&h);
-	embed_opt_t o = embed_opt_default();
+	embed_default_hosted(&h);
+	embed_opt_t o = embed_opt_default_hosted();
 	o.read  = rom_read_cb;
 	o.write = rom_write_cb;
 

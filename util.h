@@ -88,6 +88,71 @@ embed_t  *embed_copy(embed_t const * const h);
  * @param h,     initialized Virtual Machine image to free */
 void embed_free(embed_t *h);                                      
 
+/**@brief 'embed_fputc_t' callback to write to a file
+ * @param file, a 'FILE*' object to write to
+ * @param ch,  unsigned char to write to file
+ * @return ch on success, negative on failure */
+int embed_fputc_cb(int ch, void *file); 
+
+/**@brief 'embed_fgetc_t' callback to read from a file
+ * @param file, a 'FILE*' object to read from
+ * @param no_data, if there is no data to be at the moment but there might be
+ * some in the future -1 will be written to 'no_data'.
+ * @return EOF on failure, unsigned char value on success */
+int embed_fgetc_cb(void *file, int *no_data);
+
+/**@brief Saves to a file called 'name', this is the default callback to save
+ * an image to disk with the 'save' ALU instruction.
+ * @param h,       embed virtual machine to save
+ * @param name,    name of file to save to on disk
+ * @param start,   start of image location to save from
+ * @param length,  length in cell_t to save, starting at 'start'
+ * @return 0 on success, negative on failure */
+int embed_save_cb(const embed_t *h, const void *name, const size_t start, const size_t length); 
+
+/**@brief Default the virtual machine image with parameters suitable for a
+ * hosted environment 
+ * @param h, a virtual machine image, possible uninitialized. 
+ * @return zero on success, negative on failure */
+int embed_default_hosted(embed_t *h);
+
+/**@brief Run the VM, reading from 'in' and writing to 'out'. This function
+ * provides sensibly default options that suite most (but not all) needs for a
+ * hosted system.
+ * @param h,     initialized Virtual Machine image
+ * @param in,    input file for VM to read from
+ * @param out,   output file for VM to write to
+ * @param block, name of file to write block to, may be NULL
+ * @return 0 on success, negative on failure */
+int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block); 
+
+/**@brief Run the VM, reading from 'in' and writing to 'out'. The user can
+ * supply their own functions and options but 'in' and 'out' will be passed
+ * to the get and put character callbacks.
+ * @param h,     initialized Virtual Machine image
+ * @param opt,   options for the virtual machine to customize its behavior 
+ * @param in,    input file for VM to read from
+ * @param out,   output file for VM to write to
+ * @param block, name of file to write block to, may be NULL
+ * @return 0 on success, negative on failure */
+int embed_forth_opt(embed_t *h, embed_vm_option_e opt, FILE *in, FILE *out, const char *block); 
+
+/**@brief returns an initialized 'embed_opt_t' structure for hosted use
+ * @return an initialized 'embed_opt_t' structure suitable for hosted use */
+embed_opt_t embed_opt_default_hosted(void);
+
+/**@brief Load VM image from FILE*
+ * @param h,      uninitialized Virtual Machine image
+ * @param input,  open file to read from to load a disk image
+ * @return zero on success, negative on failure */
+int embed_load_file(embed_t *h, FILE *input);                      
+
+/**@brief Save VM image to disk, 0 == success
+ * @param h,     Virtual Machine image to save to disk
+ * @param name,  name of file to load
+ * @return zero on success, negative on failure */
+int embed_save(const embed_t *h, const char *name);
+
 #ifndef NDEBUF
 #define embed_fatal(...)   embed_logger(EMBED_LOG_LEVEL_FATAL,   __FILE__, __func__, __LINE__, __VA_ARGS__)
 #define embed_error(...)   embed_logger(EMBED_LOG_LEVEL_ERROR,   __FILE__, __func__, __LINE__, __VA_ARGS__)

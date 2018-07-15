@@ -137,7 +137,7 @@ mmu: t/mmu.c util.o libembed.a
 	${CC} ${CFLAGS} $^ -o $@
 
 rom: CFLAGS=-O2 -Wall -Wextra -std=c99 -I. -g
-rom: t/rom.c libembed.a 
+rom: t/rom.c util.o libembed.a 
 	${CC} ${CFLAGS} $^ -o $@
 
 apps: ${TESTAPPS}
@@ -146,7 +146,7 @@ apps: ${TESTAPPS}
 
 clean:
 	${RM} ${FORTH} *.blk ${B2C}
-	${RM} *.o *.a *.so *.pdf *.htm
+	${RM} *.o *.a *.so *.pdf *.htm *.log
 	${RM} *.gen.c
 	${RM} *.tgz
 	${RM} ${TESTAPPS} eforth

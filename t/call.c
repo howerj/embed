@@ -579,7 +579,7 @@ static vm_extension_t *vm_extension_new(void) {
 
 	v->callbacks_length = number_of_callbacks(), 
 	v->callbacks        = callbacks;
-	v->o                = *embed_opt_get(v->h);
+	v->o                = embed_opt_default_hosted();
 	v->o.callback       = callback_selector;
 	v->o.param          = v;
 	embed_opt_set(v->h, &v->o);

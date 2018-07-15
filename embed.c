@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #define SHADOW    (7)     /**< start location of shadow registers */
@@ -18,19 +17,18 @@ typedef double_cell_t d_t; /**< should be double the size of 'm_t' and unsigned 
 m_t  embed_mmu_read_cb(embed_t const * const h, m_t addr)       { return h->m[addr]; }
 void embed_mmu_write_cb(embed_t * const h, m_t addr, m_t value) { h->m[addr] = value; }
 
-/* @todo Simplify library so only functions that access memory and not FILE
- * I/O are defined within this file */
-int embed_fputc_cb(int ch, void *file)             { assert(file); return fputc(ch, file); }
-int embed_fgetc_cb(void *file, int *no_data)       { assert(file && no_data); *no_data = 0; return fgetc(file); }
-m_t *embed_core_get(embed_t *h)                    { assert(h); return h->m; }
-static size_t embed_cells(embed_t const * const h) { assert(h); return MIN(h->o.read(h, 5), EMBED_CORE_SIZE); } /* count in cells, not bytes */
-m_t embed_swap(m_t s)                              { return (s >> 8) | (s << 8); }
-void embed_buffer_swap(m_t *b, size_t l)           { assert(b); for(size_t i = 0; i < l; i++) b[i] = embed_swap(b[i]); }
 static inline int is_big_endian(void)              { return (*(uint16_t *)"\0\xff" < 0x100); }
 static void embed_normalize(embed_t *h, size_t l)  { assert(h); if(is_big_endian()) embed_buffer_swap(h->m, l); }
+int embed_nputc_cb(int ch, void *file)             { (void)file; return ch; }
+int embed_ngetc_cb(void *file, int *no_data)       { (void)file; assert(no_data); *no_data = 0; return -1; }
+m_t *embed_core_get(embed_t *h)                    { assert(h); return h->m; }
+size_t embed_cells(embed_t const * const h)        { assert(h); return MIN(h->o.read(h, 5), EMBED_CORE_SIZE); } /* count in cells, not bytes */
+m_t embed_swap(m_t s)                              { return (s >> 8) | (s << 8); }
+void embed_buffer_swap(m_t *b, size_t l)           { assert(b); for(size_t i = 0; i < l; i++) b[i] = embed_swap(b[i]); }
 embed_opt_t *embed_opt_get(embed_t *h)             { assert(h); return &h->o; }
 void embed_opt_set(embed_t *h, embed_opt_t *opt)   { assert(h && opt); memcpy(&h->o, opt, sizeof(*opt)); }
 int embed_yield_cb(void *param)                    { (void)(param); return 0; }
+size_t   embed_length(embed_t const * const h)     { return embed_cells(h) * sizeof(h->m[0]); }
 
 int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length) {
 	assert(h && buf);
@@ -39,44 +37,18 @@ int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length) {
 	return length < 128 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
 }
 
-int embed_load_file(embed_t *h, FILE *input) {
-	assert(h && input);
-	size_t r = fread(h->m, 1, sizeof(h->m), input);
-	embed_normalize(h, r/2);
-	return r < 128 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
-}
-
 int embed_default(embed_t *h) {
 	assert(h);
 	h->o = embed_opt_default();
 	return embed_load_buffer(h, embed_default_block, embed_default_block_size);
 }
 
-int embed_save_cb(const embed_t *h, const void *name, const size_t start, const size_t length) {
-	assert(h);
-	const embed_mmu_read_t  mr = h->o.read;
-	if(!name || !(((length - start) <= length) && ((start + length) <= embed_cells(h))))
-		return -69; /* open-file IOR */
-	FILE *out = fopen(name, "wb");
-	if(!out)
-		return -69; /* open-file IOR */
-	int r = 0;
-	for(size_t i = start; i < length; i++)
-		if(fputc(mr(h, i)&255, out) < 0 || fputc(mr(h, i)>>8, out) < 0)
-			r = -76; /* write-file IOR */
-	return fclose(out) < 0 ? -62 /* close-file IOR */ : r;
-}
-
-int      embed_save(const embed_t *h, const char *name) { assert(name); return embed_save_cb(h, name, 0, embed_cells(h)); }
-size_t   embed_length(embed_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
-int      embed_load(embed_t *h, const char *name) { FILE *f = fopen(name, "rb"); if(!f) return -69; int r = embed_load_file(h, f); fclose(f); return r; }
-
 int embed_sgetc_cb(void *string_ptr, int *no_data) {
 	assert(string_ptr);
 	char **sp = (char**)string_ptr;
 	char ch = **sp;
 	if(!ch)
-		return EOF;
+		return -1;
 	(*sp)++;
 	*no_data = 0;
 	return ch;
@@ -162,8 +134,8 @@ size_t embed_depth(embed_t *h) {
 
 embed_opt_t embed_opt_default(void) {
 	embed_opt_t o = {
-		.get      = embed_fgetc_cb, .put   = embed_fputc_cb, .save = embed_save_cb,
-		.in       = stdin,          .out   = stdout,         .name = NULL, 
+		.get      = embed_ngetc_cb, .put   = embed_nputc_cb, .save = NULL,
+		.in       = NULL,           .out   = NULL,           .name = NULL, 
 		.write    = embed_mmu_write_cb,    
 		.read     = embed_mmu_read_cb,
 		.yield    = embed_yield_cb
@@ -296,16 +268,4 @@ int embed_vm(embed_t * const h) {
 finished: mw(h, 0, pc), mw(h, 1, t), mw(h, 2, rp), mw(h, 3, sp);
 	return (s_t)r;
 }
-
-int embed_forth_opt(embed_t *h, embed_vm_option_e opt, FILE *in, FILE *out, const char *block) {
-	embed_opt_t o_old = embed_opt_default();
-	embed_opt_t o_new = o_old;
-	o_new.in = in, o_new.out = out, o_new.options = opt, o_new.name = block;
-	embed_opt_set(h, &o_new);
-	const int r = embed_vm(h);
-	embed_opt_set(h, &o_old);
-	return r;
-}
-
-int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block) { return embed_forth_opt(h, 0, in, out, block); }
 

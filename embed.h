@@ -12,7 +12,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -49,7 +48,7 @@ typedef int (*embed_fgetc_t)(void *file, int *no_data);
  * @param ch,   unsigned byte to write
  * @param file, handle needed to write to a source, if needed
  * @return ch on success, negative on failure */
-typedef int (*embed_fputc_t)(int ch, void *file); /**< write character to file, return character wrote on success */
+typedef int (*embed_fputc_t)(int ch, void *file);
 
 /**@brief Function pointer typedef for functions that are to write sections of
  * the virtual machine image to mass storage. Mass storage on a hosted machine
@@ -121,35 +120,25 @@ struct embed_t {
 	cell_t m[EMBED_CORE_SIZE]; /**< virtual machine core memory @todo change to pointer to memory */
 }; /**< Embed Forth VM structure */
 
-/**@brief Saves to a file called 'name', this is the default callback to save
- * an image to disk with the 'save' ALU instruction.
- * @param h,       embed virtual machine to save
- * @param name,    name of file to save to on disk
- * @param start,   start of image location to save from
- * @param length,  length in cell_t to save, starting at 'start'
- * @return 0 on success, negative on failure */
-int embed_save_cb(const embed_t *h, const void *name, const size_t start, const size_t length); 
-
-/**@brief 'embed_fputc_t' callback to write to a file
- * @param file, a 'FILE*' object to write to
- * @param ch,  unsigned char to write to file
- * @return ch on success, negative on failure */
-int embed_fputc_cb(int ch, void *file); 
-
-/**@brief 'embed_fgetc_t' callback to read from a file
- * @param file, a 'FILE*' object to read from
- * @param no_data, if there is no data to be at the moment but there might be
- * some in the future -1 will be written to 'no_data'.
- * @return EOF on failure, unsigned char value on success */
-int embed_fgetc_cb(void *file, int *no_data);         /**< 'file' is a 'FILE*', like 'stdin' */
-
 /**@brief alternative 'embed_fgetc_t' to read data from a string
  * @param string_ptr, pointer to character array ('char**') to read from, this
  * should be an ASCII NUL terminated string.
  * @param no_data, if there is no data to be at the moment but there might be
  * some in the future -1 will be written to 'no_data'.
  * @return EOF on failure, unsigned char value on success */
-int embed_sgetc_cb(void *string_ptr, int *no_data);  
+int embed_sgetc_cb(void *string_ptr, int *no_data);
+
+/**@brief 'embed_fputc_t' callback, discards data output
+ * @param  ch,   character (discarded)
+ * @param  file, can be NULL, or anything
+ * @return returns 'ch' */
+int embed_nputc_cb(int ch, void *file);
+
+/**@brief 'embed_fgetc_t' callback, always returns EOF
+ * @param file, not used
+ * @param no_data, set to zero
+ * @return returns 'EOF' */
+int embed_ngetc_cb(void *file, int *no_data);
 
 /**@brief The default yield callback, this function never yields.
  * @param param, unused
@@ -170,27 +159,6 @@ cell_t  embed_mmu_read_cb(embed_t const * const h, cell_t addr);
  * @param value, value to write */
 void embed_mmu_write_cb(embed_t * const h, cell_t addr, cell_t value);
 
-/**@brief Run the VM, reading from 'in' and writing to 'out'. This function
- * provides sensibly default options that suite most (but not all) needs for a
- * hosted system.
- * @param h,     initialized Virtual Machine image
- * @param in,    input file for VM to read from
- * @param out,   output file for VM to write to
- * @param block, name of file to write block to, may be NULL
- * @return 0 on success, negative on failure */
-int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block); 
-
-/**@brief Run the VM, reading from 'in' and writing to 'out'. The user can
- * supply their own functions and options but 'in' and 'out' will be passed
- * to the get and put character callbacks.
- * @param h,     initialized Virtual Machine image
- * @param opt,   options for the virtual machine to customize its behavior 
- * @param in,    input file for VM to read from
- * @param out,   output file for VM to write to
- * @param block, name of file to write block to, may be NULL
- * @return 0 on success, negative on failure */
-int embed_forth_opt(embed_t *h, embed_vm_option_e opt, FILE *in, FILE *out, const char *block); 
-
 /**@brief Load VM image off disk 
  * @param h,     uninitialized Virtual Machine image
  * @param name,  name of file to load off disk
@@ -204,18 +172,6 @@ int embed_load(embed_t *h, const char *name);
  * @return zero on success, negative on failure */
 int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length); 
 
-/**@brief Load VM image from FILE*
- * @param h,      uninitialized Virtual Machine image
- * @param input,  open file to read from to load a disk image
- * @return zero on success, negative on failure */
-int embed_load_file(embed_t *h, FILE *input);                      
-
-/**@brief Save VM image to disk, 0 == success
- * @param h,     Virtual Machine image to save to disk
- * @param name,  name of file to load
- * @return zero on success, negative on failure */
-int embed_save(const embed_t *h, const char *name);
-
 /**@brief Load the default configuration options for the embed virtual machine
  * and the default image as well.
  * @param h, an uninitialized 
@@ -225,7 +181,12 @@ int embed_default(embed_t *h);
 /**@brief Length in bytes of core memory 
  * @param h, initialized Virtual Machine image
  * @return bytes in h */
-size_t embed_length(embed_t const * const h);            
+size_t embed_length(embed_t const * const h);
+
+/**@brief Length in cells of core memory
+ * @param h, initialized Virtual Machine image
+ * @return cells in h*/
+size_t embed_cells(embed_t const * const h);
 
 /**@brief Swap byte order of a 'cell_t'
  * @param s, value to swap byte order of

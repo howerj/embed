@@ -114,7 +114,7 @@ int main(void) {
 		options |= EMBED_VM_QUITE_ON;
 	}
 
-	embed_opt_t o = embed_opt_default();
+	embed_opt_t o = embed_opt_default_hosted();
 	o.get      = unix_getch,           o.put   = unix_putch, o.save = embed_save_cb,
 	o.in       = (void*)(intptr_t)fd,  o.out   = out,
 	o.options  = options;

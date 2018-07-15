@@ -78,8 +78,9 @@ int main(int argc, char **argv)
 	binary(stderr);
 
 	static embed_t h;
-	if(embed_default(&h) < 0)
+	if(embed_default_hosted(&h) < 0)
 		embed_fatal("embed: load failed\n");
+
 	for(int i = 1; i < argc; i++) {
 		if(stop)
 			goto optend;

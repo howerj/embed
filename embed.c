@@ -14,8 +14,8 @@ typedef signed_cell_t s_t; /**< used for signed calculation and casting */
 typedef double_cell_t d_t; /**< should be double the size of 'm_t' and unsigned */
 
 /* NB. MMU operations could be improved by allowing exceptions to be thrown */
-m_t  embed_mmu_read_cb(embed_t const * const h, m_t addr)       { return h->m[addr]; }
-void embed_mmu_write_cb(embed_t * const h, m_t addr, m_t value) { h->m[addr] = value; }
+m_t  embed_mmu_read_cb(embed_t const * const h, m_t addr)       { return ((m_t*)h->m)[addr]; }
+void embed_mmu_write_cb(embed_t * const h, m_t addr, m_t value) { ((m_t*)h->m)[addr] = value; }
 
 static inline int is_big_endian(void)              { return (*(uint16_t *)"\0\xff" < 0x100); }
 static void embed_normalize(embed_t *h, size_t l)  { assert(h); if(is_big_endian()) embed_buffer_swap(h->m, l); }
@@ -28,17 +28,17 @@ void embed_buffer_swap(m_t *b, size_t l)           { assert(b); for(size_t i = 0
 embed_opt_t *embed_opt_get(embed_t *h)             { assert(h); return &h->o; }
 void embed_opt_set(embed_t *h, embed_opt_t *opt)   { assert(h && opt); memcpy(&h->o, opt, sizeof(*opt)); }
 int embed_yield_cb(void *param)                    { (void)(param); return 0; }
-size_t   embed_length(embed_t const * const h)     { return embed_cells(h) * sizeof(h->m[0]); }
+size_t   embed_length(embed_t const * const h)     { return embed_cells(h) * sizeof(m_t); }
 
 int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length) {
 	assert(h && buf);
-	memcpy(h->m, buf, MIN(sizeof(h->m), length));
+	memcpy(h->m, buf, MIN(EMBED_CORE_SIZE*2, length));
 	embed_normalize(h, length/2);
 	return length < 128 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
 }
 
 int embed_default(embed_t *h) {
-	assert(h);
+	assert(h && h->m);
 	h->o = embed_opt_default();
 	return embed_load_buffer(h, embed_default_block, embed_default_block_size);
 }
@@ -55,7 +55,7 @@ int embed_sgetc_cb(void *string_ptr, int *no_data) {
 }
 
 void embed_reset(embed_t *h) {
-	assert(h);
+	assert(h && h->m);
 	embed_mmu_read_t  mr = h->o.read;
 	embed_mmu_write_t mw = h->o.write;
 	assert(mr && mw);

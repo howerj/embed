@@ -78,6 +78,8 @@ int main(int argc, char **argv)
 	binary(stderr);
 
 	static embed_t h;
+	static uint16_t m[EMBED_CORE_SIZE] = { 0 };
+	h.m = m;
 	if(embed_default_hosted(&h) < 0)
 		embed_fatal("embed: load failed\n");
 

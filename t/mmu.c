@@ -128,14 +128,14 @@ static bitmap_t *write_map = NULL;
 static cell_t  mmu_read_cb(embed_t const * const h, cell_t addr) {
 	assert(!(0x8000 & addr));
 	bitmap_set(read_map, addr);
-	return h->m[addr];
+	return ((cell_t*)h->m)[addr];
 }
 
 static void mmu_write_cb(embed_t * const h, cell_t addr, cell_t value) {
 	assert(!(0x8000 & addr));
 	/*if(m[addr] != value)*/
 	bitmap_set(write_map, addr);
-	h->m[addr] = value;
+	((cell_t*)h->m)[addr] = value;
 }
 
 #ifndef MIN

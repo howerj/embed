@@ -79,11 +79,6 @@ void *embed_alloc_or_die(size_t sz);
  * @return a pointer to a new Forth VM, loaded with the default image */
 embed_t  *embed_new(void); 
 
-/**@brief Copy existing instance of a Forth VM 
- * @param h,     initialized Virtual Machine image
- * @return a copy of h, or NULL on failure */
-embed_t  *embed_copy(embed_t const * const h); 
-
 /**@brief Free a Forth VM
  * @param h,     initialized Virtual Machine image to free */
 void embed_free(embed_t *h);                                      

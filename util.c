@@ -62,26 +62,25 @@ void *embed_alloc_or_die(size_t sz) {
 embed_t *embed_new(void) { 
 	embed_t *h = calloc(sizeof(struct embed_t), 1); 
 	if(!h) 
-		return NULL; 
-	if(embed_default_hosted(h) < 0) {
-		embed_free(h);
-		return NULL;
-	}
+		goto fail;
+	h->m = calloc(EMBED_CORE_SIZE*sizeof(cell_t), 1);
+	if(!(h->m))
+		goto fail;
+	if(embed_default_hosted(h) < 0)
+		goto fail;
 	h->o = embed_opt_default();
 	return h; 
+fail:
+	embed_free(h);
+	return NULL;
 }
 
 void embed_free(embed_t *h)  { 
-	assert(h); 
-	memset(h, 0, sizeof(*h)); free(h); 
-}
-
-embed_t *embed_copy(embed_t const * const h) { 
-	assert(h); 
-	embed_t *r = embed_new(); 
-	if(!r) 
-		return NULL; 
-	return memcpy(r, h, sizeof(*h)); 
+	if(!h)
+		return;
+	memset(h, 0, sizeof(*h)); 
+	free(h->m);
+	free(h); 
 }
 
 int embed_save(const embed_t *h, const char *name) { 
@@ -147,7 +146,7 @@ static void embed_normalize(embed_t *h, size_t l)  { assert(h); if(is_big_endian
 
 int embed_load_file(embed_t *h, FILE *input) {
 	assert(h && input);
-	size_t r = fread(h->m, 1, sizeof(h->m), input);
+	size_t r = fread(h->m, 1, EMBED_CORE_SIZE * sizeof(cell_t), input);
 	embed_normalize(h, r/2);
 	return r < 128 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
 }

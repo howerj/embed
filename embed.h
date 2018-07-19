@@ -15,7 +15,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
-#define EMBED_CORE_SIZE (32768)        /**< core size in cells */
+#define EMBED_CORE_SIZE (32768uL)        /**< core size in cells */
 
 typedef uint16_t cell_t;               /**< Virtual Machine Cell size: 16-bit*/
 typedef  int16_t signed_cell_t;        /**< Virtual Machine Signed Cell */
@@ -116,8 +116,8 @@ typedef struct {
 } embed_opt_t; /**< Embed VM options structure for customizing behavior */
 
 struct embed_t { 
-	embed_opt_t o;             /**< options structure for virtual machine */
-	cell_t m[EMBED_CORE_SIZE]; /**< virtual machine core memory @todo change to pointer to memory */
+	embed_opt_t o; /**< options structure for virtual machine */
+	void *m;       /**< virtual machine core memory - @warning you need to set this to something sensible! */
 }; /**< Embed Forth VM structure */
 
 /**@brief alternative 'embed_fgetc_t' to read data from a string

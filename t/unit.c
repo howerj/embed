@@ -5,6 +5,16 @@
 #undef NDEBUG
 #include <assert.h>
 
+static void test_embed_swap(void) {
+	unit_test_start();
+
+	uint16_t v = 0;
+	unit_test_statement(v = 0x1234);
+	unit_test(embed_swap(v) == 0x3412);
+
+	unit_test_finish();
+}
+
 static void test_embed_stack(void) {
 	unit_test_start();
 	embed_t *h = NULL;
@@ -137,6 +147,8 @@ static void test_embed_file(void) {
 }
 
 int main(void) {
+	unit_color_on = 1;
+	test_embed_swap();
 	test_embed_stack();
 	test_embed_eval();
 	test_embed_callbacks();

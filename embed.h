@@ -95,7 +95,7 @@ typedef int (*embed_yield_t)(void *param);
 typedef enum {
 	EMBED_VM_TRACE_ON        = 1u << 0, /**< turn tracing on */
 	EMBED_VM_RAW_TERMINAL    = 1u << 1, /**< raw terminal mode */
-	EMBED_VM_QUITE_ON        = 1u << 2, /**< turn off 'okay' prompt and welcome message */
+	EMBED_VM_QUITE_ON        = 1u << 2, /**< turn off 'ok' prompt and welcome message */
 } embed_vm_option_e; /**< VM option enum */
 
 /**@todo merge 'embed_t' and 'embed_opt_t' structures? */

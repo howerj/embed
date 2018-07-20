@@ -17,7 +17,7 @@ CMP=cmp
 AR=ar
 ARFLAGS=rcs
 RM=rm -fv
-TESTAPPS=cpp call mmu rom
+TESTAPPS=cpp call mmu rom ref
 TRACER=
 
 .PHONY: all clean run cross double-cross default tests docs apps dist
@@ -140,6 +140,9 @@ rom: CFLAGS=-O2 -Wall -Wextra -std=c99 -I. -g
 rom: t/rom.c util.o libembed.a 
 	${CC} ${CFLAGS} $^ -o $@
 
+ref: t/ref.c embed.blk
+	${CC} ${CFLAGS} $< -o $@
+
 apps: ${TESTAPPS}
 
 ### Cleanup ################################################################## 
@@ -149,6 +152,7 @@ clean:
 	${RM} *.o *.a *.so *.pdf *.htm *.log
 	${RM} *.gen.c
 	${RM} *.tgz
+	${RM} *.bin
 	${RM} ${TESTAPPS} eforth
 
 ### EOF ###################################################################### 

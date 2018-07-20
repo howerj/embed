@@ -2198,7 +2198,7 @@ h: token =bl word ;                      ( -- a )
 
 h: ?dictionary dup $3F00 u< ?exit 8 -throw ;
 : , here dup cell+ ?dictionary cp! ! ; ( u -- : store *u* in dictionary )
-\ : c, here ?dictionary c! cp 1+! ;    ( c -- : store *c* in the dictionary )
+: c, here ?dictionary c! cp 1+! ;      ( c -- : store *c* in the dictionary )
 h: doLit 0x8000 or , ;                 ( n+ -- : compile literal )
 : literal ( n -- : write a literal into the dictionary )
   dup 0x8000 and ( n > $7FFF ? )
@@ -3681,6 +3681,9 @@ This is a list of Error codes, not all of which are used by the application.
 
 ## Virtual Machine Implementation in C
 
+This Virtual Machine implementation is likely to be out of date and *slightly*
+wrong.
+
 	/* Embed Forth Virtual Machine, Richard James Howe, 2017-2018, MIT License */
 	#include <assert.h>
 	#include <errno.h>
@@ -3780,7 +3783,7 @@ This is a list of Error codes, not all of which are used by the application.
 		static const m_t delta[] = { 0, 1, -2, -1 };
 		const m_t l = embed_cells(h);
 		m_t * const m = h->m;
-		m_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0;
+		m_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0, opt = 0;
 		for(d_t d;;) {
 			const m_t instruction = m[pc++];
 
@@ -3820,10 +3823,12 @@ This is a list of Error codes, not all of which are used by the application.
 				case 21: rp = t >> 1; T = n;       break;
 				case 22: T = save(h, block, n>>1, ((d_t)T+1)>>1); break;
 				case 23: T = fputc(t, out);        break; 
-				case 24: T = fgetc(in); n = -1;    break; /* n = blocking status */
+				case 24: m[++sp] = t; T = fgetc(in); t = T; n = 0;    break; /* n = blocking status */
 				case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 				case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; } else { pc=4; T=10; } break;
-				case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;
+				case 27: if(t) { t = 0; sp--; r = n; goto finished; } T = t; break;
+				/* 28 is virtual machine callback mechanism, not implemented here */
+				case 29: T = opt; opt = t; break;
 				default: pc=4; T=21; break;
 				}
 				sp += delta[ instruction       & 0x3];

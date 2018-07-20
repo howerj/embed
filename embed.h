@@ -5,25 +5,25 @@
  *
  *  Do not be afraid to modify things and generally hack around with things,
  *  if you want to port this to a microcontroller you might need to modify
- *  this file and 'embed.c' as well. 
- */
+ *  this file and 'embed.c' as well. */
 #ifndef EMBED_H
 #define EMBED_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-#include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#define EMBED_CORE_SIZE (32768uL)        /**< core size in cells */
 
 typedef uint16_t cell_t;               /**< Virtual Machine Cell size: 16-bit*/
 typedef  int16_t signed_cell_t;        /**< Virtual Machine Signed Cell */
 typedef uint32_t double_cell_t;        /**< Virtual Machine Double Cell (2*sizeof(cell_t)) */
 typedef  int32_t signed_double_cell_t; /**< Virtual Machine Signed Double Cell */
 
-struct embed_t;                 /**< Forth Virtual Machine State (Opaque) */
-typedef struct embed_t embed_t; /**< Forth Virtual Machine State Type Define (Opaque) */
+struct embed_t;                 /**< Forth Virtual Machine State */
+typedef struct embed_t embed_t; /**< Forth Virtual Machine State Type Define */
 
 /**@brief Function pointer typedef for functions that are to retrieve a
  * character of input from a source. This function should behave the same
@@ -48,18 +48,19 @@ typedef int (*embed_fgetc_t)(void *file, int *no_data);
  * @param ch,   unsigned byte to write
  * @param file, handle needed to write to a source, if needed
  * @return ch on success, negative on failure */
-typedef int (*embed_fputc_t)(int ch, void *file); /**< write character to file, return character wrote on success */
+typedef int (*embed_fputc_t)(int ch, void *file);
 
 /**@brief Function pointer typedef for functions that are to write sections of
  * the virtual machine image to mass storage. Mass storage on a hosted machine
  * would be a file on disk, but on a microcontroller it could be a Flash
  * chip, for example.
- * @param m,      Virtual Machine memory to write to, of embed_length() cell_t long (maximum length is 32768).
+ * @param h,      Virtual Machine memory to write to, of embed_length() cell_t long, use
+ * 'embed_core_get' to get a pointer to the core to save.
  * @param name,   handle that identifies place to write to (such as a 'FILE*')
  * @param start,  position in 'm' to start write from
  * @param length, length of section to save from 'm', starting at 'start'.
  * @return zero on success, negative on failure */
-typedef int (*embed_save_t)(const cell_t m[/*static 32768*/], const void *name, const size_t start, const size_t length);
+typedef int (*embed_save_t)(const embed_t *h, const void *name, const size_t start, const size_t length);
 
 /**@brief Function pointer typedef for user supplied callbacks for doing
  * arbitrary things. The function should return zero on success or a number
@@ -69,187 +70,94 @@ typedef int (*embed_save_t)(const cell_t m[/*static 32768*/], const void *name, 
  * @return zero to continue execute, non-zero to throw */
 typedef int (*embed_callback_t)(embed_t *h, void *param);
 
+/**@brief Function pointer typedef for user supplied callbacks for
+ * reading from the Virtual Machines memory 
+ * @param  h,    initialized Virtual Machine image
+ * @param  addr, address of location to read from
+ * @return return of MMU read */
+typedef cell_t (*embed_mmu_read_t)(embed_t const * const h, cell_t addr);
+
+/**@brief Function pointer typedef for user supplied callbacks for
+ * writing to the Virtual Machines memory
+ * @param h,     initialized Virtual Machine image
+ * @param addr,  address of value to write
+ * @param value, value to write to 'addr' */
+typedef void (*embed_mmu_write_t)(embed_t * const h, cell_t addr, cell_t value);
+
+/**@brief This function is called by the virtual machine to determine whether
+ * the virtual machine should yield or not, it can be used to limit time spent
+ * in the virtual machine.
+ * @param param, arbitrary data to supply to the yield function
+ * @return returns non zero if virtual machine should yield, and zero if it
+ * should continue */
+typedef int (*embed_yield_t)(void *param);
+
 typedef enum {
 	EMBED_VM_TRACE_ON        = 1u << 0, /**< turn tracing on */
 	EMBED_VM_RAW_TERMINAL    = 1u << 1, /**< raw terminal mode */
-	EMBED_VM_QUITE_ON        = 1u << 2, /**< turn off 'okay' prompt and welcome message */
+	EMBED_VM_QUITE_ON        = 1u << 2, /**< turn off 'ok' prompt and welcome message */
 } embed_vm_option_e; /**< VM option enum */
 
+/**@todo merge 'embed_t' and 'embed_opt_t' structures? */
 typedef struct {
-	embed_fgetc_t    get;      /**< callback to get a character, behaves like 'fgetc' */
-	embed_fputc_t    put;      /**< callback to output a character, behaves like 'fputc' */
-	embed_save_t     save;     /**< callback to save an image */
-	embed_callback_t callback; /**< arbitrary user supplied callback */
-	void *in,                  /**< first argument to 'getc' */
-	     *out,                 /**< second argument to 'putc' */
-	     *param;               /**< first argument to 'callback' */
-	const void *name;          /**< second argument to 'save' */
-	embed_vm_option_e options; /**< virtual machine options register */
+	embed_fgetc_t     get;      /**< callback to get a character, behaves like 'fgetc' */
+	embed_fputc_t     put;      /**< callback to output a character, behaves like 'fputc' */
+	embed_save_t      save;     /**< callback to save an image */
+	embed_mmu_write_t write;    /**< callback to write location to virtual machine memory */
+	embed_mmu_read_t  read;     /**< callback to read location from virtual machine memory */
+	embed_callback_t  callback; /**< arbitrary user supplied callback */
+	embed_yield_t     yield;    /**< callback to force the virtual machine to yield */
+	void	*in,                /**< first argument to 'getc' */
+		*out,               /**< second argument to 'putc' */
+		*param,             /**< first argument to 'callback' */
+		*yields;            /**< parameter to yield */
+	const void *name;           /**< second argument to 'save' */
+	embed_vm_option_e options;  /**< virtual machine options register */
 } embed_opt_t; /**< Embed VM options structure for customizing behavior */
 
-/* Default Callback which can be passed to options */
-
-/**@brief Saves to a file called 'name', this is the default callback to save
- * an image to disk with the 'save' ALU instruction.
- * @param m,       memory to save to disk, 32768 cell_t long
- * @param name,    name of file to save to on disk
- * @param start,   start of image location to save from
- * @param length,  length in cell_t to save, starting at 'start'
- * @return 0 on success, negative on failure */
-int embed_save_cb(const cell_t m[/*static 32768*/], const void *name, const size_t start, const size_t length); 
-
-/**@brief 'embed_fputc_t' callback to write to a file
- * @param file, a 'FILE*' object to write to
- * @param ch,  unsigned char to write to file
- * @return ch on success, negative on failure */
-int embed_fputc_cb(int ch, void *file); 
-
-/**@brief 'embed_fgetc_t' callback to read from a file
- * @param file, a 'FILE*' object to read from
- * @param no_data, if there is no data to be at the moment but there might be
- * some in the future -1 will be written to 'no_data'.
- * @return EOF on failure, unsigned char value on success */
-int embed_fgetc_cb(void *file, int *no_data);         /**< 'file' is a 'FILE*', like 'stdin' */
+struct embed_t { 
+	embed_opt_t o; /**< options structure for virtual machine */
+	void *m;       /**< virtual machine core memory - @warning you need to set this to something sensible! */
+}; /**< Embed Forth VM structure */
 
 /**@brief alternative 'embed_fgetc_t' to read data from a string
- * @param string_ptr, pointer to character array ('char**') to read from
+ * @param string_ptr, pointer to character array ('char**') to read from, this
+ * should be an ASCII NUL terminated string.
  * @param no_data, if there is no data to be at the moment but there might be
  * some in the future -1 will be written to 'no_data'.
  * @return EOF on failure, unsigned char value on success */
-int embed_sgetc_cb(void *string_ptr, int *no_data);   /**< 'string_ptr' is a 'char **' to ASCII NUL terminated string */
+int embed_sgetc_cb(void *string_ptr, int *no_data);
 
-typedef enum {
-	EMBED_LOG_LEVEL_ALL_OFF, /**< Turn all log messages off, EMBED_LOG_LEVEL_FATAL still kills the process */
-	EMBED_LOG_LEVEL_FATAL,   /**< Log a fatal error message, and die! */
-	EMBED_LOG_LEVEL_ERROR,   /**< For errors, recoverable */
-	EMBED_LOG_LEVEL_WARNING, /**< Warning information */
-	EMBED_LOG_LEVEL_INFO,    /**< General information, */
-	EMBED_LOG_LEVEL_DEBUG,   /**< Debug operations, may produce voluminous output */
-	EMBED_LOG_LEVEL_ALL_ON,  /**< Turn all log messages on */
-} embed_log_level_e; /**< Log levels, and all on/off enumerations */
+/**@brief 'embed_fputc_t' callback, discards data output
+ * @param  ch,   character (discarded)
+ * @param  file, can be NULL, or anything
+ * @return returns 'ch' */
+int embed_nputc_cb(int ch, void *file);
 
-#ifndef NDEBUF
-#define embed_fatal(...)   embed_logger(EMBED_LOG_LEVEL_FATAL,   __FILE__, __func__, __LINE__, __VA_ARGS__)
-#define embed_error(...)   embed_logger(EMBED_LOG_LEVEL_ERROR,   __FILE__, __func__, __LINE__, __VA_ARGS__)
-#define embed_warning(...) embed_logger(EMBED_LOG_LEVEL_WARNING, __FILE__, __func__, __LINE__, __VA_ARGS__)
-#define embed_info(...)    embed_logger(EMBED_LOG_LEVEL_INFO,    __FILE__, __func__, __LINE__, __VA_ARGS__)
-#define embed_debug(...)   embed_logger(EMBED_LOG_LEVEL_DEBUG,   __FILE__, __func__, __LINE__, __VA_ARGS__)
-#else
-/* fatal is always so, even if debugging is off */
-#define embed_fatal(...)   embed_die()
-#define embed_error(...)   do { } while(0)
-#define embed_warning(...) do { } while(0)
-#define embed_info(...)    do { } while(0)
-#define embed_debug(...)   do { } while(0)
-#endif
+/**@brief 'embed_fgetc_t' callback, always returns EOF
+ * @param file, not used
+ * @param no_data, set to zero
+ * @return returns 'EOF' */
+int embed_ngetc_cb(void *file, int *no_data);
 
-#ifndef UNUSED
-/**@brief This macro can be used to suppress warnings relating to a variable
- * being unused in a function. This should be used carefully and sparingly, and
- * to indicate intention. Valid uses include in callbacks where a parameter
- * might not be used in that specific callback, or in code that is selected for
- * depending on platform which may not use a variable on that platform.
- * @param VARIABLE, variable to silence warning of and mark as unused */
-#define UNUSED(VARIABLE) ((void)(VARIABLE))
-#endif
+/**@brief The default yield callback, this function never yields.
+ * @param param, unused
+ * @return always returns false */
+int embed_yield_cb(void *param);
 
-#ifndef MAX
-/**@brief Macro to return the maximum value of X and Y
- * @param X, value
- * @param Y, value
- * @return Maximum value of X and Y */
-#define MAX(X, Y) ((X) > (Y) ? (X) : (Y))
-#endif
-
-#ifndef MIN
-/**@brief Macro to return the Minimum value of X and Y
- * @param X, value
- * @param Y, value
- * @return Minimum value of X and Y */
-#define MIN(X, Y) ((X) > (Y) ? (Y) : (X))
-#endif
-
-/**@brief Set the global log level, this may be any 
-* @param level, level to log up to, any log level equal to or lower than than
-* this value will be logged */
-void embed_log_level_set(embed_log_level_e level);
-
-/**@brief Get the global log level
-*  @return Global log level */
-embed_log_level_e embed_log_level_get(void);            
-
-/**@brief Exit system with failure */
-void embed_die(void);
-
-/**@brief Printf a format string to standard error with a few additional
- * extras to make things easier. A new line is automatically appended to the
- * logged line, and log-level/file/function and line information is printed.
- * Whether something is logged or the log is suppressed can be controlled with
- * by the 'embed_log_level_set()' function.
- * @param level, logging level, should be WITHIN 'EMBED_LOG_LEVEL_ALL_OFF' and
- * 'EMBED_LOG_LEVEL_ALL_ON', which themselves are not valid logging levels. Also
- * of note, EMBED_LOG_LEVEL_FATAL causes the process to terminate! Even if the
- * log is not printed because the log level is off, 'exit()' will still be
- * called if the log level is fatal. 'exit' is called with the 'EXIT_FAILURE'
- * value.
- * @param file,  file logging occurs within, should be __FILE__
- * @param func,  function logging occurs within, should be __func__
- * @param line,  line logging occurred on, should be __LINE__
- * @param fmt,   a printf format string
- * @param ...,   variable length parameter list for 'fmt' */
-void embed_logger(embed_log_level_e level, const char *file, const char *func, unsigned line, const char *fmt, ...); 
-
-/**@brief Open up 'file', and if that fails print out an error message and
- * call exit with EXIT_FAILURE.
- * @param file, name of file to open
- * @param mode, mode to open file in
- * @return An open file handle, this never returns NULL */
-FILE *embed_fopen_or_die(const char *file, const char *mode);         
-
-/**@brief 'calloc' of size 'sz'
- * @param sz, number of bytes to allocate
- * @return pointer to memory of size 'sz', or NULL on failure */
-void *embed_alloc(size_t sz);
-
-/**@brief 'calloc' or die 
- * @param sz, number of bytes to allocate
- * @return pointer to memory of size 'sz', never returns NULL */
-void *embed_alloc_or_die(size_t sz);                              
-
-/**@brief Make a new Forth VM, and load with default image. The default image
- * contains a fully working eForth image.
- * @return a pointer to a new Forth VM, loaded with the default image */
-embed_t  *embed_new(void); 
-
-/**@brief Copy existing instance of a Forth VM 
+/**@brief Default callback for reading virtual machine memory, this is equivalent to
+ * returning 'm[addr]'.
  * @param h,     initialized Virtual Machine image
- * @return a copy of h, or NULL on failure */
-embed_t  *embed_copy(embed_t const * const h); 
+ * @param addr, address to read
+ * @return read in address */
+cell_t  embed_mmu_read_cb(embed_t const * const h, cell_t addr);
 
-/**@brief Free a Forth VM
- * @param h,     initialized Virtual Machine image to free */
-void embed_free(embed_t *h);                                      
-
-/**@brief Run the VM, reading from 'in' and writing to 'out'. This function
- * provides sensibly default options that suite most (but not all) needs for a
- * hosted system.
+/**@brief Default callback for writing to virtual machine memory, this is
+ * equivalent to 'm[addr] = value'.
  * @param h,     initialized Virtual Machine image
- * @param in,    input file for VM to read from
- * @param out,   output file for VM to write to
- * @param block, name of file to write block to, may be NULL
- * @return 0 on success, negative on failure */
-int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block); 
-
-/**@brief Run the VM, reading from 'in' and writing to 'out'. The user can
- * supply their own functions and options but 'in' and 'out' will be passed
- * to the get and put character callbacks.
- * @param h,     initialized Virtual Machine image
- * @param opt,   options for the virtual machine to customize its behavior 
- * @param in,    input file for VM to read from
- * @param out,   output file for VM to write to
- * @param block, name of file to write block to, may be NULL
- * @return 0 on success, negative on failure */
-int embed_forth_opt(embed_t *h, embed_vm_option_e opt, FILE *in, FILE *out, const char *block); 
+ * @param addr,  address to write to
+ * @param value, value to write */
+void embed_mmu_write_cb(embed_t * const h, cell_t addr, cell_t value);
 
 /**@brief Load VM image off disk 
  * @param h,     uninitialized Virtual Machine image
@@ -264,22 +172,21 @@ int embed_load(embed_t *h, const char *name);
  * @return zero on success, negative on failure */
 int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length); 
 
-/**@brief Load VM image from FILE*
- * @param h,      uninitialized Virtual Machine image
- * @param input,  open file to read from to load a disk image
- * @return zero on success, negative on failure */
-int embed_load_file(embed_t *h, FILE *input);                      
-
-/**@brief Save VM image to disk, 0 == success
- * @param h,     Virtual Machine image to save to disk
- * @param name,  name of file to load
- * @return zero on success, negative on failure */
-int embed_save(const embed_t *h, const char *name);
+/**@brief Load the default configuration options for the embed virtual machine
+ * and the default image as well.
+ * @param h, an uninitialized 
+ * @return returns non-zero on failure, and zero on success */
+int embed_default(embed_t *h);
 
 /**@brief Length in bytes of core memory 
  * @param h, initialized Virtual Machine image
  * @return bytes in h */
-size_t embed_length(embed_t const * const h);            
+size_t embed_length(embed_t const * const h);
+
+/**@brief Length in cells of core memory
+ * @param h, initialized Virtual Machine image
+ * @return cells in h*/
+size_t embed_cells(embed_t const * const h);
 
 /**@brief Swap byte order of a 'cell_t'
  * @param s, value to swap byte order of
@@ -292,19 +199,18 @@ cell_t embed_swap(cell_t s);
 void embed_buffer_swap(cell_t *b, size_t l);                   
 
 /**@brief Run the virtual machine directly, with custom options.
- * 'embed_options_default()' can be used to get a copy of a structure
+ * 'embed_opt_default()' can be used to get a copy of a structure
  * which contains the defaults which can be modified for your purposes. The
  * options structure contains the callbacks and the data the callbacks might
  * require. You should call this function if you need to customize the virtual
  * machines behavior so it reads or writes to different I/O sources.
  * @param h, initialized virtual machine
- * @param o, options structure containing custom callbacks and callback data
  * @return zero on success, negative on failure */
-int embed_vm(embed_t *h, embed_opt_t *o);  
+int embed_vm(embed_t *h);
 
 /**@brief Push value onto the Virtual Machines stack. This can be called from
  * within the 'embed_callback_t' callback and from outside of it.
- * @param h,     initialized Virtual Machines
+ * @param h,     initialized Virtual Machine image
  * @param value, value to push
  * @return zero on success, negative on failure */
 int embed_push(embed_t *h, cell_t value);
@@ -317,22 +223,37 @@ int embed_push(embed_t *h, cell_t value);
  * @return zero on success, negative on failure */
 int embed_pop(embed_t *h, cell_t *value); 
 
+/**@brief Return the current variable stack depth
+ * @param h, initialized Virtual Machine
+ * @return The current stack depth in cells */
+size_t embed_depth(embed_t *h);
+
 /**@brief Retrieve a copy of some sensible default options, the default options
  * contain callbacks and file handles that will read data from standard in,
  * write data to standard out and save to disk. You can modify the returned
  * structure as you please.
  * @return returns a structure, not a pointer to a structure */
-embed_opt_t embed_options_default(void);
+embed_opt_t embed_opt_default(void);
 
-/**@brief write a string to output specified in 'o'
- * @param o, options structure containing place to write to
+/**@brief Retrieve a copy of the current options set in 'h'
+ * @param h, initialized virtual machine image
+ * @return copy of current embed_opt_t structure in 'h' */
+embed_opt_t *embed_opt_get(embed_t *h);
+
+/**@brief Retrieve a copy of the current options set in 'h'
+ * @param h, initialized virtual machine image
+ * @return copy of current embed_opt_t structure in 'h' */
+void embed_opt_set(embed_t *h, embed_opt_t *opt);
+
+/**@brief write a string to output specified in the options within 'h'
+ * @param h, initialized virtual machine image with options set
  * @param s, string to write
  * @return negative on failure, number of characters written otherwise */
-int embed_puts(embed_opt_t const * const o, const char *s);
+int embed_puts(embed_t *h, const char *s);
 
 /**@brief Reset the virtual machine image, this means that the stack pointers,
  * top of stack register and program counter will be set to the defaults.
- * @param h, initialized Virtual machine image to reset  */
+ * @param h, initialized Virtual Machine image to reset */
 void embed_reset(embed_t *h);
 
 /**@brief get a pointer to VM core 

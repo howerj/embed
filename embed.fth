@@ -162,6 +162,8 @@
 \ namespaces and are generally talked about that much, they are especially
 \ useful (in fact pretty much required) for writing a metacompiler.
 
+.( FORTH META COMPILATION START ) cr
+
 only forth definitions hex
 variable meta          ( Metacompilation vocabulary )
 meta +order definitions
@@ -182,10 +184,10 @@ variable fence               ( Do not peephole optimize before this point )
 2    constant =cell          ( Target cell size )
 -1   constant optimize       ( Turn optimizations on [-1] or off [0] )
 0    constant swap-endianess ( if true, swap the endianess )
-$4280 constant pad-area      ( area for pad storage )
+$4100 constant pad-area      ( area for pad storage )
+$7FFF constant (rp0)         ( start of return stack in *cells* )
+$2400 constant (sp0)         ( start of variable stack in *cells* )
 variable header -1 header !  ( if true target headers generated )
-$7FFF constant (rp0)         ( start of return stack )
-$4400 constant (sp0)         ( start of variable stack )
 
 ( 1   constant verbose ( verbosity level, higher is more verbose )
 #target #max 0 fill    ( Erase the target memory location )
@@ -205,6 +207,7 @@ $4400 constant (sp0)         ( start of variable stack )
 : t! over $FF and over high tc! swap 8 rshift swap low tc! ; ( u a -- )
 : t@ dup high tc@ swap low tc@ 8 lshift or ; ( a -- u )
 : 2/ 1 rshift ;                ( u -- u : non-standard definition divide by 2 )
+: 2* 1 lshift ;                ( u -- u : multiple by two, non-standard )
 : talign there 1 and tcp +! ;  ( -- : align target dictionary pointer value )
 : tc, there tc! 1 tcp +! ;     ( c -- : write byte into target dictionary )
 : t,  there t!  =cell tcp +! ; ( u -- : write cell into target dictionary )
@@ -214,8 +217,8 @@ $4400 constant (sp0)         ( start of variable stack )
   [char] " word count dup tc, 1- for count tc, next drop talign update-fence ;
 : tcells =cell * ;             ( u -- a )
 : tbody 1 tcells + ;           ( a -- a )
-: tcfa cfa ;
-: tnfa nfa ;
+: tcfa cfa ;                   ( PWD -- CFA )
+: tnfa nfa ;                   ( PWD -- NFA )
 : meta! ! ;                    ( u a --  )
 : dump-hex #target there $10 + dump ; ( -- )
 ( : locations ( -- : list all words and locations in target dictionary )
@@ -237,9 +240,9 @@ $4400 constant (sp0)         ( start of variable stack )
 (     ." TARGET DICTIONARY: " cr )
 (     locations )
 (   then )
-  ." HOST:   "  here        . cr
-  ." TARGET: "  there       . cr
-  ." HEADER: "  #target $30 dump cr ;
+  ." HOST:   " here        . cr
+  ." TARGET: " there       . cr
+  ." HEADER: " #target $30 dump cr ;
 
 $26 constant (header-options)
 
@@ -251,8 +254,8 @@ $26 constant (header-options)
 : finished ( -- : save target image and display statistics )
    display
    only forth definitions hex
-   ." SAVING... " save-hex ." DONE! " cr
-   ." STACK> " .s cr ;
+   ." SAVING..." save-hex ." DONE" cr
+   ." STACK>" .s cr ;
 
 \ ### The Assembler
 
@@ -621,6 +624,7 @@ a: return ( -- : Compile a return into the target )
 : next tdoNext fetch-xt [a] call t, update-fence ; ( a -- )
 : exit exit, ;                               ( -- )
 : ' [t] literal ;                            ( "name", -- )
+: recurse tlast @ tcfa [a] call ;            ( -- )
 
 \ @bug maximum string length is 64 bytes, not 255 as it should be.
 : ." tdoPrintString fetch-xt [a] call $literal ; ( "string", -- )
@@ -713,8 +717,8 @@ $40   constant word-length ( maximum length of a word )
 $40   constant c/l         ( characters per line in a block )
 $10   constant l/b         ( lines in a block )
 $F    constant l/b-1       ( lines in a block, less one )
-(rp0) constant rp0         ( start of return stack )
-(sp0) constant sp0         ( start of variable stack )
+(rp0) 2* constant rp0      ( start of return stack )
+(sp0) 2* constant sp0      ( start of variable stack )
 $2BAD constant magic       ( magic number for compiler security )
 $F    constant #highest    ( highest bit in cell )
 
@@ -730,15 +734,16 @@ $4012 constant <emit>      ( c -- : emit character )
 $4014 constant <expect>    ( "accept" vector )
 $4016 constant <tap>       ( "tap" vector, for terminal handling )
 $4018 constant <echo>      ( c -- : emit character )
-$4110 constant context     ( holds current context for search order )
-$4122 constant #tib        ( Current count of terminal input buffer )
-$4124 constant tib-buf     ( ... and address )
-$4126 constant tib-start   ( backup tib-buf value )
-\ $4280 == pad-area
+$401A constant context     ( holds current context for search order )
+  ( area for context is #vocs large )
+$402A constant #tib        ( Current count of terminal input buffer )
+$402C constant tib-buf     ( ... and address )
+$402E constant tib-start   ( backup tib-buf value )
+\ $4100 == pad-area
 
-\ $C    constant vm-options   ( Virtual machine options register )
-$1E   constant header-length  ( location of length in header )
-$20   constant header-crc     ( location of CRC in header )
+\ $C  constant vm-options    ( Virtual machine options register )
+$1E   constant header-length ( location of length in header )
+$20   constant header-crc    ( location of CRC in header )
 (header-options) constant header-options ( location of options bits in header )
 
 target.1         +order ( Add target word dictionary to search order )
@@ -838,29 +843,29 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 \ updated during the metacompilation process.
 \
 
-0 tlocation cp                ( Dictionary Pointer: Set at end of file )
 0 tlocation root-voc          ( root vocabulary )
 0 tlocation editor-voc        ( editor vocabulary )
-0 tlocation _forth-wordlist   ( set at the end near the end of the file )
 
 \ System Variables
-
+#version constant  ver   ( eForth version )
+pad-area tconstant pad   ( pad variable - offset into temporary storage )
+$8       constant  #vocs ( number of vocabularies in allowed )
 $2       tconstant cell  ( size of a cell in bytes )
+$400     tconstant b/buf ( size of a block )
+
+0        tlocation cp    ( Dictionary Pointer: Set at end of file )
+0        tlocation _forth-wordlist ( set at the end near the end of the file )
 $0       tvariable >in   ( Hold character pointer when parsing input )
 $0       tvariable state ( compiler state variable )
 $0       tvariable hld   ( Pointer into hold area for numeric output )
 $A       tvariable base  ( Current output radix )
 $0       tvariable span  ( Hold character count received by expect   )
-$8       constant  #vocs ( number of vocabularies in allowed )
-$400     tconstant b/buf ( size of a block )
 0        tvariable blk   ( current blk loaded, set in *cold* )
-#version constant  ver   ( eForth version )
-pad-area tconstant pad   ( pad variable - offset into temporary storage )
 $FFFF    tvariable dpl   ( number of places after fraction )
-0        tvariable current ( WID to add definitions to )
+0        tvariable current   ( WID to add definitions to )
 0        tvariable <literal> ( holds execution vector for literal )
-0        tvariable <boot>  ( execute program at startup )
-0        tvariable <ok>    ( prompt execution vector )
+0        tvariable <boot>    ( execute program at startup )
+0        tvariable <ok>      ( prompt execution vector )
          ( @todo move <ok>, <boot>, and other words to a system vocabulary )
 
 \ 
@@ -930,6 +935,7 @@ h: tx!     tx!      ; ( c -- : transmit single character )
 : mod      mod      ; ( u1 u2 -- u : remainder of u1 divided by u2 )
 : vm       vm       ; ( ??? -- ??? : perform arbitrary VM call )
 ( h: cpu!    cpu!     ; ( u -- : set CPU options register )
+
 \ 
 \ ### Forth Implementation of Arithmetic Functions
 \
@@ -1103,12 +1109,12 @@ h: cpu@    0 cpu-xchg dup cpu! ; ( -- u : get CPU options register )
 h: ?exit if rdrop exit then ; ( u --, R: xt -- xt| : conditional return )
 : 2drop drop drop ;         ( n n -- )
 : 1+ 1 + ;                  ( n -- n : increment a value  )
-: negate invert 1+ ;        ( n -- n : negate a number )
+: negate 1- invert ;        ( n -- n : negate a number )
 : - negate + ;              ( n1 n2 -- n : subtract n1 from n2 )
 h: over- over - ;           ( u u -- u u )
 h: over+ over + ;           ( u1 u2 -- u1 u1+2 )
 : aligned dup first-bit + ; ( b -- a )
-: bye -1 0 yield? nop ( $38 -throw ) ; ( -- : leave the interpreter )
+: bye 0 [-1] yield? drop ( $38 -throw ) ; ( -- : leave the interpreter )
 h: cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+  cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;          ( n -- n : convert cells count to address count )
@@ -1285,10 +1291,18 @@ h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 \ other work as there is no input available at the moment, and it loops until
 \ there is some input. All of this is transparent to the user of *key*.
 \
+\ *bye* exits the interpreter in the standard fashion, however the C program
+\ calling the virtual machine is free to run the same image again which will
+\ start off executing at the yield again (which will not yield the second
+\ time as it sets its second parameter to zero the first time) if a call
+\ to reset the virtual machine is not made. The C program may repeatedly do 
+\ this, send the virtual machine input that runs out when it wants to evaluate 
+\ strings of Forth programs.
+\
 
-: key ( -- c : return a  )
-    begin <key> @execute dup if nip [-1] 1 yield? 2drop then 0= until
-    dup [-1] <> ?exit bye ;
+: key ( -- c : return a character )
+    begin <key> @execute dup if nip 1 [-1] yield? drop then 0= until
+    dup [-1] <> ?exit drop bye recurse ;
 
 \ */string*, *+string* and *count* are for manipulating strings, *count*
 \ words best on counted strings which have a length prefix, but can be used
@@ -1322,9 +1336,6 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
    string@ r> swap ccitt >r +string
   repeat r> nip ;
 
-( : random ( -- u : pseudo random number )
-(  seed @ 0= seed toggle seed @ 0 ccitt dup seed ! ; )
-
 \ *last* gets a pointer to the most recently defined word, which is used to
 \ implement words like *recurse*, as well as in words which must traverse the
 \ current word list.
@@ -1340,7 +1351,6 @@ h: last get-current @ ;         ( -- pwd )
 \ necessary in a hosted Forth to have such a mechanism, but it can be turned
 \ on when needed with a VM CPU option, when we see *^h* and *ktap*.
 \
-
 
 h: echo <echo> @execute ;              ( c -- )
 : emit <emit> @execute ;               ( c -- : write out a char )
@@ -1371,9 +1381,9 @@ h: colon-space [char] : emit space ;   ( -- )
 \   : pick ?dup if swap >r 1- pick r> swap exit then dup ;
 \
 
-h: vrelative cells sp@ swap - ;  ( u -- u : position relative to sp )
-: depth sp0 vrelative chars 1- ; ( -- u : get current depth )
-: pick vrelative @ ;             ( vn...v0 u -- vn...v0 vu )
+h: vrelative sp@ swap - ;  ( u -- u : position relative to sp )
+: depth sp0 vrelative cell- chars ; ( -- u : get current depth )
+: pick cells vrelative @ ;          ( vn...v0 u -- vn...v0 vu )
 
 \ *ndrop* removes a variable number of items off the variable stack, which
 \ is sometimes needed for cleaning things up before exiting a word.
@@ -1626,7 +1636,7 @@ h: (u.) 0 <# #s #> ;             ( u -- b u : turn *u* into number string )
 : u.r >r (u.) r> fallthrough;    ( u +n -- : print u right justified by +n)
 h: adjust over- spaces type ;    ( b n n -- )
 h: d5u.r dup fallthrough;        ( u -- u )
-h: 5u.r 5 u.r ;                  ( u -- )
+h: 5u.r space 5 u.r ;            ( u -- )
 ( :  .r >r (.)( r> adjust ;      ( n n -- : print n, right justified by +n )
 : u.  (u.) h: blt space type ;;  ( u -- : print unsigned number )
 :  .  radix $A xor if u. exit then (.) blt ; ( n -- print number )
@@ -1779,7 +1789,10 @@ h: raw? cpu@ 2 and 0<> ; ( c -- t : raw terminal mode? )
   begin
     2dupxor
   while
-    key dup 
+    \ we need to be wary of 'key', because it calls 'bye' when input
+    \ is exhausted it is an exit and potential entry point into the program,
+    \ so we should try to keep the stack elements from 'accept' hidden
+    >r 2>r key 2r> rot r> swap dup 
     raw? if ( we need to handle echoing, and handling delete keys )
 	\ =bl - 95 u< if tap else <tap> @execute then
 	ktap? if tap else <tap> @execute then
@@ -1964,26 +1977,26 @@ h: inline? inline-start inline-end within ; ( pwd -- t : is word inline? )
 
 \ Now we know the structure of the dictionary we can define some words that
 \ work with it. We will define *find* and *search-wordlist*, which will
-\ be derived from *finder* and *searcher*. *searcher* will attempt to
-\ find a word in a specific word list, and *find* will attempt to find a
-\ word in all the word lists in the current order.
+\ be derived from *(find)* and *(search-wordlist)*. *(search-wordlist)* will 
+\ attempt to find a word in a specific word list, and *find* will attempt to 
+\ find a word in all the word lists in the current order.
 \
-\ *searcher* and *finder* both return as much information about the words
-\ they find as possible, if they find them. *searcher* returns
+\ *(search-wordlist)* and *(find)* both return as much information about the 
+\ words they find as possible, if they find them. *(search-wordlist)* returns
 \ the *PWD* of the word that points to the found word, the *PWD* of the
 \ found word and a number indicating whether the found word is immediate
 \ (1) or a compiling word (-1). It returns zero, the original counted string,
 \ and another zero if the word could not be found in its first argument, a word
 \ list (wid). The word is provided as a counted string in the second argument
-\ to *searcher*.
+\ to *(search-wordlist)*.
 \
-\ *finder* wraps up *searcher* and applies it to all the words in the
-\ search order. It returns the same values as *searcher* if a word is found,
-\ returns the original counted word string address if it was not found, as
-\ well as zeros.
+\ *(find)* wraps up *(search-wordlist)* and applies it to all the words in the
+\ search order. It returns the same values as *(search-wordlist)* if a word is 
+\ found, returns the original counted word string address if it was not found, 
+\ as well as zeros.
 \
 
-h: searcher ( a wid -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word in a WID )
+h: (search-wordlist) ( a wid -- PWD PWD 1|PWD PWD -1|0 a 0: find word in WID )
   swap >r dup
   begin
     dup
@@ -1997,28 +2010,28 @@ h: searcher ( a wid -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word in a WID )
   repeat
   rdrop 2drop-0 ;
 
-h: finder ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
+h: (find) ( a -- pwd pwd 1 | pwd pwd -1 | 0 a 0 : find a word dictionary )
   >r
   context
   begin
     dup@
   while
-    dup@ @ r@ swap searcher ?dup
+    dup@ @ r@ swap (search-wordlist) ?dup
     if
       >r rot-drop r> rdrop exit
     then
     cell+
   repeat drop-0 r> 0x0000 ;
 
-\ *search-wordlist* and *find* are simple applications of *searcher* and
-\ *finder*, there is a difference between this Forths version of *find* and
+\ *search-wordlist* and *find* are simple applications of *(search-wordlist)* 
+\ and *(find)* there is a difference between this Forths version of *find* and
 \ the standard one, this version of *find* does not return an execution token
 \ but a pointer in the word header which can be turned into an execution token
 \ with *cfa*.
 
-: search-wordlist searcher rot-drop ; ( a wid -- pwd 1 | pwd -1 | a 0 )
+: search-wordlist (search-wordlist) rot-drop ; ( a wid -- PWD 1|PWD -1|a 0 )
 : find ( a -- pwd 1 | pwd -1 | a 0 : find a word in the dictionary )
-  finder rot-drop ;
+  (find) rot-drop ;
 
 \ 
 \ ## Numeric Input
@@ -2074,8 +2087,6 @@ h: digit? ( c base -- u f )
 \ The negative prefix must come before any base specifier. *dpl* is used to 
 \ store where the decimal place occurred in the input.
 \
-
-( $2e tvariable fsp )
 
 h: number? ( a u -- d -1 | a u 0 )
   [-1] dpl !
@@ -2187,7 +2198,7 @@ h: token =bl word ;                      ( -- a )
 
 h: ?dictionary dup $3F00 u< ?exit 8 -throw ;
 : , here dup cell+ ?dictionary cp! ! ; ( u -- : store *u* in dictionary )
-\ : c, here ?dictionary c! cp 1+! ;    ( c -- : store *c* in the dictionary )
+: c, here ?dictionary c! cp 1+! ;      ( c -- : store *c* in the dictionary )
 h: doLit 0x8000 or , ;                 ( n+ -- : compile literal )
 : literal ( n -- : write a literal into the dictionary )
   dup 0x8000 and ( n > $7FFF ? )
@@ -2196,8 +2207,8 @@ h: doLit 0x8000 or , ;                 ( n+ -- : compile literal )
   then
   doLit ; compile-only immediate ( turn into literal, write into dictionary )
 
-h: make-callable chars $4000 or ; ( cfa -- instruction )
-: compile, make-callable , ; ( cfa -- : compile a code field address )
+h: make-callable chars $4000 or ;    ( cfa -- instruction )
+: compile, make-callable , ;         ( cfa -- : compile a code field address )
 h: $compile dup inline? if cfa @ , exit then cfa compile, ; ( pwd -- )
 h: not-found source type $D -throw ; ( -- : throw 'word not found' )
 
@@ -2330,25 +2341,49 @@ h: (abort) do$ ?abort ;                                        ( -- )
 \ 
 \ *quit* will be called from the boot word later on.
 \
-
-h: preset tib-start #tib cell+ ! 0 in! id zero ;  ( -- : reset input )
-: ] [-1] state ! ;                                ( -- : compile mode )
-: [   state zero ; immediate                      ( -- : command mode )
-
-h: empty sp0 cells sp! ; ( 0..n -- : empty variable stack )
-h: ?error ( n -- : perform actions on error )
-  ?dup if
-    .             ( print error number )
-    [char] ? emit ( print '?' )
-    cr            ( and terminate the line )
-    empty         ( empty the variable stack )
-    preset        ( reset I/O streams )
-    postpone [    ( back into interpret mode )
-    exit
-  then ;
+\ ### I/O Control
+\ 
+\ The I/O control section is a relic from eForth that is not really needed
+\ in a hosted Forth, at least one where the terminal emulator used handles
+\ things like line editing. It is left in here so it can be quickly be added
+\ back in if this Forth were to be ported to an embed environment, one in
+\ which communications with the Forth took place over a UART.
+\
+\ Open and reading from different files is also not needed, it is handled
+\ by the virtual machine.
 
 h: (ok) state@ ?exit ."  ok" cr ;  ( -- : default state aware prompt )
 ( : ok <ok> @execute ; )
+
+h: preset tib-start #tib cell+ ! 0 in! id zero ;  ( -- : reset input )
+
+h: quite? 4 cpu@ and 0<> ; ( -- t : are we operating in quite mode? )
+: io! preset fallthrough;  ( -- : initialize I/O )
+h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
+h: hand 
+   quite? 0= ' (ok) and
+   ' drop ' tap 
+   raw? if 2drop
+     ' emit  ' ktap 
+   then fallthrough;
+h: xio  ' accept <expect> ! <tap> ! <echo> ! <ok> ! ;
+h: pace 11 emit ;
+: file ' pace ' drop ' ktap xio ; 
+
+: ] [-1] state !    ;                                ( -- : compile mode )
+: [      state zero ; immediate                      ( -- : command mode )
+
+h: empty sp0 sp! ; ( 0..n -- : empty variable stack )
+h: ?error ( n -- : perform actions on error )
+  ?dup 0= ?exit
+  .             ( print error number )
+  [char] ? emit ( print '?' )
+  cr            ( and terminate the line )
+  empty         ( empty the variable stack )
+  fallthrough; 
+h: prequit      ( perform actions needed to start 'quit' off )
+  preset        ( reset I/O streams )
+  postpone [ ;  ( back into interpret mode )
 
 h: eval ( -- : evaluation loop, get token, evaluate, loop, prompt )
   begin
@@ -2363,7 +2398,7 @@ h: eval ( -- : evaluation loop, get token, evaluate, loop, prompt )
 \ processes any errors that occur, if any.
 
 ( : @echo source type cr ; ( -- : can be used to monitor input )
-: quit preset postpone [ begin query ( @echo ) ' eval catch ?error again ; 
+: quit prequit begin query ( @echo ) ' eval catch ?error again ; 
 
 \ *evaluate* is used to evaluate a string of text as if it were typed in by
 \ the programmer. It takes an address and its length, this is used in the
@@ -2384,32 +2419,6 @@ h: set-input <ok> ! id ! in! #tib 2! ;     ( n1...n5 -- )
   ' eval catch
   r> 2r> 2r> set-input
   throw ;
-
-\ 
-\ ## I/O Control
-\ 
-\ The I/O control section is a relic from eForth that is not really needed
-\ in a hosted Forth, at least one where the terminal emulator used handles
-\ things like line editing. It is left in here so it can be quickly be added
-\ back in if this Forth were to be ported to an embed environment, one in
-\ which communications with the Forth took place over a UART.
-\
-\ Open and reading from different files is also not needed, it is handled
-\ by the virtual machine.
-
-h: quite? 4 cpu@ and 0<> ; ( -- t : are we operating in quite mode? )
-: io! preset fallthrough;  ( -- : initialize I/O )
-h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
-h: hand 
-   quite? if 0 else ' (ok) then
-   raw? if 
-     ' emit  ' ktap 
-   else 
-     ' drop ' tap 
-   then fallthrough;
-h: xio  ' accept <expect> ! <tap> ! <echo> ! <ok> ! ;
-h: pace 11 emit ;
-: file ' pace ' drop ' ktap xio ; 
 
 \ 
 \ ## Control Structures and Defining words
@@ -2487,7 +2496,7 @@ h: pace 11 emit ;
 h: ?check ( magic-number -- : check for magic number on the stack )
    magic = ?exit $16 -throw ;
 h: ?unique ( a -- a : print a message if a word definition is not unique )
-  dup get-current searcher 0= ?exit
+  dup get-current (search-wordlist) 0= ?exit
     ( source type )
   space
   2drop last-def @ .id ." redefined" cr ;
@@ -3017,7 +3026,7 @@ h: cold ( -- : performs a cold boot  )
    $12 retrieve io! 
    forth
    empty
-   rp0 cells rp!
+   rp0 rp!
    <boot> @execute ;
 
 \ *hi* prints out the welcome message, the version number, sets the numeric
@@ -3104,27 +3113,28 @@ h: name ( cwf -- a | 0 )
      swap r@ search-for-cfa ?dup if >r 1- ndrop r> rdrop exit then
    1- repeat rdrop ;
 
-( h: neg? dup 2 and if $FFFE or then ; )
+( h: neg? dup 2 and if $FFFE or then ;  )
 ( h: .alu  ( u -- ) 
-(   dup ." alu{" 8 rshift $1F and 2 u.r ." } "  )
-(   dup $80 and if ." t->n " then  )
-(   dup $40 and if ." t->r " then )
-(   dup $20 and if ." n->t " then )
-(   dup $10 and if ." r->p " then )
-(   dup $0C and ." r{" 2 rshift neg? . ." } " )
-(       $03 and ." d{"          neg? . ." } " ; )
+(   dup 8 rshift $1F and 5u.r space )
+(   dup $80 and if ." t->n  " then   )
+(   dup $40 and if ." t->r  " then  )
+(   dup $20 and if ." n->t  " then  )
+(   dup $10 and if ." r->pc " then  )
+(   dup $0C and [char] r emit 2 rshift neg? . space )
+(       $03 and [char] d emit          neg? . ;  )
  
 h: ?instruction ( i m e -- i t )
    >r over-and r> = ;
 
 ( a -- : find word by address, and print )
-h: .name name ?dup if word.count type then ; 
+h: .name dup address cells 5u.r space  ( a -- )
+         name ?dup if word.count type then ; 
 h: .instruction                    ( u -- : decompile a single instruction )
-   0x8000  0x8000 ?instruction if [char] L emit $7FFF and u. exit then
-    $6000   $6000 ?instruction if [char] A emit drop ( space .alu ) exit then
-    $6000   $4000 ?instruction if [char] C emit space .name  exit then
-    $6000   $2000 ?instruction if [char] Z emit space .name  exit then
-   [char] B emit space .name ;
+   0x8000  0x8000 ?instruction if [char] L emit $7FFF and 5u.r exit then
+    $6000   $6000 ?instruction if [char] A emit  drop ( .alu ) exit then
+    $6000   $4000 ?instruction if [char] C emit .name exit then
+    $6000   $2000 ?instruction if [char] Z emit .name exit then
+   [char] B emit .name ;
 
 h: decompiler ( previous current -- : decompile starting at address )
   >r
@@ -3152,7 +3162,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ 
 
 : see ( --, <string> : decompile a word )
-  token finder ?not-found
+  token (find) ?not-found
   swap      2dup= if drop here then >r
   cr colon-space dup .id dup cr
   cfa r> decompiler space [char] ; emit
@@ -3197,7 +3207,7 @@ h: decompiler ( previous current -- : decompile starting at address )
 
 
 : .s depth begin ?dup while dup pick . 1- repeat ."  <sp" cr ; ( -- )
-h: dm+ chars for aft dup@ space 5u.r cell+ then next ;        ( a u -- a )
+h: dm+ chars for aft dup@ 5u.r cell+ then next ;        ( a u -- a )
 ( h: dc+ chars for aft dup@ space decompile cell+ then next ; ( a u -- a )
 
 : dump ( a u -- )
@@ -3559,25 +3569,27 @@ Bill Muench with some modifications to the model.
 The eForth model imposes extra semantics to certain areas of memory, along
 with the virtual machine.
 
-	| Address       | Block  | Meaning                        |
-	| ------------- | ------ | ------------------------------ |
-	| $0000         |   0    | Initial Program Counter (PC)   |
-	| $0002         |   0    | Initial Top of Stack Register  |
-	| $0004         |   0    | Initial Return Stack Register  |
-	| $0006         |   0    | Initial Var. Stack Register    |
-	| $0008         |   0    | Instruction exception vector   |
-	| $000A         |   0    | VM Options bits                |
-	| $000C         |   0    | VM memory in cells             |
-	| $000E         |   0    | VM memory Reserved             |
-	| $0010         |   0    | VM memory Reserved             |
-	| $0012-$001C   |   0    | eForth Header                  |
-	| $001E-EOD     |  0-?   | The dictionary                 |
-	| EOD-$3FFF     |  ?-15  | Compilation and Numeric Output |
-	| $4000         |   16   | Interpreter variable storage   |
-	| $4280         |   16   | Pad area                       |
-	| $4400         |   17   | Start of variable stack        |
-	| $4800-$FBFF   | 18-63  | Empty blocks for user data     |
-	| $FC00-$FFFF   |   0    | Return stack block             |
+	| Address       | Block  | Meaning                           |
+	| ------------- | ------ | --------------------------------- |
+	| $0000         |   0    | Initial Program Counter (PC)      |
+	| $0002         |   0    | Initial Top of Stack Register     |
+	| $0004         |   0    | Initial Return Stack Register     |
+	| $0006         |   0    | Initial Var. Stack Register       |
+	| $0008         |   0    | Instruction exception vector      |
+	| $000A         |   0    | VM Options bits                   |
+	| $000C         |   0    | VM memory in cells                |
+	| $000E         |   0    | Shadow PC,  Not set by VM on exit |
+	| $0010         |   0    | Shadow T,   Not set by VM on exit |
+	| $0012         |   0    | Shadow RP0, Not set by VM on exit |
+	| $0014         |   0    | Shadow SP0, Not set by VM on exit |
+	| $0016-$001C   |   0    | eForth Header                     |
+	| $001E-EOD     |  0-?   | The dictionary                    |
+	| EOD-$3FFF     |  ?-15  | Compilation and Numeric Output    |
+	| $4000         |   16   | Interpreter variable storage      |
+	| $4280         |   16   | Pad area                          |
+	| $4400         |   17   | Start of variable stack           |
+	| $4800-$FBFF   | 18-63  | Empty blocks for user data        |
+	| $FC00-$FFFF   |   0    | Return stack block                |
 
 ## Error Codes
 
@@ -3668,6 +3680,9 @@ This is a list of Error codes, not all of which are used by the application.
 	| FFB4 | -76  | WRITE-LINE                                    |
 
 ## Virtual Machine Implementation in C
+
+This Virtual Machine implementation is likely to be out of date and *slightly*
+wrong.
 
 	/* Embed Forth Virtual Machine, Richard James Howe, 2017-2018, MIT License */
 	#include <assert.h>
@@ -3768,7 +3783,7 @@ This is a list of Error codes, not all of which are used by the application.
 		static const m_t delta[] = { 0, 1, -2, -1 };
 		const m_t l = embed_cells(h);
 		m_t * const m = h->m;
-		m_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0;
+		m_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0, opt = 0;
 		for(d_t d;;) {
 			const m_t instruction = m[pc++];
 
@@ -3808,10 +3823,12 @@ This is a list of Error codes, not all of which are used by the application.
 				case 21: rp = t >> 1; T = n;       break;
 				case 22: T = save(h, block, n>>1, ((d_t)T+1)>>1); break;
 				case 23: T = fputc(t, out);        break; 
-				case 24: T = fgetc(in); n = -1;    break; /* n = blocking status */
+				case 24: m[++sp] = t; T = fgetc(in); t = T; n = 0;    break; /* n = blocking status */
 				case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 				case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; } else { pc=4; T=10; } break;
-				case 27: if(n) { m[sp] = 0; r = t; goto finished; } break;
+				case 27: if(t) { t = 0; sp--; r = n; goto finished; } T = t; break;
+				/* 28 is virtual machine callback mechanism, not implemented here */
+				case 29: T = opt; opt = t; break;
 				default: pc=4; T=21; break;
 				}
 				sp += delta[ instruction       & 0x3];

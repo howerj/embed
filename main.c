@@ -1,4 +1,5 @@
 #include "embed.h"
+#include "util.h"
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
@@ -49,6 +50,7 @@ Options:\n\
   -h          display this help message and die\n\
   -q          quite mode on\n\
   -t          turn tracing on\n\
+  --          stop processing command arguments\n\
   file.fth    read from 'file.fth'\n\n\
 If no input Forth file is given standard input is read from. If no input\n\
 block is given a built in version containing an eForth interpreter is\n\
@@ -74,9 +76,13 @@ int main(int argc, char **argv)
 	binary(stdin);
 	binary(stdout);
 	binary(stderr);
-	embed_t *h = embed_new();
-	if(!h)
-		embed_fatal("embed: new failed");
+
+	static embed_t h;
+	static uint16_t m[EMBED_CORE_SIZE] = { 0 };
+	h.m = m;
+	if(embed_default_hosted(&h) < 0)
+		embed_fatal("embed: load failed\n");
+
 	for(int i = 1; i < argc; i++) {
 		if(stop)
 			goto optend;
@@ -84,7 +90,7 @@ int main(int argc, char **argv)
 			if(iblk)
 				embed_fatal("embed: input block already set");
 			iblk = next(&i, argc, argv);
-			if(embed_load(h, iblk) < 0)
+			if(embed_load(&h, iblk) < 0)
 				embed_fatal("embed: load failed");
 		} else if(!strcmp("-o", argv[i])) {
 			if(oblk)
@@ -100,16 +106,15 @@ int main(int argc, char **argv)
 			stop = true;
 		} else {
 optend:
-			r = run_file(h, option | EMBED_VM_QUITE_ON, !ran, argv[i], out, iblk, oblk);
+			r = run_file(&h, option | EMBED_VM_QUITE_ON, !ran, argv[i], out, iblk, oblk);
 			ran = true;
 			if(r < 0)
 				goto end;
 		}
 	}
 	if(!ran)
-		r = run(h, option, !ran, in, out, iblk, oblk);
+		r = run(&h, option, !ran, in, out, iblk, oblk);
 end:
-	embed_free(h);
 	return r;
 }
 

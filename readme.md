@@ -50,7 +50,7 @@ little about [Forth][] itself.
 If you do not have a copy of [make][], but do have a [C99][] compiler, the
 following command should build the project:
 
-	cc -std=c99 main.c embed.c image.c -o embed
+	cc -std=c99 main.c embed.c image.c util.c -o embed
 
 Generating a new image is easy as well (using the built in image):
 
@@ -103,6 +103,7 @@ all of these goals, but might fall short.
   * [x] Test applications for Windows/Unix non-block I/O, and callback
     extensions.
 * [ ] Virtual Machine and eForth Image/Metacompiler that uses 'uintptr\_t'
+* [ ] Port the library to a small microcontroller
 
 [MIT License]: LICENSE
 [embed.c]: embed.c

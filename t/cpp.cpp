@@ -6,6 +6,7 @@
  * See <https://github.com/howerj/embed> for more information. */
 
 #include "embed.h"
+#include "util.h"
 #include <stdio.h>
 #include <iostream>
 using namespace std;

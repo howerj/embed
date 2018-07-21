@@ -34,6 +34,8 @@
 \ A few generic helper words will be built, to check if a word is defined, or
 \ not, and to conditionally execute a line.
 
+only forth definitions system +order
+
 \ Create anonymous namespace:
 : anonymous get-order 1+ here 1 cells allot swap set-order ;
 
@@ -303,7 +305,7 @@ only forth definitions
 \	      PHONE: 217/826-2734 
 \
 \ NB. There is not under or overflow checking, nor division by zero checks
-only forth definitions
+only forth definitions system +order
 variable float-voc
 
 : zero  over 0= if drop 0 then ; ( f -- f : zero exponent if mantissa is )
@@ -841,8 +843,10 @@ logger\ .( s1:  ) space s1 type cr
 logger\ .( s2:  ) space s2 type cr
 logger\ .( s3:  ) space s3 type cr
 
+system +order
 T{ s1 crc -> $C35A }T
 T{ s2 crc -> $D26E }T
+system -order
 
 T{ s1 s2 compare 0= ->  0 }T
 T{ s2 s1 compare 0= ->  0 }T
@@ -902,6 +906,7 @@ T{    -1    -1 xor ->     0 }T
 T{ $FA50 $05AF xor -> $FFFF }T
 T{ $FA50 $FA00 xor -> $0050 }T
 
+system +order
 T{ $FFFF     1 um+ -> 0 1  }T
 T{ $40   $FFFF um+ -> $3F 1  }T
 T{ 4         5 um+ -> 9 0  }T
@@ -910,6 +915,7 @@ T{ $FFFF     1 um* -> $FFFF     0 }T
 T{ $FFFF     2 um* -> $FFFE     1 }T
 T{ $1004  $100 um* ->  $400   $10 }T
 T{     3     4 um* ->    $C     0 }T
+system -order
 
 T{     1     1   < ->  0 }T
 T{     1     2   < -> -1 }T

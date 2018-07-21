@@ -59,6 +59,15 @@ static void test_embed_eval(void) {
 	unit_test_finish();
 }
 
+static void test_embed_reset(void) {
+	unit_test_start();
+	embed_t *h = NULL;
+	unit_test_verify((h = embed_new()) != NULL);
+
+	unit_test_statement(embed_free(h));
+	unit_test_finish();
+}
+
 typedef struct {
 	int result;
 } test_callback_t;
@@ -87,7 +96,7 @@ static void test_embed_callbacks(void) {
 	unit_test_statement(o.callback = test_callback);
 	unit_test_statement(o.param    = &parameter);
 	unit_test_statement(embed_opt_set(h, &o));
-
+	unit_test(embed_eval(h, "only forth definitions system +order\n") == 0);
 	unit_test(embed_eval(h, " 3 4 vm \n") == 0);
 	unit_test(parameter.result == 7);
 	unit_test(embed_depth(h) == 1); /* @bug should be zero, but yield parameters still on stack */

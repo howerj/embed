@@ -550,18 +550,25 @@ static int callback_selector(embed_t *h, void *param) {
 static int callbacks_add(embed_t * const h, const bool optimize,  callbacks_t *cb, const size_t number) {
 	assert(h && cb);
 	const char *optimizer = optimize ? "-2 cells allot ' vm chars ," : "";
+	static const char *preamble = "only forth definitions system +order\n";
+	int r = 0;
+	if((r = embed_eval(h, preamble)) < 0) {
+		embed_error("embed: eval(%s) returned %d", preamble, r);
+		return r;
+	}
+
 	for(size_t i = 0; i < number; i++) {
 		char line[80] = { 0 };
 		if(!cb[i].use)
 			continue;
-		int r = snprintf(line, sizeof(line), ": %s %u vm ; %s\n", cb[i].name, (unsigned)i, optimizer);
+		r = snprintf(line, sizeof(line), ": %s %u vm ; %s\n", cb[i].name, (unsigned)i, optimizer);
 		assert(strlen(line) < sizeof(line) - 1); 
 		if(r < 0) {
 			embed_error("format error in snprintf (returned %d)", r);
 			return -1;
 		}
 		if((r = embed_eval(h, line)) < 0) {
-			embed_error("embed: eval returned %d", r);
+			embed_error("embed: eval(%s) returned %d", line, r);
 			return r;
 		}
 	}

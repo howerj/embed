@@ -165,6 +165,7 @@
 .( FORTH META COMPILATION START ) cr
 
 only forth definitions hex
+system +order
 variable meta          ( Metacompilation vocabulary )
 meta +order definitions
 
@@ -639,10 +640,10 @@ a: return ( -- : Compile a return into the target )
 : dup      ]asm #t      t->n               d+1 alu asm[ ;
 : over     ]asm #n      t->n               d+1 alu asm[ ;
 : invert   ]asm #~t                            alu asm[ ;
-: um+      ]asm #t+n                           alu asm[ ;
 : +        ]asm #t+n              n->t     d-1 alu asm[ ;
-: um*      ]asm #t*n                           alu asm[ ;
+: um+      ]asm #t+n                           alu asm[ ;
 : *        ]asm #t*n              n->t     d-1 alu asm[ ;
+: um*      ]asm #t*n                           alu asm[ ;
 : swap     ]asm #n      t->n                   alu asm[ ;
 : nip      ]asm #t                         d-1 alu asm[ ;
 : drop     ]asm #n                         d-1 alu asm[ ;
@@ -748,6 +749,7 @@ $20   constant header-crc    ( location of CRC in header )
 
 target.1         +order ( Add target word dictionary to search order )
 meta -order meta +order ( Reorder so *meta* has a higher priority )
+system           -order ( Remove system vocabulary to previously accidents )
 forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
 
 \ # The Target Forth
@@ -855,6 +857,7 @@ $400     tconstant b/buf ( size of a block )
 
 0        tlocation cp    ( Dictionary Pointer: Set at end of file )
 0        tlocation _forth-wordlist ( set at the end near the end of the file )
+0        tlocation _system ( system specific vocabulary )
 $0       tvariable >in   ( Hold character pointer when parsing input )
 $0       tvariable state ( compiler state variable )
 $0       tvariable hld   ( Pointer into hold area for numeric output )
@@ -863,10 +866,11 @@ $0       tvariable span  ( Hold character count received by expect   )
 0        tvariable blk   ( current blk loaded, set in *cold* )
 $FFFF    tvariable dpl   ( number of places after fraction )
 0        tvariable current   ( WID to add definitions to )
+xchange _forth-wordlist _system
 0        tvariable <literal> ( holds execution vector for literal )
 0        tvariable <boot>    ( execute program at startup )
 0        tvariable <ok>      ( prompt execution vector )
-         ( @todo move <ok>, <boot>, and other words to a system vocabulary )
+xchange _system _forth-wordlist
 
 \ 
 \ ## Target Assembly Words
@@ -904,9 +908,11 @@ $FFFF    tvariable dpl   ( number of places after fraction )
 : dup      dup      ; ( n -- n n : duplicate value on top of stack )
 : over     over     ; ( n1 n2 -- n1 n2 n1 : duplicate second value on stack )
 : invert   invert   ; ( u -- u : bitwise invert of value on top of stack )
+xchange _forth-wordlist _system
 : um+      um+      ; ( u u -- u carry : addition with carry )
-: +        +        ; ( u u -- u : addition without carry )
 : um*      um*      ; ( u u -- ud : multiplication  )
+xchange _system _forth-wordlist
+: +        +        ; ( u u -- u : addition without carry )
 : *        *        ; ( u u -- u : multiplication )
 : swap     swap     ; ( n1 n2 -- n2 n1 : swap two values on stack )
 : nip      nip      ; ( n1 n2 -- n2 : remove second item on stack )
@@ -928,12 +934,14 @@ $FFFF    tvariable dpl   ( number of places after fraction )
 ( h: yield?  yield?   ; ( u -- !!! : exit VM with *u* as return value )
 h: rx?     rx?      ; ( -- c t | -1 t : fetch a single character, or EOF )
 h: tx!     tx!      ; ( c -- : transmit single character )
+xchange _forth-wordlist _system
 : (save)   (save)   ; ( u1 u2 -- u : save memory from u1 to u2 inclusive )
+: vm       vm       ; ( ??? -- ??? : perform arbitrary VM call )
+xchange _system _forth-wordlist
 : um/mod   um/mod   ; ( d  u2 -- rem div : mixed unsigned divide/modulo )
 : /mod     /mod     ; ( u1 u2 -- rem div : signed divide/modulo )
 : /        /        ; ( u1 u2 -- u : u1 divided by u2 )
 : mod      mod      ; ( u1 u2 -- u : remainder of u1 divided by u2 )
-: vm       vm       ; ( ??? -- ??? : perform arbitrary VM call )
 ( h: cpu!    cpu!     ; ( u -- : set CPU options register )
 
 \ 
@@ -1328,6 +1336,7 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
   dup  $C lshift xor   ( crc x )
   swap $8 lshift xor ; ( crc )
 
+xchange _forth-wordlist _system
 : crc ( b u -- u : calculate ccitt-ffff CRC )
   [-1] ( -1 = 0xffff ) >r
   begin
@@ -1335,6 +1344,7 @@ h: ccitt ( crc c -- crc : crc polynomial $1021 AKA "x16 + x12 + x5 + 1" )
   while
    string@ r> swap ccitt >r +string
   repeat r> nip ;
+xchange _system _forth-wordlist
 
 \ *last* gets a pointer to the most recently defined word, which is used to
 \ implement words like *recurse*, as well as in words which must traverse the
@@ -1696,10 +1706,12 @@ h: 5u.r space 5 u.r ;            ( u -- )
 
 h: down cell negate and ; ( a -- a : align down )
 
+xchange _forth-wordlist _system
 : pack$ ( b u a -- a ) \ null fill
   aligned dup>r over
   dup down 
   - over+ zero 2dup c! 1+ swap ( 2dup 0 fill ) cmove r> ;
+xchange _system _forth-wordlist 
 
 : compare ( a1 u2 a1 u2 -- n : string equality )
   rot
@@ -1960,8 +1972,11 @@ h: in! >in ! ;                             ( u -- )
 
 h: word.count count fallthrough; ( nfa -- u : get a words length )
 h: word.length $1F and ; 
+
+xchange _forth-wordlist _system
 : nfa cell+ ; ( pwd -- nfa : move to name field address)
 : cfa nfa dup c@ word.length + cell+ down ; ( pwd -- cfa )
+xchange _system _forth-wordlist 
 
 \ *.id* prints out a words name field.
 
@@ -2196,7 +2211,7 @@ h: token =bl word ;                      ( -- a )
 \ if it is defined. It hides the latest define word.
 \ 
 
-h: ?dictionary dup $3F00 u< ?exit 8 -throw ;
+h: ?dictionary dup $3FFF u< ?exit 8 -throw ;
 : , here dup cell+ ?dictionary cp! ! ; ( u -- : store *u* in dictionary )
 : c, here ?dictionary c! cp 1+! ;      ( c -- : store *c* in the dictionary )
 h: doLit 0x8000 or , ;                 ( n+ -- : compile literal )
@@ -2213,7 +2228,14 @@ h: $compile dup inline? if cfa @ , exit then cfa compile, ; ( pwd -- )
 h: not-found source type $D -throw ; ( -- : throw 'word not found' )
 
 h: ?compile dup compile-only? 0= ?exit source type $E -throw ;
+
+\ @todo *(literal)* and *literal* and *<literal>* need renaming
+\ *literal* should be ": literal <literal> @execute ;"
+
+xchange _forth-wordlist _system
 : (literal) state@ 0= ?exit postpone literal ; ( u -- u | )
+xchange _system _forth-wordlist
+
 : interpret ( ??? a -- ??? : The command/compiler loop )
   \ dup count type space ( <- for tracing the parser )
   find ?dup if
@@ -2352,6 +2374,7 @@ h: (abort) do$ ?abort ;                                        ( -- )
 \ Open and reading from different files is also not needed, it is handled
 \ by the virtual machine.
 
+xchange _forth-wordlist _system
 h: (ok) state@ ?exit ."  ok" cr ;  ( -- : default state aware prompt )
 ( : ok <ok> @execute ; )
 
@@ -2369,6 +2392,7 @@ h: hand
 h: xio  ' accept <expect> ! <tap> ! <echo> ! <ok> ! ;
 h: pace 11 emit ;
 : file ' pace ' drop ' ktap xio ; 
+xchange _system _forth-wordlist
 
 : ] [-1] state !    ;                                ( -- : compile mode )
 : [      state zero ; immediate                      ( -- : command mode )
@@ -2617,9 +2641,11 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit h: !, ! , ;;
 \ is always possible to edit the VM's C source and recompile it.
 \ 
 
+xchange _forth-wordlist _system
 h: trace-execute cpu! >r ; ( u xt -- )
 : trace ( "name" -- : trace a word )
   find-cfa cpu@ dup>r 1 or ( ' ) trace-execute ( catch ) r> cpu! ( throw ) ;
+xchange _system _forth-wordlist
 
 \ Annotated example output of running *trace* on *+* is shown (excluding
 \ instruction decoding output):
@@ -2659,7 +2685,11 @@ h: find-cell >r begin dup@ r@ <> while cell+ repeat rdrop ; ( u a -- a )
 \ it will be set back to the default shortly.
 
 xchange _forth-wordlist root-voc
-: forth-wordlist _forth-wordlist ;
+: forth-wordlist _forth-wordlist ; ( -- wid : push forth vocabulary )
+: system _system ;                 ( -- wid : push system vocabulary )
+\ : root-wordlist root-voc ;       ( -- wid : push root vocabulary )
+\ : editor-wordlist editor-voc ;   ( -- wid : push editor vocabulary )
+\ : hidden-wordlist hidden-voc ;   ( -- wid : push hidden words vocabulary )
 
 \ *set-order* does the opposite of *get-order*, it can be used to set
 \ the current search order. It has a special case however, when the number
@@ -3911,7 +3941,6 @@ On the command line. Four maps are provided, more can be found online at
 
 	\ Author:  Richard James Howe
 	\ License: MIT (excluding the maps)
-	0 <ok> !
 	only forth definitions hex
 	\ NB. 'blk' has the last block retrieved by 'block', not 'load' in this Forth
 
@@ -4109,8 +4138,6 @@ Follow the on screen instructions to play a game.
 ## Conways Game of Life
 
 A [Conways Games Of Life][] in a few screens, adapted to this Forth:
-
-	0 <ok> !
 
 	\ Adapted from: http://wiki.c2.com/?ForthBlocks
 

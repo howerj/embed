@@ -153,7 +153,7 @@ clean:
 	${RM} *.gen.c
 	${RM} *.tgz
 	${RM} *.bin
-	${RM} ${TESTAPPS} eforth
+	${RM} ${TESTAPPS} eforth unit
 
 ### EOF ###################################################################### 
 

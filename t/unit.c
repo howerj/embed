@@ -64,6 +64,13 @@ static void test_embed_reset(void) {
 	embed_t *h = NULL;
 	unit_test_verify((h = embed_new()) != NULL);
 
+	unit_test(embed_depth(h)   == 0);
+	unit_test(embed_push(h, 1) == 0);
+	unit_test(embed_push(h, 1) == 0);
+	unit_test(embed_depth(h)   == 2);
+	unit_test_statement(embed_reset(h));
+	unit_test(embed_depth(h)   == 0);
+
 	unit_test_statement(embed_free(h));
 	unit_test_finish();
 }
@@ -159,6 +166,7 @@ int main(void) {
 	unit_color_on = 1;
 	test_embed_swap();
 	test_embed_stack();
+	test_embed_reset();
 	test_embed_eval();
 	test_embed_callbacks();
 	test_embed_yields();

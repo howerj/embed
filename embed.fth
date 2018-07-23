@@ -1713,7 +1713,7 @@ xchange _forth-wordlist _system
   - over+ zero 2dup c! 1+ swap ( 2dup 0 fill ) cmove r> ;
 xchange _system _forth-wordlist 
 
-: compare ( a1 u2 a1 u2 -- n : string equality )
+: compare ( a1 u1 a2 u2 -- n : string equality )
   rot
   over- ?dup if >r 2drop r> nip exit then
   for ( a1 a2 )
@@ -3031,7 +3031,7 @@ h: retrieve block drop ;                ( k -- )
 \
 
 h: check-header?   header-options @ first-bit 0= ; ( -- t )
-h: disable-check 1 header-options toggle ;       ( -- )
+h: disable-check 1 header-options toggle ;         ( -- )
 
 \ *bist* checks the length field in the header matches *here* and that the
 \ CRC in the header matches the CRC it calculates in the image, it has to

@@ -237,7 +237,7 @@ int embed_vm(embed_t * const h) {
 			case 24: if(o->get)  { int nd = 0; mw(h, ++sp, t); T = o->get(o->in, &nd); t = T; n = nd; } else { pc=4; T=21; } break;
 			case 25: if(t)       { d = mr(h, --sp)|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t)       { T=(s_t)n/t; t=(s_t)n%t; n=t; }                     else { pc=4; T=10; } break;
-			case 27: if(t)       { t = 0; sp--; r = n; goto finished; } T = t; break;
+			case 27: if(mr(h, rp)) { mw(h, rp, 0); sp--; r = t; t = n; goto finished; }; T = t; break;
 			case 28: if(o->callback) { 
 					 mw(h, 0, pc), mw(h, 1, t), mw(h, 2, rp), mw(h, 3, sp); 
 					 r = o->callback(h, o->param);

@@ -140,7 +140,8 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 			case 24: m[++sp] = t; T = fgetc(in); t = T; n = 0;    break; /* n = blocking status */
 			case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; } else { pc=4; T=10; } break;
-			case 27: if(t) { t = 0; sp--; r = n; goto finished; } T = t; break;
+			case 27: if(m[rp]) { m[rp] = 0; sp--; r = t; t = n; goto finished; }; T = t; break;
+			/* 28 is virtual machine callback mechanism, not implemented here */
 			case 29: T = opt; opt = t; break;
 			default: pc=4; T=21; break;
 			}

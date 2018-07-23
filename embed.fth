@@ -1122,7 +1122,7 @@ h: ?exit if rdrop exit then ; ( u --, R: xt -- xt| : conditional return )
 h: over- over - ;           ( u u -- u u )
 h: over+ over + ;           ( u1 u2 -- u1 u1+2 )
 : aligned dup first-bit + ; ( b -- a )
-: bye 0 [-1] yield? drop ( $38 -throw ) ; ( -- : leave the interpreter )
+: bye 0 [-1] >r yield? rdrop ( $38 -throw ) ; ( -- : leave the interpreter )
 h: cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+  cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;          ( n -- n : convert cells count to address count )
@@ -1309,7 +1309,7 @@ h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 \
 
 : key ( -- c : return a character )
-    begin <key> @execute dup if nip 1 [-1] yield? drop then 0= until
+    begin <key> @execute dup if nip 1 [-1] >r yield? rdrop then 0= until
     dup [-1] <> ?exit drop bye recurse ;
 
 \ */string*, *+string* and *count* are for manipulating strings, *count*
@@ -2328,7 +2328,7 @@ h: .string do$ print ;      ( -- : print string  )
 : $" compile string-literal fallthrough; immediate compile-only
 h: parse-string [char] " word count+ cp! ; ( ccc" -- )
 : ." compile .string parse-string ; immediate compile-only ( <string>, -- )
-: abort [-1] [-1] yield? ;                                     ( -- )
+: abort [-1] [-1] >r yield? ;                                  ( -- )
 h: ?abort swap if print cr abort exit then drop ;              ( u a -- )
 h: (abort) do$ ?abort ;                                        ( -- )
 : abort" compile (abort) parse-string ; immediate compile-only ( u -- )
@@ -3050,7 +3050,7 @@ h: bist ( -- u : built in self test )
 \ order and reset the variable stack.
 
 h: cold ( -- : performs a cold boot  )
-   bist ?dup if negate dup yield? exit then
+   bist ?dup if negate dup >r yield? exit then
 \  $10 retrieve z 
 \  $10 block b/buf 0 fill
    $12 retrieve io! 

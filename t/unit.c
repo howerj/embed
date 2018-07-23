@@ -30,7 +30,7 @@ static void test_embed_stack(void) {
 	unit_test(v == 6);
 	unit_test(embed_pop(h, &v) == 0);
 	unit_test(v == 5);
-	unit_test(embed_pop(h, &v) != 0);
+	unit_test(embed_pop(h, NULL) != 0);
 	unit_test(embed_depth(h)   == 0);
 	unit_test(embed_pop(h, &v) != 0);
 	unit_test(embed_depth(h)   == 0);
@@ -48,9 +48,7 @@ static void test_embed_eval(void) {
 	unit_test_verify((h = embed_new()) != NULL);
 
 	unit_test(embed_eval(h, "2 2 + \n") == 0);
-	/* @todo Fix this so there's not loads of junk on the stack */
 	cell_t v = 0;
-	unit_test(embed_pop(h, &v) == 0); /* junk: yield */
 	unit_test(embed_pop(h, &v) == 0); /* result */
 	unit_test(v == 4);
 
@@ -106,11 +104,11 @@ static void test_embed_callbacks(void) {
 	unit_test(embed_eval(h, "only forth definitions system +order\n") == 0);
 	unit_test(embed_eval(h, " 3 4 vm \n") == 0);
 	unit_test(parameter.result == 7);
-	unit_test(embed_depth(h) == 1); /* @bug should be zero, but yield parameters still on stack */
+	unit_test(embed_depth(h) == 0);
 
 	unit_test(embed_eval(h, " 5 3 vm \n") == 0);
 	unit_test(parameter.result == 8);
-	unit_test(embed_depth(h) == 1); /* @bug should be zero, but yield parameters still on stack */
+	unit_test(embed_depth(h) == 0); 
 
 	unit_test_statement(embed_free(h));
 	unit_test_finish();
@@ -152,8 +150,7 @@ static void test_embed_file(void) {
 
 	unit_test(embed_forth_opt(h, EMBED_VM_QUITE_ON, in, stdout, NULL) == 0);
 	cell_t v = 0;
-	unit_test(embed_pop(h, NULL) == 0); /* junk: yield */
-	unit_test(embed_pop(h, &v)   == 0); /* result */
+	unit_test(embed_pop(h, &v) == 0);
 	unit_test(v == 0xBABE);
 
 	unit_test(fclose(in) == 0);

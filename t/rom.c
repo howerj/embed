@@ -23,7 +23,7 @@ typedef struct {
 	cell_t m[NPAGES][PAGE_SIZE];
 } pages_t;
 
-static pages_t pages = { 0 };
+static pages_t pages = { .m = { { 0 } } };
 
 static const uint16_t page_0 = 0x0000;
 /*static const uint16_t page_1 = PAGE_SIZE ;*/

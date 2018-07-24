@@ -2,6 +2,8 @@
 #include "util.h"
 #include "unit.h"
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -160,7 +162,9 @@ static void test_embed_file(void) {
 }
 
 int main(void) {
-	unit_color_on = 1;
+	/* If color is on by default, <http://no-color.org/> should be implemented */
+	char *on = getenv("COLOR");
+	unit_color_on = (on && !strcmp(on, "on"));
 	test_embed_swap();
 	test_embed_stack();
 	test_embed_reset();

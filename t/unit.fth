@@ -538,8 +538,10 @@ only forth definitions
 \ : ftan fsincos f/ ;              ( rads -- tan )
 \ 
 
+system +order
 hide norm hide zero hide tens hide ralign hide lalign
 hide   -+ hide  one hide fix  hide shifts 
+system -order
 
 \ ========================= FLOATING POINT CODE ===============================
 
@@ -686,6 +688,7 @@ only forth definitions test +order
 : logger( verbose @ 1 > if .( cr exit then [compile] (  ;
 : logger\ verbose @ 1 > if exit then [compile] \ ;
 
+system +order
 hide test hide n
 only forth definitions
 

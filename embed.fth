@@ -1113,6 +1113,7 @@ h: base@ base @ ;            ( -- u )
 \ *cell+* require a reason for such a simple word (they embody a concept or
 \ they help hide implementation details).
 
+h: yield!? >r yield? rdrop ; ( u u -- : )
 h: cpu@    0 cpu-xchg dup cpu! ; ( -- u : get CPU options register )
 h: ?exit if rdrop exit then ; ( u --, R: xt -- xt| : conditional return )
 : 2drop drop drop ;         ( n n -- )
@@ -1122,7 +1123,7 @@ h: ?exit if rdrop exit then ; ( u --, R: xt -- xt| : conditional return )
 h: over- over - ;           ( u u -- u u )
 h: over+ over + ;           ( u1 u2 -- u1 u1+2 )
 : aligned dup first-bit + ; ( b -- a )
-: bye 0 [-1] >r yield? rdrop ( $38 -throw ) ; ( -- : leave the interpreter )
+: bye 0 [-1] yield!? ( $38 -throw ) ; ( -- : leave the interpreter )
 h: cell- cell - ;           ( a -- a : adjust address to previous cell )
 : cell+  cell + ;           ( a -- a : move address forward to next cell )
 : cells 1 lshift ;          ( n -- n : convert cells count to address count )
@@ -1309,7 +1310,7 @@ h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 \
 
 : key ( -- c : return a character )
-    begin <key> @execute dup if nip 1 [-1] >r yield? rdrop then 0= until
+    begin <key> @execute dup if nip 1 [-1] yield!? then 0= until
     dup [-1] <> ?exit drop bye recurse ;
 
 \ */string*, *+string* and *count* are for manipulating strings, *count*
@@ -1399,7 +1400,7 @@ h: vrelative sp@ swap - ;  ( u -- u : position relative to sp )
 \ is sometimes needed for cleaning things up before exiting a word.
 \
 
-h: ndrop vrelative sp! drop ; ( 0u...nu n -- : drop n cells )
+h: ndrop ( dup 0< ?exit ) vrelative sp! drop ; ( 0u...nu n -- : drop n cells )
 
 \ *>char* takes a character and converts it to an underscore if it is not
 \ printable, which is useful for printing out arbitrary sections of memory
@@ -2328,7 +2329,7 @@ h: .string do$ print ;      ( -- : print string  )
 : $" compile string-literal fallthrough; immediate compile-only
 h: parse-string [char] " word count+ cp! ; ( ccc" -- )
 : ." compile .string parse-string ; immediate compile-only ( <string>, -- )
-: abort [-1] [-1] >r yield? ;                                  ( -- )
+: abort [-1] [-1] yield!? ;                                    ( -- )
 h: ?abort swap if print cr abort exit then drop ;              ( u a -- )
 h: (abort) do$ ?abort ;                                        ( -- )
 : abort" compile (abort) parse-string ; immediate compile-only ( u -- )
@@ -2565,7 +2566,10 @@ h: doDoes r> chars here chars last-cfa dup cell+ doLit h: !, ! , ;;
 : for =>r , here ; immediate compile-only
 : next compile doNext , ; immediate compile-only
 : aft drop >mark postpone begin swap ; immediate compile-only
+
+xchange _forth-wordlist _system
 : hide find-token (smudge) ; ( --, <string> : hide word by name )
+xchange _system _forth-wordlist 
 ( : name? find-token nfa ; )
 
 ( \ Force tail call )
@@ -3050,7 +3054,7 @@ h: bist ( -- u : built in self test )
 \ order and reset the variable stack.
 
 h: cold ( -- : performs a cold boot  )
-   bist ?dup if negate dup >r yield? exit then
+   bist ?dup if negate dup yield!? exit then
 \  $10 retrieve z 
 \  $10 block b/buf 0 fill
    $12 retrieve io! 
@@ -3140,7 +3144,7 @@ h: name ( cwf -- a | 0 )
    begin
      dup
    while
-     swap r@ search-for-cfa ?dup if >r 1- ndrop r> rdrop exit then
+     swap r@ search-for-cfa ?dup if >r ( 1- ) ndrop r> rdrop exit then
    1- repeat rdrop ;
 
 ( h: neg? dup 2 and if $FFFE or then ;  )
@@ -3190,6 +3194,9 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ *#t|n* could then be used to disassemble ALU instructions, which are
 \ currently only displayed in their raw format.
 \ 
+
+\ @todo fix bug with 'see' when decompiling words in the 'system' vocabulary,
+\ also rename the system vocabulary from 'system' to 'system-wordlist'
 
 : see ( --, <string> : decompile a word )
   token (find) ?not-found

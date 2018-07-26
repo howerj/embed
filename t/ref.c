@@ -1,19 +1,21 @@
 /* Embed Forth Virtual Machine, Richard James Howe, 2017-2018, MIT License */
 #include <assert.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdarg.h>
 
 typedef uint16_t m_t;
 typedef  int16_t s_t;
 typedef uint32_t d_t;
 typedef struct forth_t { m_t m[32768]; } forth_t;
 
-void embed_die(const char *fmt, ...)
-{
+static inline size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
+static inline size_t max_size_t(size_t a, size_t b)       { return a > b ? a : b; }
+
+static void embed_die(const char *fmt, ...) {
 	assert(fmt);
 	va_list arg;
 	va_start(arg, fmt);
@@ -23,8 +25,7 @@ void embed_die(const char *fmt, ...)
 	exit(EXIT_FAILURE);
 }
 
-FILE *embed_fopen_or_die(const char *file, const char *mode)
-{
+static FILE *embed_fopen_or_die(const char *file, const char *mode) {
 	assert(file && mode);
 	FILE *h = NULL;
 	errno = 0;
@@ -33,18 +34,14 @@ FILE *embed_fopen_or_die(const char *file, const char *mode)
 	return h;
 }
 
-forth_t *embed_new(void)
-{
+static forth_t *embed_new(void) {
 	forth_t *h = calloc(1, sizeof(*h));
 	if(!h)
 		embed_die("allocation (of %u) failed", (unsigned)sizeof(*h));
 	return h;
 }
 
-static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
-
-static int save(forth_t *h, const char *name, const size_t start, const size_t length)
-{
+static int save(forth_t *h, const char *name, const size_t start, const size_t length) {
 	assert(h);
 	if(!name || !(((length - start) <= length) && ((start + length) <= embed_cells(h))))
 		return -69; /* open-file IOR */
@@ -58,15 +55,8 @@ static int save(forth_t *h, const char *name, const size_t start, const size_t l
 	return fclose(out) < 0 ? -62 /* close-file IOR */ : r;
 }
 
-forth_t *embed_copy(forth_t const * const h)      { assert(h); return memcpy(embed_new(), h, sizeof(*h)); }
-int      embed_save(forth_t *h, const char *name) { assert(name); return save(h, name, 0, embed_cells(h)); }
-size_t   embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
-void     embed_free(forth_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
-char    *embed_core(forth_t *h)                   { assert(h); return (char*)h->m; }
-static size_t max_size_t(size_t a, size_t b)      { return a > b ? a : b; }
 
-int embed_load(forth_t *h, const char *name)
-{
+static int embed_load(forth_t *h, const char *name) {
 	assert(h && name);
 	FILE *input = embed_fopen_or_die(name, "rb");
 	long r = 0, c1 = 0, c2 = 0;
@@ -80,19 +70,13 @@ int embed_load(forth_t *h, const char *name)
 	return r < 64 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
 }
 
-#ifdef NDEBUG
-#define trace(OUT,M,PC,INSTRUCTION,T,RP,SP)
-#else
-static inline void trace(FILE *out, m_t *m, m_t pc, m_t instruction, m_t t, m_t rp, m_t sp)
-{
-	if(!(m[6] & 1))
+static inline void trace(FILE *out, m_t opt, m_t *m, m_t pc, m_t instruction, m_t t, m_t rp, m_t sp) {
+	if(!(opt & 1))
 		return;
 	fprintf(out, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, m[2]-rp, sp-m[3]);
 }
-#endif
 
-int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
-{
+static int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block) {
 	assert(h && in && out);
 	static const m_t delta[] = { 0, 1, -2, -1 };
 	const m_t l = embed_cells(h);
@@ -100,18 +84,15 @@ int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
 	m_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0, opt = 0;
 	for(d_t d;;) {
 		const m_t instruction = m[pc++];
-
-		trace(out, m, pc, instruction, t, rp, sp);
+		trace(out, opt, m, pc, instruction, t, rp, sp);
 		if((r = -!(sp < l && rp < l && pc < l))) /* critical error */
 			goto finished;
-
 		if(0x8000 & instruction) { /* literal */
 			m[++sp] = t;
 			t       = instruction & 0x7FFF;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
 			m_t n = m[sp], T = t;
 			pc = instruction & 0x10 ? m[rp] >> 1 : pc;
-
 			switch((instruction >> 8u) & 0x1f) {
 			case  0:                           break;
 			case  1: T = n;                    break;
@@ -166,8 +147,7 @@ finished: m[0] = pc, m[1] = t, m[2] = rp, m[3] = sp;
 	return (s_t)r;
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
 	forth_t *h = embed_new();
 	if(argc > 4)
 		embed_die("usage: %s [in.blk] [out.blk] [file.fth]", argv[0]);

@@ -4,7 +4,7 @@
 # 	- Unix (Linux Tested)
 # 	- Windows (Using MinGW)
 
-CFLAGS= -O2 -std=c99 -g -Wall -Wextra -fwrapv -fPIC -pedantic -I.
+CFLAGS= -O2 -std=c99 -g -Wall -Wextra -fwrapv -fPIC -pedantic -I. -Wmissing-prototypes
 CC=gcc
 EXE=
 DF=

@@ -59,9 +59,9 @@ void *embed_alloc_or_die(size_t sz) {
 	return r;
 }
 
-embed_t *embed_new(void) { 
-	embed_t *h = calloc(sizeof(struct embed_t), 1); 
-	if(!h) 
+embed_t *embed_new(void) {
+	embed_t *h = calloc(sizeof(struct embed_t), 1);
+	if(!h)
 		goto fail;
 	h->m = calloc(EMBED_CORE_SIZE*sizeof(cell_t), 1);
 	if(!(h->m))
@@ -69,32 +69,32 @@ embed_t *embed_new(void) {
 	if(embed_default_hosted(h) < 0)
 		goto fail;
 	h->o = embed_opt_default();
-	return h; 
+	return h;
 fail:
 	embed_free(h);
 	return NULL;
 }
 
-void embed_free(embed_t *h)  { 
+void embed_free(embed_t *h)  {
 	if(!h)
 		return;
-	memset(h, 0, sizeof(*h)); 
+	memset(h, 0, sizeof(*h));
 	free(h->m);
-	free(h); 
+	free(h);
 }
 
-int embed_save(const embed_t *h, const char *name) { 
-	assert(name); 
-	return embed_save_cb(h, name, 0, embed_cells(h)); 
+int embed_save(const embed_t *h, const char *name) {
+	assert(name);
+	return embed_save_cb(h, name, 0, embed_cells(h));
 }
 
-int embed_load(embed_t *h, const char *name) { 
-	FILE *f = fopen(name, "rb"); 
-	if(!f) 
-		return -69; 
-	int r = embed_load_file(h, f); 
-	fclose(f); 
-	return r; 
+int embed_load(embed_t *h, const char *name) {
+	FILE *f = fopen(name, "rb");
+	if(!f)
+		return -69;
+	int r = embed_load_file(h, f);
+	fclose(f);
+	return r;
 }
 
 int embed_save_cb(const embed_t *h, const void *name, const size_t start, const size_t length) {
@@ -130,15 +130,15 @@ int embed_default_hosted(embed_t *h) {
 	return 0;
 }
 
-int embed_fputc_cb(int ch, void *file) { 
-	assert(file); 
-	return fputc(ch, file); 
+int embed_fputc_cb(int ch, void *file) {
+	assert(file);
+	return fputc(ch, file);
 }
 
-int embed_fgetc_cb(void *file, int *no_data) { 
-	assert(file && no_data); 
-	*no_data = 0; 
-	return fgetc(file); 
+int embed_fgetc_cb(void *file, int *no_data) {
+	assert(file && no_data);
+	*no_data = 0;
+	return fgetc(file);
 }
 
 static inline int is_big_endian(void)              { return (*(uint16_t *)"\0\xff" < 0x100); }
@@ -161,7 +161,7 @@ int embed_forth_opt(embed_t *h, embed_vm_option_e opt, FILE *in, FILE *out, cons
 	return r;
 }
 
-int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block) { 
-	return embed_forth_opt(h, 0, in, out, block); 
+int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block) {
+	return embed_forth_opt(h, 0, in, out, block);
 }
 

@@ -1,7 +1,7 @@
 /** @file      embed.h
  *  @brief     Embed Forth Virtual Machine Library Interface
  *  @copyright Richard James Howe (2017,2018)
- *  @license   MIT 
+ *  @license   MIT
  *
  *  Do not be afraid to modify things and generally hack around with things,
  *  if you want to port this to a microcontroller you might need to modify
@@ -71,7 +71,7 @@ typedef int (*embed_save_t)(const embed_t *h, const void *name, const size_t sta
 typedef int (*embed_callback_t)(embed_t *h, void *param);
 
 /**@brief Function pointer typedef for user supplied callbacks for
- * reading from the Virtual Machines memory 
+ * reading from the Virtual Machines memory
  * @param  h,    initialized Virtual Machine image
  * @param  addr, address of location to read from
  * @return return of MMU read */
@@ -115,7 +115,7 @@ typedef struct {
 	embed_vm_option_e options;  /**< virtual machine options register */
 } embed_opt_t; /**< Embed VM options structure for customizing behavior */
 
-struct embed_t { 
+struct embed_t {
 	embed_opt_t o; /**< options structure for virtual machine */
 	void *m;       /**< virtual machine core memory - @warning you need to set this to something sensible! */
 }; /**< Embed Forth VM structure */
@@ -159,26 +159,26 @@ cell_t  embed_mmu_read_cb(embed_t const * const h, cell_t addr);
  * @param value, value to write */
 void embed_mmu_write_cb(embed_t * const h, cell_t addr, cell_t value);
 
-/**@brief Load VM image off disk 
+/**@brief Load VM image off disk
  * @param h,     uninitialized Virtual Machine image
  * @param name,  name of file to load off disk
  * @return zero on success, negative on failure */
-int embed_load(embed_t *h, const char *name); 
+int embed_load(embed_t *h, const char *name);
 
-/**@brief Load VM image from memory 
+/**@brief Load VM image from memory
  * @param h,      uninitialized Virtual Machine image
  * @param buf,    byte buffer to load from
  * @param length, length of 'buf'
  * @return zero on success, negative on failure */
-int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length); 
+int embed_load_buffer(embed_t *h, const uint8_t *buf, size_t length);
 
 /**@brief Load the default configuration options for the embed virtual machine
  * and the default image as well.
- * @param h, an uninitialized 
+ * @param h, an uninitialized
  * @return returns non-zero on failure, and zero on success */
 int embed_default(embed_t *h);
 
-/**@brief Length in bytes of core memory 
+/**@brief Length in bytes of core memory
  * @param h, initialized Virtual Machine image
  * @return bytes in h */
 size_t embed_length(embed_t const * const h);
@@ -191,12 +191,12 @@ size_t embed_cells(embed_t const * const h);
 /**@brief Swap byte order of a 'cell_t'
  * @param s, value to swap byte order of
  * @return cell_t with swapped byte order */
-cell_t embed_swap(cell_t s);                                
+cell_t embed_swap(cell_t s);                               
 
 /**@brief Swap byte order of a buffer of 2-byte values
  * @param b, buffer to change endianess of
  * @param l, length of buffer in cell_t*/
-void embed_buffer_swap(cell_t *b, size_t l);                   
+void embed_buffer_swap(cell_t *b, size_t l);                  
 
 /**@brief Run the virtual machine directly, with custom options.
  * 'embed_opt_default()' can be used to get a copy of a structure
@@ -221,7 +221,7 @@ int embed_push(embed_t *h, cell_t value);
  * @param h,     initialized Virtual Machine
  * @param value, pointer to value to pop into
  * @return zero on success, negative on failure */
-int embed_pop(embed_t *h, cell_t *value); 
+int embed_pop(embed_t *h, cell_t *value);
 
 /**@brief Return the current variable stack depth
  * @param h, initialized Virtual Machine
@@ -256,17 +256,17 @@ int embed_puts(embed_t *h, const char *s);
  * @param h, initialized Virtual Machine image to reset */
 void embed_reset(embed_t *h);
 
-/**@brief get a pointer to VM core 
+/**@brief get a pointer to VM core
  * @warning be careful with this!
  * @param h, initialized Virtual Machine image
  * @return point to core image of embed_length() bytes long  */
-cell_t *embed_core_get(embed_t *h);         
+cell_t *embed_core_get(embed_t *h);        
 
 /**@brief evaluate a string, each line should be less than 80 chars and end in a newline
  * @param h,   an initialized virtual machine
- * @param str, string to evaluate 
+ * @param str, string to evaluate
  * @return zero on success, negative on failure */
-int embed_eval(embed_t *h, const char *str); 
+int embed_eval(embed_t *h, const char *str);
 
 /**@brief This array contains the default virtual machine image, generated from
  * 'embed-1.blk', which is included in the library. It contains a fully working

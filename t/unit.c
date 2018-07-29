@@ -110,7 +110,7 @@ static void test_embed_callbacks(void) {
 
 	unit_test(embed_eval(h, " 5 3 vm \n") == 0);
 	unit_test(parameter.result == 8);
-	unit_test(embed_depth(h) == 0); 
+	unit_test(embed_depth(h) == 0);
 
 	unit_test_statement(embed_free(h));
 	unit_test_finish();

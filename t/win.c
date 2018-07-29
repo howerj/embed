@@ -31,6 +31,7 @@
 #include <string.h>
 #include <windows.h>
 
+#define EOT    (4)  /**< ASCII End Of Transmission */
 #define ESCAPE (27) /**< ASCII Escape Character */
 
 static bool a_tty = false;
@@ -57,7 +58,7 @@ static int win_getch(void *file, int *no_data) {
 	bool eagain = false;
 	int r = getch_wrapper(&eagain);
 	*no_data = eagain ? -1 : 0;
-	r = r == ESCAPE ? EOF : r;
+	r = (r == ESCAPE) || (r == EOT) ? EOF : r;
 	return r;
 }
 
@@ -67,8 +68,8 @@ static int win_putch(int ch, void *file) {
 	return r;
 }
 
-static void binary(FILE *f) { 
-	_setmode(_fileno(f), _O_BINARY); 
+static void binary(FILE *f) {
+	_setmode(_fileno(f), _O_BINARY);
 }
 
 int main(void) {

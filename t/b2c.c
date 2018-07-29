@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
 		return -1;
 	}
 	const char *var = argv[1];
-	FILE *in  = fopen_or_die(argv[2], "rb"), 
+	FILE *in  = fopen_or_die(argv[2], "rb"),
 	     *out = fopen_or_die(argv[3], "wb");
 	const char *msg = argv[4];
 	size_t i = 0;

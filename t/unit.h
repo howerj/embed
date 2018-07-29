@@ -72,15 +72,15 @@ static inline void unit_test_finish(void) {
 
 #undef UNIT_TEST_OUTPUT
 
-#undef CSI     
-#undef CSIm   
+#undef CSI    
+#undef CSIm  
 #undef BRIGHT
-#undef RED   
-#undef GREEN   
-#undef YELLOW 
-#undef BLUE    
+#undef RED  
+#undef GREEN  
+#undef YELLOW
+#undef BLUE   
 #undef MAGENTA
-#undef CYAN  
+#undef CYAN 
 #undef RESET
 
 #endif /* UNIT_TEST_H */

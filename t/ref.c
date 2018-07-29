@@ -117,7 +117,7 @@ static int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block) {
 			case 20: sp = t >> 1;              break;
 			case 21: rp = t >> 1; T = n;       break;
 			case 22: T = save(h, block, n>>1, ((d_t)T+1)>>1); break;
-			case 23: T = fputc(t, out);        break; 
+			case 23: T = fputc(t, out);        break;
 			case 24: m[++sp] = t; T = fgetc(in); t = T; n = 0;    break; /* n = blocking status */
 			case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; } else { pc=4; T=10; } break;

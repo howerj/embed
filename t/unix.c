@@ -9,7 +9,7 @@
  * of keyboard input, this allows a virtual machine image to yield when it has
  * nothing to do. There is a Windows equivalent to this in a file called
  * 'win.c'.
- * 
+ *
  * The program implements a custom callback that the virtual machine can use
  * which gets input from a file descriptor that might be a terminal, if it is,
  * then it will set that file descriptor into raw mode, and non-blocking mode
@@ -46,6 +46,7 @@
 static struct termios old, new;
 static int fd = -1;
 
+#define EOT    (4)  /**< ASCII End Of Transmission */
 #define ESCAPE (27) /**< ASCII Escape Character */
 
 static int getch(int fd, bool *eagain) { /* Set terminal to raw mode */
@@ -86,7 +87,7 @@ static int unix_getch(void *file, int *no_data) {
 	bool eagain = false;
 	int r = getch(fd, &eagain);
 	*no_data = eagain ? -1 : 0;
-	r = r == ESCAPE ? EOF : r;
+	r = (r == ESCAPE || r == EOT) ? EOF : r;
 	return r;
 }
 

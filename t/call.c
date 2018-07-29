@@ -30,7 +30,7 @@ typedef float vm_float_t;
 typedef int32_t sdc_t;   /**< signed double cell type */
 
 typedef int (*embed_callback_extended_t)(vm_extension_t *v);
-typedef struct { 
+typedef struct {
 	embed_callback_extended_t cb; /**< Callback for function */
 	const char *name;             /**< Forth function */
 	bool use;                     /**< Use this callback? */
@@ -195,7 +195,7 @@ static int cb_ddiv(vm_extension_t * const v) {
 	const sdc_t d2 = dpop(v);
 	if(!d1) {
 		eset(v, 10); /* division by zero */
-		return eclr(v); 
+		return eclr(v);
 	}
 	dpush(v, d2 / d1);
 	return eclr(v);
@@ -562,7 +562,7 @@ static int callbacks_add(embed_t * const h, const bool optimize,  callbacks_t *c
 		if(!cb[i].use)
 			continue;
 		r = snprintf(line, sizeof(line), ": %s %u vm ; %s\n", cb[i].name, (unsigned)i, optimizer);
-		assert(strlen(line) < sizeof(line) - 1); 
+		assert(strlen(line) < sizeof(line) - 1);
 		if(r < 0) {
 			embed_error("format error in snprintf (returned %d)", r);
 			return -1;
@@ -584,7 +584,7 @@ static vm_extension_t *vm_extension_new(void) {
 	if(!(v->h))
 		goto fail;
 
-	v->callbacks_length = number_of_callbacks(), 
+	v->callbacks_length = number_of_callbacks(),
 	v->callbacks        = callbacks;
 	v->o                = embed_opt_default_hosted();
 	v->o.callback       = callback_selector;

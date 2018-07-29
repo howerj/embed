@@ -1,11 +1,11 @@
 /** @file      util.h
  *  @brief     Utility functions used by Embed library test applications
  *  @copyright Richard James Howe (2018)
- *  @license   MIT 
+ *  @license   MIT
  *
  *  Do not be afraid to modify things and generally hack around with things,
  *  if you want to port this to a microcontroller you might need to modify
- *  this file and 'embed.c' as well. 
+ *  this file and 'embed.c' as well.
  */
 #ifndef UTIL_H
 #define UTIL_H
@@ -27,14 +27,14 @@ typedef enum {
 	EMBED_LOG_LEVEL_ALL_ON,  /**< Turn all log messages on */
 } embed_log_level_e; /**< Log levels, and all on/off enumerations */
 
-/**@brief Set the global log level, this may be any 
+/**@brief Set the global log level, this may be any
 * @param level, level to log up to, any log level equal to or lower than than
 * this value will be logged */
 void embed_log_level_set(embed_log_level_e level);
 
 /**@brief Get the global log level
 *  @return Global log level */
-embed_log_level_e embed_log_level_get(void);            
+embed_log_level_e embed_log_level_get(void);           
 
 /**@brief Exit system with failure */
 void embed_die(void);
@@ -55,39 +55,39 @@ void embed_die(void);
  * @param line,  line logging occurred on, should be __LINE__
  * @param fmt,   a printf format string
  * @param ...,   variable length parameter list for 'fmt' */
-void embed_logger(embed_log_level_e level, const char *file, const char *func, unsigned line, const char *fmt, ...); 
+void embed_logger(embed_log_level_e level, const char *file, const char *func, unsigned line, const char *fmt, ...);
 
 /**@brief Open up 'file', and if that fails print out an error message and
  * call exit with EXIT_FAILURE.
  * @param file, name of file to open
  * @param mode, mode to open file in
  * @return An open file handle, this never returns NULL */
-FILE *embed_fopen_or_die(const char *file, const char *mode);         
+FILE *embed_fopen_or_die(const char *file, const char *mode);        
 
 /**@brief 'calloc' of size 'sz'
  * @param sz, number of bytes to allocate
  * @return pointer to memory of size 'sz', or NULL on failure */
 void *embed_alloc(size_t sz);
 
-/**@brief 'calloc' or die 
+/**@brief 'calloc' or die
  * @param sz, number of bytes to allocate
  * @return pointer to memory of size 'sz', never returns NULL */
-void *embed_alloc_or_die(size_t sz);                              
+void *embed_alloc_or_die(size_t sz);                             
 
 /**@brief Make a new Forth VM, and load with default image. The default image
  * contains a fully working eForth image.
  * @return a pointer to a new Forth VM, loaded with the default image */
-embed_t  *embed_new(void); 
+embed_t  *embed_new(void);
 
 /**@brief Free a Forth VM
  * @param h,     initialized Virtual Machine image to free */
-void embed_free(embed_t *h);                                      
+void embed_free(embed_t *h);                                     
 
 /**@brief 'embed_fputc_t' callback to write to a file
  * @param file, a 'FILE*' object to write to
  * @param ch,  unsigned char to write to file
  * @return ch on success, negative on failure */
-int embed_fputc_cb(int ch, void *file); 
+int embed_fputc_cb(int ch, void *file);
 
 /**@brief 'embed_fgetc_t' callback to read from a file
  * @param file, a 'FILE*' object to read from
@@ -103,11 +103,11 @@ int embed_fgetc_cb(void *file, int *no_data);
  * @param start,   start of image location to save from
  * @param length,  length in cell_t to save, starting at 'start'
  * @return 0 on success, negative on failure */
-int embed_save_cb(const embed_t *h, const void *name, const size_t start, const size_t length); 
+int embed_save_cb(const embed_t *h, const void *name, const size_t start, const size_t length);
 
 /**@brief Default the virtual machine image with parameters suitable for a
- * hosted environment 
- * @param h, a virtual machine image, possible uninitialized. 
+ * hosted environment
+ * @param h, a virtual machine image, possible uninitialized.
  * @return zero on success, negative on failure */
 int embed_default_hosted(embed_t *h);
 
@@ -119,18 +119,18 @@ int embed_default_hosted(embed_t *h);
  * @param out,   output file for VM to write to
  * @param block, name of file to write block to, may be NULL
  * @return 0 on success, negative on failure */
-int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block); 
+int embed_forth(embed_t *h, FILE *in, FILE *out, const char *block);
 
 /**@brief Run the VM, reading from 'in' and writing to 'out'. The user can
  * supply their own functions and options but 'in' and 'out' will be passed
  * to the get and put character callbacks.
  * @param h,     initialized Virtual Machine image
- * @param opt,   options for the virtual machine to customize its behavior 
+ * @param opt,   options for the virtual machine to customize its behavior
  * @param in,    input file for VM to read from
  * @param out,   output file for VM to write to
  * @param block, name of file to write block to, may be NULL
  * @return 0 on success, negative on failure */
-int embed_forth_opt(embed_t *h, embed_vm_option_e opt, FILE *in, FILE *out, const char *block); 
+int embed_forth_opt(embed_t *h, embed_vm_option_e opt, FILE *in, FILE *out, const char *block);
 
 /**@brief returns an initialized 'embed_opt_t' structure for hosted use
  * @return an initialized 'embed_opt_t' structure suitable for hosted use */
@@ -140,7 +140,7 @@ embed_opt_t embed_opt_default_hosted(void);
  * @param h,      uninitialized Virtual Machine image
  * @param input,  open file to read from to load a disk image
  * @return zero on success, negative on failure */
-int embed_load_file(embed_t *h, FILE *input);                      
+int embed_load_file(embed_t *h, FILE *input);                     
 
 /**@brief Save VM image to disk, 0 == success
  * @param h,     Virtual Machine image to save to disk

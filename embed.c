@@ -135,8 +135,8 @@ size_t embed_depth(embed_t *h) {
 embed_opt_t embed_opt_default(void) {
 	embed_opt_t o = {
 		.get      = embed_ngetc_cb, .put   = embed_nputc_cb, .save = NULL,
-		.in       = NULL,           .out   = NULL,           .name = NULL, 
-		.write    = embed_mmu_write_cb,    
+		.in       = NULL,           .out   = NULL,           .name = NULL,
+		.write    = embed_mmu_write_cb,   
 		.read     = embed_mmu_read_cb,
 		.yield    = embed_yield_cb
 	};
@@ -196,7 +196,7 @@ int embed_vm(embed_t * const h) {
 	const embed_yield_t     yield = o->yield;
 	void  *yields = o->yields;
 	assert(mr && mw && yield);
-	const m_t l = embed_cells(h); 
+	const m_t l = embed_cells(h);
 	m_t pc = mr(h, 0), t = mr(h, 1), rp = mr(h, 2), sp = mr(h, 3), r = 0;
 	for(d_t d;!yield(yields);) {
 		const m_t instruction = mr(h, pc++);
@@ -233,15 +233,15 @@ int embed_vm(embed_t * const h) {
 			case 20: sp = t >> 1;            break;
 			case 21: rp = t >> 1; T = n;     break;
 			case 22: if(o->save) { T = o->save(h, o->name, n>>1, ((d_t)t+1)>>1); }    else { pc=4; T=21; } break;
-			case 23: if(o->put)  { T = o->put(t, o->out); }                           else { pc=4; T=21; } break; 
+			case 23: if(o->put)  { T = o->put(t, o->out); }                           else { pc=4; T=21; } break;
 			case 24: if(o->get)  { int nd = 0; mw(h, ++sp, t); T = o->get(o->in, &nd); t = T; n = nd; } else { pc=4; T=21; } break;
 			case 25: if(t)       { d = mr(h, --sp)|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 			case 26: if(t)       { T=(s_t)n/t; t=(s_t)n%t; n=t; }                     else { pc=4; T=10; } break;
 			case 27: if(mr(h, rp)) { mw(h, rp, 0); sp--; r = t; t = n; goto finished; }; T = t; break;
-			case 28: if(o->callback) { 
-					 mw(h, 0, pc), mw(h, 1, t), mw(h, 2, rp), mw(h, 3, sp); 
+			case 28: if(o->callback) {
+					 mw(h, 0, pc), mw(h, 1, t), mw(h, 2, rp), mw(h, 3, sp);
 					 r = o->callback(h, o->param);
-					 pc = mr(h, 0), T = mr(h, 1), rp = mr(h, 2), sp = mr(h, 3); 
+					 pc = mr(h, 0), T = mr(h, 1), rp = mr(h, 2), sp = mr(h, 3);
 					 if(r) { pc = 4; T = r; }
 				 } else { pc=4; T=21; }  break;
 			case 29: T = o->options; o->options = t; break;

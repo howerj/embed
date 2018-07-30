@@ -1623,9 +1623,7 @@ h: digit 9 over < 7 and + [char] 0 + ;         ( u -- c )
 
 \ *sign* is used with the Pictured Numeric Output words to add a sign character
 \ if the number is negative, *(.)* is then defined to convert a number in any
-\ base to its signed representation, in actual use however we will only use
-\ *(.)* for base 10 numeric output, we usually do not want to print the sign
-\ of a number when operating with a non-decimal base.
+\ base to its signed representation (regardless of the current base).
 \
 
 : sign 0< 0= ?exit [char] - hold ; ( n -- )
@@ -1650,7 +1648,7 @@ h: d5u.r dup fallthrough;        ( u -- u )
 h: 5u.r space 5 u.r ;            ( u -- )
 ( :  .r >r (.)( r> adjust ;      ( n n -- : print n, right justified by +n )
 : u.  (u.) h: blt space type ;;  ( u -- : print unsigned number )
-:  .  radix $A xor if u. exit then (.) blt ; ( n -- print number )
+:  .  (.) blt ;                  ( n -- print number )
 ( : >base swap base @ >r base ! execute r> base ! ; )
 ( : d. $a  '  . >base ; )
 ( : h. $10 ' u. >base ; )

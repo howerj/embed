@@ -33,14 +33,11 @@ typedef struct {
 	bitmap_unit_t map[];
 } bitmap_t;
 
-/**@todo assert bit index in range */
-
 size_t bitmap_units(size_t bits) {
 	return bits/BITS + !!(bits & MASK);
 }
 
-size_t bitmap_bits(bitmap_t *b)
-{
+size_t bitmap_bits(bitmap_t *b) {
 	assert(b);
 	return b->bits;
 }
@@ -51,8 +48,9 @@ size_t bitmap_sizeof(bitmap_t *b) {
 }
 
 bitmap_t *bitmap_new(size_t bits) {
-	size_t length = bitmap_units(bits)*sizeof(bitmap_unit_t);
-	/**@todo detect overflow */
+	const size_t length = bitmap_units(bits)*sizeof(bitmap_unit_t);
+	assert(length < (SIZE_MAX/bits));
+	assert((length + sizeof(bitmap_t)) > length);
 	bitmap_t *r = calloc(sizeof(bitmap_t) + length, 1);
 	if(!r)
 		return NULL;
@@ -74,26 +72,29 @@ void bitmap_free(bitmap_t *b) {
 
 void bitmap_set(bitmap_t *b, size_t bit) {
 	assert(b);
+	assert(bit < b->bits);
 	b->map[bit/BITS] |=  (1u << (bit & MASK));
 }
 
 void bitmap_clear(bitmap_t *b, size_t bit) {
 	assert(b);
+	assert(bit < b->bits);
 	b->map[bit/BITS] &= ~(1u << (bit & MASK));
 }
 
 void bitmap_toggle(bitmap_t *b, size_t bit) {
 	assert(b);
+	assert(bit < b->bits);
 	b->map[bit/BITS] ^=  (1u << (bit & MASK));
 }
 
 bool bitmap_get(bitmap_t *b, size_t bit) {
 	assert(b);
+	assert(bit < b->bits);
 	return !!(b->map[bit/BITS] & (1u << (bit & MASK)));
 }
 
 typedef int (*bitmap_foreach_callback_t)(bitmap_t *b, size_t bit, void *param);
-
 
 int bitmap_foreach(bitmap_t *b, bitmap_foreach_callback_t cb, void *param) {
 	const size_t bits = b->bits;
@@ -108,22 +109,6 @@ int bitmap_foreach(bitmap_t *b, bitmap_foreach_callback_t cb, void *param) {
 
 static bitmap_t *read_map  = NULL;
 static bitmap_t *write_map = NULL;
-
-/**@todo Improve MMU interface
- *
- * It should be possible to raise exceptions when an MMU operation fails, and
- * also provide a handle to the MMU functions to work with these functions.
- *
- * The MMU functions could also use pages like a normal MMU, and map those
- * pages to ROM, RAM and NVRAM.
- *
- * NB. It would be good if the 'embed.c' library only included example callbacks
- * that touched and read from memory and did not require any allocation to
- * enhance portability. This would require some significant API changes.
- *
- * I also do not like the way the 'embed_opt_t' structure is handled, this
- * should probably be changed so the structure is not copied all over the
- * place and instead be done by passing pointers. */
 
 static cell_t  mmu_read_cb(embed_t const * const h, cell_t addr) {
 	assert(!(0x8000 & addr));

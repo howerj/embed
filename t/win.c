@@ -11,13 +11,8 @@
  * terminal handling routines. Also note, Windows is picky as to what it
  * considers a terminal, the program is liable to only work correctly when run
  * under 'cmd.exe', or at least not detect that a user is reading input from a
- * terminal. This project, and the embed library, were compile and tested with
- * MinGW.
- *
- *
- * @todo Merge the Windows and Unix code that is common, and select the OS
- * dependent functions with the build system.
- * */
+ * terminal. This project, and the embed library, were compiled and tested with
+ * MinGW. */
 
 #include "embed.h"
 #include "util.h"

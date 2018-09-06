@@ -98,7 +98,6 @@ typedef enum {
 	EMBED_VM_QUITE_ON        = 1u << 2, /**< turn off 'ok' prompt and welcome message */
 } embed_vm_option_e; /**< VM option enum */
 
-/**@todo merge 'embed_t' and 'embed_opt_t' structures? */
 typedef struct {
 	embed_fgetc_t     get;      /**< callback to get a character, behaves like 'fgetc' */
 	embed_fputc_t     put;      /**< callback to output a character, behaves like 'fputc' */

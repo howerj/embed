@@ -355,7 +355,7 @@ a: ALU        ?set [a] #alu     or    a; ( u -- : Make ALU instruction )
 a: alu                    [a] ALU  t, a; ( u -- : ALU operation )
 a: literal ( n -- : compile a number into target )
   dup [a] #literal and if   ( numbers above $7FFF take up two instructions )
-    invert recurse  ( the number is inverted, an literal is called again )
+    invert recurse  ( the number is inverted, and 'literal' is called again )
     [a] #~t [a] alu ( then an invert instruction is compiled into the target )
   else
     [a] #literal or t, ( numbers below $8000 are single instructions )

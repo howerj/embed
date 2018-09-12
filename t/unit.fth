@@ -1049,8 +1049,6 @@ T{ min-int max-int m* min-int sm/rem ->  0 max-int }T
 T{ min-int max-int m* max-int sm/rem ->  0 min-int }T
 T{ max-int max-int m* max-int sm/rem ->  0 max-int }T
 
-
-
 T{ :noname 2 6 + ; execute -> 8 }T
 
 decimal

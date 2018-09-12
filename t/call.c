@@ -5,12 +5,47 @@
  *
  * See <https://github.com/howerj/embed> for more information.
  *
+ * @todo Implement extracting strings and putting strings into the interpreter
+ * @todo Simplify this program given the new API 
+ *
+ * NOTES:
+ *
  * This file shows how you can extend the embed virtual machine using its
  * library API to add double and floating point words to that are accessible
  * via the eForth image.
  *
- * @todo Implement extracting strings and putting strings into the interpreter
- * @todo Simplify this program given the new API */
+ * Proper floating point number input has not been implemented, but floating point
+ * output has been (with the word 'f.'). Floating point number can be input
+ * only as integers (with the word 's>f'). There is no plan to add more 
+ * floating point number words, as this program is here only as a 
+ * demonstration that new functionality can be added, that is, that is 
+ * extension is possible.
+ *
+ * A number of helper routines are added that make dealing with the library
+ * interface easier; 'eset', 'eget' and 'eclr' for setting, getting and
+ * clearing error codes so that the results of push and pop do not have to
+ * be checked each time, a table of function pointers and strings is used
+ * to initialize 
+ *
+ * Examples:
+ *
+ *    2 s>f f.
+ *    2.000000e+00 ( <- 2.0 is printed )
+ *
+ *    2 s>f fsqrt f.
+ *    1.414214e+00 ( square root of 2 )
+ *
+ * Awkward numeric input of a floating point number can technically be
+ * done with the 'fget' function:
+ *
+ *    fget
+ *    3.443   ( <- must be on a new line 'fget 3.443' does not work )
+ *    f.
+ *    3.443000e+00
+ *
+ * Various things could be simplified as a consequence of some library
+ * changes, and should be simplified in the future. So even for a small
+ * program, there is still some unneeded historic cruft. */
 
 #include "embed.h"
 #include "util.h"
@@ -59,7 +94,6 @@ struct vm_extension_t {
 	X("f-",       cb_fsub,       true)\
 	X("f*",       cb_fmul,       true)\
 	X("f/",       cb_fdiv,       true)\
-	X("d>f",      cb_d2f,        true)\
 	X("f>d",      cb_f2d,        true)\
 	X("f<",       cb_fless,      true)\
 	X("f>",       cb_fmore,      true)\
@@ -273,10 +307,11 @@ static int cb_fdiv(vm_extension_t * const v) {
 	return eclr(v);
 }
 
-static int cb_d2f(vm_extension_t * const v) {
+/*// 'd>f' would need take into account the 'dpl' variable
+static int cb_d2f(vm_extension_t * const v) { 
 	fpush(v, dpop(v));
 	return eclr(v);
-}
+}*/
 
 static int cb_f2d(vm_extension_t * const v) {
 	dpush(v, fpop(v));

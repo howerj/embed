@@ -277,7 +277,7 @@ extern const size_t embed_default_block_size;
 
 #ifndef BUILD_BUG_ON
 /**@brief This is effectively a static_assert for condition
- * @param constant expression to check */
+ * @param condition, constant expression to check */
 #define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
 #endif
 

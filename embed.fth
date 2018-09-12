@@ -3192,10 +3192,6 @@ h: decompiler ( previous current -- : decompile starting at address )
 \ *#t|n* could then be used to disassemble ALU instructions, which are
 \ currently only displayed in their raw format.
 
-
-\ @todo fix bug with 'see' when decompiling words in the 'system' vocabulary,
-\ also rename the system vocabulary from 'system' to 'system-wordlist'
-
 : see ( --, <string> : decompile a word )
   token (find) ?not-found
   swap      2dup= if drop here then >r

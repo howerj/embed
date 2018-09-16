@@ -95,6 +95,8 @@ int main(int argc, char **argv) {
 		i += r;
 	}
 	tail(out, i, var);
+	fclose(in);
+	fclose(out);
 	return 0;
 }
 

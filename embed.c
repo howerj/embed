@@ -44,7 +44,7 @@ int embed_default(embed_t *h) {
 }
 
 int embed_sgetc_cb(void *string_ptr, int *no_data) {
-	assert(string_ptr);
+	assert(string_ptr && no_data);
 	char **sp = (char**)string_ptr;
 	char ch = **sp;
 	if(!ch)
@@ -71,9 +71,6 @@ int embed_eval(embed_t *h, const char *str) {
 	o_new.options = EMBED_VM_QUITE_ON;
 	embed_opt_set(h, &o_new);
 	const int r = embed_vm(h);
-	/*embed_reset(h);*/
-	/*embed_pop(h, NULL);
-	embed_pop(h, NULL);*/
 	embed_opt_set(h, &o_old);
 	return r;
 }
@@ -146,17 +143,17 @@ embed_opt_t embed_opt_default(void) {
 #ifdef NDEBUG
 #define trace(VM,PC,INSTRUCTION,T,RP,SP)
 #else
-static int extend(uint16_t dd) { return dd & 2 ? (s_t)(dd | 0xFFFE) : dd; }
+static int extend(uint16_t dd) { return (dd & 2) ? (s_t)(dd | 0xFFFE) : dd; }
 
 static int disassemble(m_t instruction, char *output, size_t length) {
 	assert(output);
-	if(0x8000 & instruction) {
+	if((0x8000 & instruction)) {
 		return snprintf(output, length, "literal %04x", (unsigned)(0x1FFF & instruction));
 	} else if ((0xE000 & instruction) == 0x6000) {
-		const char *ttn    =  instruction & 0x80 ? "t->n  " : "      ";
-		const char *ttr    =  instruction & 0x40 ? "t->r  " : "      ";
-		const char *ntt    =  instruction & 0x20 ? "n->t  " : "      ";
-		const char *rtp    =  instruction & 0x10 ? "r->pc " : "      ";
+		const char *ttn    =  (instruction & 0x80) ? "t->n  " : "      ";
+		const char *ttr    =  (instruction & 0x40) ? "t->r  " : "      ";
+		const char *ntt    =  (instruction & 0x20) ? "n->t  " : "      ";
+		const char *rtp    =  (instruction & 0x10) ? "r->pc " : "      ";
 		const unsigned alu = (instruction >> 8) & 0x1F;
 		const int rd       = extend((instruction >> 2) & 0x3);
 		const int dd       = extend((instruction     ) & 0x3);
@@ -208,7 +205,7 @@ int embed_vm(embed_t * const h) {
 			t       = instruction & 0x7FFF;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
 			m_t n = mr(h, sp), T = t;
-			pc = instruction & 0x10 ? mr(h, rp) >> 1 : pc;
+			pc = (instruction & 0x10) ? (mr(h, rp) >> 1) : pc;
 			switch((instruction >> 8u) & 0x1f) {
 			case  0: T = t;                  break;
 			case  1: T = n;                  break;
@@ -245,7 +242,6 @@ int embed_vm(embed_t * const h) {
 					 if(r) { pc = 4; T = r; }
 				 } else { pc=4; T=21; }  break;
 			case 29: T = o->options; o->options = t; break;
-			/* NB. A source of entropy and time are missing, which could be added here */
 			default: pc = 4; T=21; /* not implemented */ break;
 			}
 			sp += delta[ instruction       & 0x3];
@@ -254,7 +250,7 @@ int embed_vm(embed_t * const h) {
 				mw(h, sp, t);
 			if(instruction & 0x40)
 				mw(h, rp, t);
-			t = instruction & 0x20 ? n : T;
+			t = (instruction & 0x20) ? n : T;
 		} else if (0x4000 & instruction) { /* call */
 			mw(h, --rp, pc << 1);
 			pc      = instruction & 0x1FFF;

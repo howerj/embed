@@ -34,7 +34,7 @@ static inline void _unit_test_start(const char *file, const char *func, unsigned
 {
 	unit_tests_run    = 0;
 	unit_tests_passed = 0;
-	fprintf(UNIT_TEST_OUTPUT, "Start tests: %s in %s:%d\n\n", func, file, line);
+	fprintf(UNIT_TEST_OUTPUT, "Start tests: %s in %s:%u\n\n", func, file, line);
 }
 
 static inline void _unit_test_statement(const char *expr_str)
@@ -44,7 +44,7 @@ static inline void _unit_test_statement(const char *expr_str)
 
 static inline void _unit_test(int failed, const char *expr_str, const char *file, const char *func, unsigned line, int die) {
 	if(failed) {
-		fprintf(UNIT_TEST_OUTPUT, "  %sFAILED%s: %s (%s:%s:%d)\n", _unit_red(), _unit_ansi_reset(), expr_str, file, func, line);
+		fprintf(UNIT_TEST_OUTPUT, "  %sFAILED%s: %s (%s:%s:%u)\n", _unit_red(), _unit_ansi_reset(), expr_str, file, func, line);
 		if(die) {
 			fprintf(UNIT_TEST_OUTPUT, "VERIFY FAILED - EXITING\n");
 			exit(EXIT_FAILURE);

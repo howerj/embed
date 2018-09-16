@@ -2101,6 +2101,11 @@ h: digit? ( c base -- u f )
 \ The negative prefix must come before any base specifier. *dpl* is used to
 \ store where the decimal place occurred in the input.
 \
+\ A more Forth like of handling numbers of a different base would be to have
+\ a word defined called *$*, which would attempt to parse the next number in
+\ the input stream as a number with a modified *base* variable. This would
+\ simplify the definition of 'number?'.
+\
 
 h: number? ( a u -- d -1 | a u 0 )
   [-1] dpl !
@@ -2161,6 +2166,7 @@ h: ?length dup word-length u< ?exit $13 -throw ;
 : word 1depth parse ?length here pack$ ; ( c -- a ; <string> )
 h: token =bl word ;                      ( -- a )
 : char token count drop c@ ;             ( -- c; <string> )
+\ : $ base@ >r hex token count number? 0= throw drop r> base! ; ( word -- n )
 
 \
 \ ## The Interpreter

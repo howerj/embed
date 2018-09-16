@@ -5,9 +5,6 @@
  *
  * See <https://github.com/howerj/embed> for more information.
  *
- * @todo Implement extracting strings and putting strings into the interpreter
- * @todo Simplify this program given the new API 
- *
  * NOTES:
  *
  * This file shows how you can extend the embed virtual machine using its
@@ -25,7 +22,11 @@
  * interface easier; 'eset', 'eget' and 'eclr' for setting, getting and
  * clearing error codes so that the results of push and pop do not have to
  * be checked each time, a table of function pointers and strings is used
- * to initialize 
+ * to define new words, and other minor things.
+ *
+ * Only numbers are passed to and from the eForth interpreter, it is in
+ * principle possible to pass strings but requires a more intimate knowledge
+ * of the internals.
  *
  * Examples:
  *
@@ -41,11 +42,7 @@
  *    fget
  *    3.443   ( <- must be on a new line 'fget 3.443' does not work )
  *    f.
- *    3.443000e+00
- *
- * Various things could be simplified as a consequence of some library
- * changes, and should be simplified in the future. So even for a small
- * program, there is still some unneeded historic cruft. */
+ *    3.443000e+00 */
 
 #include "embed.h"
 #include "util.h"
@@ -580,8 +577,7 @@ static int callback_selector(embed_t *h, void *param) {
 }
 
 /*! This adds the call backs to an instance of the virtual machine running
- * an eForth image by defining new words in it with 'embed_eval'.
- */
+ * an eForth image by defining new words in it with 'embed_eval'.  */
 static int callbacks_add(embed_t * const h, const bool optimize,  callbacks_t *cb, const size_t number) {
 	assert(h && cb);
 	const char *optimizer = optimize ? "-2 cells allot ' vm chars ," : "";

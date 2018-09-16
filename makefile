@@ -20,7 +20,7 @@ RM=rm -fv
 TESTAPPS=cpp call mmu rom ref
 TRACER=
 
-.PHONY: all clean run cross double-cross default tests docs apps dist
+.PHONY: all clean run cross double-cross default tests docs apps dist check
 
 default: all
 
@@ -86,6 +86,11 @@ unit: t/unit.c util.o libembed.a
 
 tests: unit ${UNIT}
 	${DF}unit${EXE}
+
+### Static Code Analysis ##################################################### 
+
+check:
+	cppcheck --std=c99 -I. --enable=warning,style,performance,portability,information,missingInclude *.c t/*.c
 
 ### Documentation ############################################################ 
 

@@ -102,9 +102,6 @@ all of these goals, but might fall short.
 * [x] C Test programs
   * [x] Test applications for Windows/Unix non-block I/O, and callback
     extensions.
-* [ ] Small standalone test programs
-  * [ ] Cut down version of [embed.fth][]
-  * [ ] Bootloader
 * [ ] Virtual Machine and eForth Image/Metacompiler that uses 'uintptr\_t'
 * [x] Port the library to a small microcontroller (see <https://github.com/howerj/arduino>)
 

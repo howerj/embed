@@ -148,7 +148,7 @@ int embed_load_file(embed_t *h, FILE *input);
  * @return zero on success, negative on failure */
 int embed_save(const embed_t *h, const char *name);
 
-#ifndef NDEBUF
+#ifndef NDEBUG
 #define embed_fatal(...)   embed_logger(EMBED_LOG_LEVEL_FATAL,   __FILE__, __func__, __LINE__, __VA_ARGS__)
 #define embed_error(...)   embed_logger(EMBED_LOG_LEVEL_ERROR,   __FILE__, __func__, __LINE__, __VA_ARGS__)
 #define embed_warning(...) embed_logger(EMBED_LOG_LEVEL_WARNING, __FILE__, __func__, __LINE__, __VA_ARGS__)

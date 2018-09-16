@@ -1,5 +1,6 @@
 #include "embed.h"
 #include "util.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
@@ -14,15 +15,15 @@ static void binary(FILE *f) { _setmode(_fileno(f), _O_BINARY); }
 static inline void binary(FILE *f) { UNUSED(f); }
 #endif
 
-static int load_default_or_file(embed_t *h, char *file)
-{
+static int load_default_or_file(embed_t *h, char *file) {
+	assert(h);
 	if(!file)
 		return embed_load_buffer(h, embed_default_block, embed_default_block_size);
 	return embed_load(h, file);
 }
 
-static int run(embed_t *h, embed_vm_option_e opt, bool load, FILE *in, FILE *out, char *iblk, char *oblk)
-{
+static int run(embed_t *h, embed_vm_option_e opt, bool load, FILE *in, FILE *out, char *iblk, char *oblk) {
+	assert(h);
 	if(load)
 		if(load_default_or_file(h, iblk) < 0)
 			embed_fatal("embed: load failed (input = %s)", iblk ? iblk : "(null)");
@@ -30,8 +31,7 @@ static int run(embed_t *h, embed_vm_option_e opt, bool load, FILE *in, FILE *out
 	return embed_forth_opt(h, opt, in, out, oblk);
 }
 
-static int run_file(embed_t *h, embed_vm_option_e opt, bool load, char *in_file, FILE *out, char *iblk, char *oblk)
-{
+static int run_file(embed_t *h, embed_vm_option_e opt, bool load, char *in_file, FILE *out, char *iblk, char *oblk) {
 	FILE *in = embed_fopen_or_die(in_file, "rb");
 	int r = run(h, opt, load, in, out, iblk, oblk);
 	fclose(in);
@@ -53,12 +53,13 @@ Options:\n\
   --          stop processing command arguments\n\
   file.fth    read from 'file.fth'\n\n\
 If no input Forth file is given standard input is read from. If no input\n\
-block is given a built in version containing an eForth interpreter is\n\
+block is given a built in block containing an eForth interpreter is\n\
 used.\n\
 ";
 
-static char *next(int *i, const int argc, char **argv)
-{
+static char *next(int *i, const int argc, char **argv) {
+	assert(i);
+	assert(argv);
 	const int j = *i;
 	if(j + 1 >= argc)
 		embed_fatal("%s expects option", argv[j]);
@@ -66,8 +67,7 @@ static char *next(int *i, const int argc, char **argv)
 	return argv[*i];
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
 	embed_vm_option_e option = 0;
 	char *oblk = NULL, *iblk = NULL;
 	FILE *in = stdin, *out = stdout;

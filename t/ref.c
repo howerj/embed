@@ -59,8 +59,9 @@ static int save(forth_t *h, const char *name, const size_t start, const size_t l
 static int embed_load(forth_t *h, const char *name) {
 	assert(h && name);
 	FILE *input = embed_fopen_or_die(name, "rb");
-	long r = 0, c1 = 0, c2 = 0;
+	long r = 0;
 	for(size_t i = 0; i < max_size_t(64, embed_cells(h)); i++, r = i) {
+		int c1 = 0, c2 = 0;
 		assert(embed_cells(h) <= 0x8000);
 		if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0)
 			break;
@@ -92,7 +93,7 @@ static int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block) {
 			t       = instruction & 0x7FFF;
 		} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
 			m_t n = m[sp], T = t;
-			pc = instruction & 0x10 ? m[rp] >> 1 : pc;
+			pc = (instruction & 0x10) ? m[rp] >> 1 : pc;
 			switch((instruction >> 8u) & 0x1f) {
 			case  0:                           break;
 			case  1: T = n;                    break;
@@ -132,7 +133,7 @@ static int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block) {
 				m[sp] = t;
 			if(instruction & 0x40)
 				m[rp] = t;
-			t = instruction & 0x20 ? n : T;
+			t = (instruction & 0x20) ? n : T;
 		} else if (0x4000 & instruction) { /* call */
 			m[--rp] = pc << 1;
 			pc      = instruction & 0x1FFF;

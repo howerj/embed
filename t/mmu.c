@@ -94,17 +94,6 @@ bool bitmap_get(bitmap_t *b, size_t bit) {
 	return !!(b->map[bit/BITS] & (1u << (bit & MASK)));
 }
 
-typedef int (*bitmap_foreach_callback_t)(bitmap_t *b, size_t bit, void *param);
-
-int bitmap_foreach(bitmap_t *b, bitmap_foreach_callback_t cb, void *param) {
-	const size_t bits = b->bits;
-	int r = 0;
-	for(size_t i = 0; i < bits; i++)
-		if((r = cb(b, i, param)) < 0)
-			return r;
-	return 0;
-}
-
 /* ================= Bit Map Routines : End =============================== */
 
 static bitmap_t *read_map  = NULL;

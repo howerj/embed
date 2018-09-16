@@ -552,8 +552,6 @@ system -order
 \  this code is an adaptation of the routines by
 \  Dreas Nielson, 1990; Dynamic Memory Allocation;
 \  Forth Dimensions, V. XII, No. 3, pp. 17-27
-\ @todo This could use refactoring and better error checking, 'free' could
-\ check that its arguments are within bounds and on the free list
 
 \ pointer to beginning of free space
 variable freelist  0 , 
@@ -959,7 +957,6 @@ T{ $8000 1 rshift -> $4000 }T
 
 T{ 99 throws? throw -> 99 }T
 
-\ @todo u/mod tests, and more sign related tests
 T{ 50 10 /mod ->  0  5 }T
 T{ -4 3  /mod -> -1 -1 }T
 T{ -8 3  /mod -> -2 -2 }T

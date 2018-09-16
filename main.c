@@ -33,7 +33,7 @@ static int run(embed_t *h, embed_vm_option_e opt, bool load, FILE *in, FILE *out
 
 static int run_file(embed_t *h, embed_vm_option_e opt, bool load, char *in_file, FILE *out, char *iblk, char *oblk) {
 	FILE *in = embed_fopen_or_die(in_file, "rb");
-	int r = run(h, opt, load, in, out, iblk, oblk);
+	const int r = run(h, opt, load, in, out, iblk, oblk);
 	fclose(in);
 	return r;
 }
@@ -45,13 +45,13 @@ Author:  Richard James Howe\n\
 License: MIT\n\
 Site:    https://github.com/howerj/embed\n\n\
 Options:\n\
-  -i in.blk   load virtual machine image from 'in.blk'\n\
-  -o out.blk  set save location to 'out.blk'\n\
-  -h          display this help message and die\n\
-  -q          quite mode on\n\
-  -t          turn tracing on\n\
-  --          stop processing command arguments\n\
-  file.fth    read from 'file.fth'\n\n\
+\t-i in.blk   load virtual machine image from 'in.blk'\n\
+\t-o out.blk  set save location to 'out.blk'\n\
+\t-h          display this help message and die\n\
+\t-q          quite mode on\n\
+\t-t          turn tracing on\n\
+\t--          stop processing command arguments\n\
+\tfile.fth    read from 'file.fth'\n\n\
 If no input Forth file is given standard input is read from. If no input\n\
 block is given a built in block containing an eForth interpreter is\n\
 used.\n\
@@ -77,9 +77,8 @@ int main(int argc, char **argv) {
 	binary(stdout);
 	binary(stderr);
 
-	static embed_t h;
-	static uint16_t m[EMBED_CORE_SIZE] = { 0 };
-	h.m = m;
+	static cell_t m[EMBED_CORE_SIZE] = { 0 };
+	static embed_t h = { .m = m };
 	if(embed_default_hosted(&h) < 0)
 		embed_fatal("embed: load failed\n");
 

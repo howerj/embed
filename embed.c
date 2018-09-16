@@ -46,7 +46,7 @@ int embed_default(embed_t *h) {
 int embed_sgetc_cb(void *string_ptr, int *no_data) {
 	assert(string_ptr && no_data);
 	char **sp = (char**)string_ptr;
-	char ch = **sp;
+	const char ch = **sp;
 	if(!ch)
 		return -1;
 	(*sp)++;
@@ -150,11 +150,11 @@ static int disassemble(m_t instruction, char *output, size_t length) {
 	if((0x8000 & instruction)) {
 		return snprintf(output, length, "literal %04x", (unsigned)(0x1FFF & instruction));
 	} else if ((0xE000 & instruction) == 0x6000) {
-		const char *ttn    =  (instruction & 0x80) ? "t->n  " : "      ";
-		const char *ttr    =  (instruction & 0x40) ? "t->r  " : "      ";
-		const char *ntt    =  (instruction & 0x20) ? "n->t  " : "      ";
-		const char *rtp    =  (instruction & 0x10) ? "r->pc " : "      ";
 		const unsigned alu = (instruction >> 8) & 0x1F;
+		const char *ttn    = (instruction & 0x80) ? "t->n  " : "      ";
+		const char *ttr    = (instruction & 0x40) ? "t->r  " : "      ";
+		const char *ntt    = (instruction & 0x20) ? "n->t  " : "      ";
+		const char *rtp    = (instruction & 0x10) ? "r->pc " : "      ";
 		const int rd       = extend((instruction >> 2) & 0x3);
 		const int dd       = extend((instruction     ) & 0x3);
 		return snprintf(output, length, "alu     %02x    %s%s%s%s rd(%2d) dd(%2d)", alu, ttn, ttr, ntt, rtp, rd, dd);
@@ -207,26 +207,26 @@ int embed_vm(embed_t * const h) {
 			m_t n = mr(h, sp), T = t;
 			pc = (instruction & 0x10) ? (mr(h, rp) >> 1) : pc;
 			switch((instruction >> 8u) & 0x1f) {
-			case  0: T = t;                  break;
-			case  1: T = n;                  break;
-			case  2: T = mr(h, rp);          break;
-			case  3: T = mr(h, (t>>1)%l);    break;
-			case  4: mw(h, (t>>1)%l, n); T = mr(h, --sp); break;
-			case  5: d = (d_t)t + n; T = d >> 16; mw(h, sp, d); n = d; break;
-			case  6: d = (d_t)t * n; T = d >> 16; mw(h, sp, d); n = d; break;
-			case  7: T = t&n;                break;
-			case  8: T = t|n;                break;
-			case  9: T = t^n;                break;
-			case 10: T = ~t;                 break;
-			case 11: T = t-1;                break;
-			case 12: T = -(t == 0);          break;
-			case 13: T = -(t == n);          break;
-			case 14: T = -(n < t);           break;
-			case 15: T = -((s_t)n < (s_t)t); break;
-			case 16: T = n >> t;             break;
-			case 17: T = n << t;             break;
-			case 18: T = sp << 1;            break;
-			case 19: T = rp << 1;            break;
+			case  0:  T = t;                  break;
+			case  1:  T = n;                  break;
+			case  2:  T = mr(h, rp);          break;
+			case  3:  T = mr(h, (t>>1)%l);    break;
+			case  4:  mw(h, (t>>1)%l, n); T = mr(h, --sp); break;
+			case  5:  d = (d_t)t + n; T = d >> 16; mw(h, sp, d); n = d; break;
+			case  6:  d = (d_t)t * n; T = d >> 16; mw(h, sp, d); n = d; break;
+			case  7:  T = t&n;                break;
+			case  8:  T = t|n;                break;
+			case  9:  T = t^n;                break;
+			case 10:  T = ~t;                 break;
+			case 11:  T = t-1;                break;
+			case 12:  T = -(t == 0);          break;
+			case 13:  T = -(t == n);          break;
+			case 14:  T = -(n < t);           break;
+			case 15:  T = -((s_t)n < (s_t)t); break;
+			case 16:  T = n >> t;             break;
+			case 17:  T = n << t;             break;
+			case 18:  T = sp << 1;            break;
+			case 19:  T = rp << 1;            break;
 			case 20: sp = t >> 1;            break;
 			case 21: rp = t >> 1; T = n;     break;
 			case 22: if(o->save) { T = o->save(h, o->name, n>>1, ((d_t)t+1)>>1); }    else { pc=4; T=21; } break;

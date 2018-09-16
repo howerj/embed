@@ -1592,7 +1592,7 @@ h: radix base@ dup 2 - $23 u< ?exit decimal $28 -throw ; ( -- u )
 \ This combination of checking catches most errors that occur and makes sure
 \ they do not propagate.
 
-: hold  hld @ 1- dup hld ! c! fallthrough;     ( c -- )
+: hold   hld @ 1- dup hld ! c! fallthrough;     ( c -- )
 h: ?hold hld @ pad $80 - u> ?exit $11 -throw ; ( -- )
 h: extract dup>r um/mod rxchg um/mod r> rot ;  ( ud ud -- ud u )
 h: digit 9 over < 7 and + [char] 0 + ;         ( u -- c )

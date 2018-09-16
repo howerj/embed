@@ -15,7 +15,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
-#define EMBED_CORE_SIZE (32768uL)        /**< core size in cells */
+#define EMBED_CORE_SIZE (32768uL)      /**< core size in cells */
 
 typedef uint16_t cell_t;               /**< Virtual Machine Cell size: 16-bit*/
 typedef  int16_t signed_cell_t;        /**< Virtual Machine Signed Cell */

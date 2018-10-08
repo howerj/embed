@@ -8,6 +8,20 @@
 | Email     | howe.r.j.89@gmail.com             |
 | Website   | <https://github.com/howerj/embed> |
 
+	  ______           _              _ 
+	 |  ____|         | |            | |
+	 | |__   _ __ ___ | |__   ___  __| |
+	 |  __| | '_ ` _ \| '_ \ / _ \/ _` |
+	 | |____| | | | | | |_) |  __/ (_| |
+	 |______|_| |_| |_|_.__/ \___|\__,_|
+	     ______         _   _           
+	    |  ____|       | | | |          
+	    | |__ ___  _ __| |_| |__        
+	    |  __/ _ \| '__| __| '_ \       
+	    | | | (_) | |  | |_| | | |      
+	    |_|  \___/|_|   \__|_| |_|      
+					    
+					
 This project contains a tiny 16-bit Virtual Machine (VM) optimized to execute 
 [Forth][]. It is powerful and well developed enough to be self hosted, 
 the VM and Forth interpreter image can be used to recreate a new image from

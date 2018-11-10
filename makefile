@@ -115,8 +115,8 @@ dist: lib${TARGET}.so lib${TARGET}.a ${TARGET}.pdf embed.1 ${FORTH} ${TARGET}.h 
 
 ### Test Applications ######################################################## 
 
-cpp: t/cpp.cpp util.o libembed.a
-	${CXX} ${CPPFLAGS} -I. -o $@ $^
+cpp: t/cpp.cpp t/embed.hpp util.o libembed.a
+	${CXX} ${CPPFLAGS} -I. -It -o $@ $^
 
 eforth: CC=musl-gcc
 eforth: CFLAGS=-Wall -Wextra -Os -fno-stack-protector -static -std=c99 -DNDEBUG 

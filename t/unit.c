@@ -141,11 +141,13 @@ static void test_embed_file(void) {
 	unit_test_start();
 	embed_t *h = NULL;
 	unit_test_verify((h = embed_new()) != NULL);
-
 	FILE *in = NULL;
-	const char test_program[] = "$CAFE $1040 -\n";
+	static const char test_file[] = "test_program.log";
+	static const char test_program[] = "$CAFE $1040 -\n";
 
-	unit_test_verify((in = tmpfile()) != NULL);
+	/*unit_test_verify((in = tmpfile()) != NULL); // Causes problems on Windows */
+	unit_test_statement(remove(test_file));
+	unit_test_verify((in = fopen(test_file, "wb+")) != NULL);
 	unit_test_verify(fwrite(test_program, 1, sizeof(test_program), in) == sizeof(test_program));
 	unit_test_verify(fflush(in) == 0);
 	unit_test_verify(fseek(in, 0L, SEEK_SET) != -1);
@@ -156,6 +158,7 @@ static void test_embed_file(void) {
 	unit_test(v == 0xBABE);
 
 	unit_test(fclose(in) == 0);
+	unit_test(remove(test_file) == 0);
 
 	unit_test_statement(embed_free(h));
 	unit_test_finish();

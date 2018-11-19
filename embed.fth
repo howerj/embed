@@ -3,7 +3,7 @@
 \	| Project    | A Small Forth VM/Implementation   |
 \	| ---------- | --------------------------------- |
 \	| Author     | Richard James Howe                |
-\	| Copyright  | 2017 Richard James Howe           |
+\	| Copyright  | 2017-2018 Richard James Howe      |
 \	| License    | MIT                               |
 \	| Email      | howe.r.j.89@gmail.com             |
 \	| Repository | <https://github.com/howerj/embed> |
@@ -1056,17 +1056,16 @@ there constant inline-end
 \
 \ The following section of words is purely a space saving measure, or
 \ they allow for other optimizations which also save space. Examples
-\ of this include *[-1]*; any number about $7FFF requires two instructions
+\ of this include *[-1]*; any number above $7FFF requires two instructions
 \ to encode, numbers below only one, -1 is a commonly used number so this
 \ allows us to save on space.
 \
 \ This does not explain the creation of a word to push the number zero
 \ though, this only takes up one instruction.  This is instead explained
 \ by the interaction of the peephole optimizer with function calls, calls
-\ to function can be turned into a branch if that instruction were to be
-\ followed by an exit instruction because it is at the end of a word
-\ definition. This cannot be said of literals. This allows us to save
-\ space under special circumstances.
+\ to functions can be turned into a branch if that instruction is
+\ followed by an exit instruction. This is not true of literals. By defining 
+\ '0' as a function This allows us to save space under special circumstances.
 \
 \ The following example illustrates this:
 \
@@ -1092,7 +1091,7 @@ there constant inline-end
 \ word name and associated concept it encapsulates), making words like
 \ *2drop-0* is not. It hurts readability as there is no reason or idea backing
 \ a word like *2drop-0*, even if it is fairly clear what it does from its
-\ name.
+\ name. This is only done as a space saving measure.
 \
 h: [-1] -1 ;                 ( -- -1 : space saving measure, push -1 )
 h: 0x8000 $8000 ;            ( -- $8000 : space saving measure, push $8000 )
@@ -1104,14 +1103,12 @@ h: first-bit 1 and ;         ( u -- u )
 h: in@ >in @ ;               ( -- u )
 h: base@ base @ ;            ( -- u )
 
-\ Now the implementation of the Forth interpreter without the apologies
-\ for the words in the prior section. This group of words implement some
-\ of the basic words expected in Forth; simple stack manipulation, tests,
-\ and other one, or two line definitions that do not really require an
-\ explanation of how they work - only why they are useful. Some of the words
-\ are described by their stack comment entirely, like *2drop*, other like
-\ *cell+* require a reason for such a simple word (they embody a concept or
-\ they help hide implementation details).
+\ This group of words implement some of the basic words expected in Forth; 
+\ simple stack manipulation, tests, and other one, or two line definitions 
+\ that do not really require an explanation of how they work - only why they 
+\ are useful. Some of the words are described by their stack comment entirely, 
+\ like *2drop*, other like *cell+* require a reason for such a simple word 
+\ (they embody a concept or they help hide implementation details).
 
 h: yield!? >r yield? rdrop ; ( u u -- : )
 h: cpu@    0 cpu-xchg dup cpu! ; ( -- u : get CPU options register )
@@ -1176,7 +1173,7 @@ h: d+ >r swap >r um+ r> + r> + ;         ( d d -- d )
 \ *execute* requires an understanding of the return stack, much like
 \ *doConst* and *doVar*, when given an execution token of a word, a pointer
 \ to its Code Field Address (or CFA), *execute* will call that word. This
-\ allows us to call arbitrary function and change, or vector, execution at
+\ allows us to call arbitrary functions and change, or vector, execution at
 \ run time. All *execute* needs to do is push the address onto the return
 \ stack and when *execute* exits it will jump to the desired word, the callers
 \ address is still on the return stack, so when the called word exit it will
@@ -1353,15 +1350,16 @@ xchange _system _forth-wordlist
 
 h: last get-current @ ;         ( -- pwd )
 
-\ A few character emitting words will now be defined, it should be obvious
-\ what these words do, *emit* is the word that forms the basis of all these
-\ words. By default it is set to the primitive virtual machine instruction
-\ *tx!*. In eForth another character emitting primitive was defined alongside
-\ *emit*, which was *echo*, which allowed for more control in how the
-\ interpreter interacts with the programmer and other programs. It is not
-\ necessary in a hosted Forth to have such a mechanism, but it can be turned
-\ on when needed with a VM CPU option, when we see *^h* and *ktap*.
-\
+\ A few character emitting words will now be defined, *emit* is the word that 
+\ forms the basis of all these words. 
+\ 
+\ By default *emit* is set to the primitive virtual machine instruction
+\ *tx!*. *echo* is also defined, which is used for terminal handling, it is
+\ not usually needed on a hosted Forth and is turned on or off depending on
+\ Virtual Machine register setting (so the same image can be used in an embed
+\ system and in a hosted platform, see *^h* and *ktap* as well for more on
+\ the terminal handling routines).
+\ 
 
 h: echo <echo> @execute ;              ( c -- )
 : emit <emit> @execute ;               ( c -- : write out a char )
@@ -1381,7 +1379,7 @@ h: colon-space [char] : emit space ;   ( -- )
 \ a memory load operation to do this.
 \
 \ In some systems Forth is implemented on this is not possible to do, for
-\ example some Forths running on stack CPUs specifically designed to run Forth
+\ example some Forths running on CPUs specifically designed to run Forth
 \ have stacks made in hardware which are not memory mapped. This is not just
 \ a hypothetical, the H2 Forth CPU (based on the J1 CPU) available at
 \ <https://github.com/howerj/forth-cpu> has stacks whose only operations are

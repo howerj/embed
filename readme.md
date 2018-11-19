@@ -79,7 +79,7 @@ Ad infinitum, the two newly generated images should be byte for byte equal.
 
 Unit tests can be ran typing:
 
-	make tests                     # Using make
+	make test                      # Using make
 	./embed -o unit.blk t/unit.fth # manual invocation
 
 ## Project Organization

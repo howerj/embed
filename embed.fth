@@ -723,6 +723,7 @@ $F    constant l/b-1       ( lines in a block, less one )
 $2BAD constant magic       ( magic number for compiler security )
 $F    constant #highest    ( highest bit in cell )
 
+\ @todo Move <key>, <emit> to system vocabulary
 ( Volatile variables )
 \ $4000 Unused
 $4002 constant last-def    ( last, possibly unlinked, word definition )
@@ -932,9 +933,9 @@ xchange _system _forth-wordlist
 : 1-       1-       ; ( u -- u : decrement top of stack )
 : 0=       0=       ; ( u -- t : if top of stack equal to zero )
 ( h: yield?  yield?   ; ( u -- !!! : exit VM with *u* as return value )
-h: rx?     rx?      ; ( -- c t | -1 t : fetch a single character, or EOF )
-h: tx!     tx!      ; ( c -- : transmit single character )
 xchange _forth-wordlist _system
+: rx?     rx?       ; ( -- c t | -1 t : fetch a single character, or EOF )
+: tx!     tx!       ; ( c -- : transmit single character )
 : (save)   (save)   ; ( u1 u2 -- u : save memory from u1 to u2 inclusive )
 : vm       vm       ; ( ??? -- ??? : perform arbitrary VM call )
 xchange _system _forth-wordlist

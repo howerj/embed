@@ -36,16 +36,8 @@ TESTAPPS+= unix
 endif
 
 FORTH=${TARGET}${EXE}
-B2C=b2c${EXE}
 
 all: ${FORTH}
-
-${B2C}: t/b2c.o
-	${CC} ${CFLAGS} $< -o $@
-
-core.gen.c: ${B2C} embed-1.blk
-	${DF}${B2C} embed_default_block embed-1.blk $@ "eForth Image"
-
 
 embed.o: embed.c embed.h
 
@@ -147,6 +139,12 @@ rom: t/rom.c util.o libembed.a
 
 ref: t/ref.c embed.blk
 	${CC} ${CFLAGS} $< -o $@
+
+b2c.blk: embed b2c.fth embed-1.blk
+	./$< -i embed-1.blk -o $@ b2c.fth
+
+core.gen.c: embed b2c.blk 
+	./$< -i b2c.blk < embed-1.blk > $@
 
 apps: ${TESTAPPS}
 

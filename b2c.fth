@@ -1,16 +1,18 @@
-only forth definitions
-system +order
-decimal
-.( B2C: Binary To C Code filter ) cr
-.( To generate the application: ) cr cr
-.( 	./embed -i embed-1.blk -o b2c.blk b2c.fth ) cr cr
-.( To Run: ) cr cr
-.( 	./embed -i b2c.blk < embed-1.blk > core.gen.c ) cr cr
-.( This program acts as a filter to convert a binary file into a C file ) cr
-.( that contains that file. It used by the 'embed' Forth project to ) cr
-.( convert a newly cross compiled image to a C file for inclusion in the ) cr
-.( embed library. ) cr
-cr
+only forth definitions system +order decimal
+.( Compiling B2C: Binary To C Code filter ) cr
+\
+\ To generate the application:
+\
+\ 	./embed -i embed-1.blk -o b2c.blk b2c.fth 
+\
+\ To Run:
+\
+\ 	./embed -i b2c.blk < embed-1.blk > core.gen.c 
+\
+\ This program acts as a filter to convert a binary file into a C file 
+\ that contains that file. It used by the 'embed' Forth project to
+\ convert a newly cross compiled image to a C file for inclusion in the
+\ embed library.
 
 72 constant line
 variable cnt
@@ -43,8 +45,11 @@ variable length
 
 ' b2c <boot> !
 
+.( Compilation done ) cr
+
 only forth definitions
+.( Saving... ) cr
 save
-.( Program Compilation Complete ) cr
+.( Program Saved ) cr
 bye
 

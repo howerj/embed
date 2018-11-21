@@ -52,6 +52,15 @@ lib${TARGET}.so: ${TARGET}.o image.o
 ${FORTH}: main.o util.o lib${TARGET}.a 
 	${CC} $^ ${LDFLAGS} -o $@
 
+### New Image Creation (renamed core.gen.c to image.c) ####################### 
+
+b2c.blk: ${TARGET} b2c.fth embed-1.blk
+	${DF}$< -i embed-1.blk -o $@ b2c.fth
+
+core.gen.c: embed b2c.blk 
+	./$< -i b2c.blk < embed-1.blk > $@
+
+
 ### Meta Compilation ######################################################### 
 
 ${META1}: ${FORTH} embed.fth
@@ -86,11 +95,14 @@ check:
 
 ### Documentation ############################################################ 
 
+f2md.blk: ${TARGET} f2md.fth
+	${DF}$< -o $@ f2md.fth
+
+%.md: %.fth f2md.blk ${TARGET}
+	${DF}${TARGET} -i f2md.blk $< > $@
+
 %.pdf: %.md
 	pandoc -V geometry:margin=0.5in --toc $< -o $@
-
-%.md: %.fth t/convert
-	t/${DF}convert $< > $@
 
 %.htm: %.md t/convert
 	markdown $< > $@
@@ -139,12 +151,6 @@ rom: t/rom.c util.o libembed.a
 
 ref: t/ref.c embed.blk
 	${CC} ${CFLAGS} $< -o $@
-
-b2c.blk: embed b2c.fth embed-1.blk
-	./$< -i embed-1.blk -o $@ b2c.fth
-
-core.gen.c: embed b2c.blk 
-	./$< -i b2c.blk < embed-1.blk > $@
 
 apps: ${TESTAPPS}
 

@@ -4,7 +4,7 @@
 .SH NAME
 embed \- embed virtual machine
 .SH SYNOPSIS
-embed [-hqt] -i in.blk -o out.blk file.fth
+embed [-hqt] -i in.blk -o out.blk -I file.fth -O file.txt file.fth
 .SH DESCRIPTION
 A simple and compact Forth Virtual machine, derived from the H2 CPU
 (from <https://github.com/howerj/forth-cpu>, which in turn derives from the J1
@@ -17,9 +17,9 @@ No options are mandatory.
 .TP
 .B -i in.blk
 Select initial input block, this block will be loaded off of disk and used as
-memory for the Virtual machine, maximum block size is 65535 bytes. If no input
-block is specified then an internal initial block will be used instead, which
-contains a fully working eForth interpreter.
+memory for the Virtual machine, maximum block size is 65536 bytes, or 32768
+cells. If no input block is specified then an internal initial block will be 
+used instead, which contains a fully working eForth interpreter.
 
 .TP
 .B -o out.blk
@@ -44,6 +44,22 @@ option if it is given, this option justs set the bit to indicate a quite mode.
 Turn tracing on, this sets an option turn on tracing in the virtual machine.
 This will do anything if the library has been compiled with the NDEBUG macro
 defined.
+
+.TP
+.B -I
+
+Set input file. This replaces the standard input as the input file.
+
+.TP
+.B -O
+
+Set output file. This replaces the standard output as the output file.
+
+.TP
+.B -T
+
+Run the built in self tests, returning zero on success, and non-zero on
+failure. The test results are printed to the screen.
 
 .TP
 .B file.fth

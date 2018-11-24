@@ -27,6 +27,19 @@ typedef enum {
 	EMBED_LOG_LEVEL_ALL_ON,  /**< Turn all log messages on */
 } embed_log_level_e; /**< Log levels, and all on/off enumerations */
 
+typedef struct {
+	const char *arg;   /**< parsed argument */
+	int error,   /**< turn error reporting on/off */
+	    index,   /**< index into argument list */
+	    option,  /**< parsed option */
+	    reset;   /**< set to reset */
+	const char *place; /**< internal use: scanner position */
+	int  init;   /**< internal use: initialized or not */
+} embed_getopt_t;    /**< getopt clone */
+
+/* returns -1 when finished, '?' (bad option), ':' (bad argument) on error */
+int embed_getopt(embed_getopt_t *opt, int nargc, char *const nargv[], const char *fmt);
+
 /**@brief Set the global log level, this may be any
 * @param level, level to log up to, any log level equal to or lower than than
 * this value will be logged */
@@ -147,6 +160,11 @@ int embed_load_file(embed_t *h, FILE *input);
  * @param name,  name of file to load
  * @return zero on success, negative on failure */
 int embed_save(const embed_t *h, const char *name);
+
+/**@brief Run the built in self tests for the eForth interpreter, this may
+ * generate temporary files in the directory the executable is run.
+ * @return zero on success, negative on failure */
+int embed_tests(void);
 
 #ifndef NDEBUG
 #define embed_fatal(...)   embed_logger(EMBED_LOG_LEVEL_FATAL,   __FILE__, __func__, __LINE__, __VA_ARGS__)

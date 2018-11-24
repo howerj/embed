@@ -114,7 +114,7 @@ typedef struct {
 	embed_vm_option_e options;  /**< virtual machine options register */
 } embed_opt_t; /**< Embed VM options structure for customizing behavior */
 
-struct embed_t {
+struct embed_t { /**@todo merge with embed_opt_t */
 	embed_opt_t o; /**< options structure for virtual machine */
 	void *m;       /**< virtual machine core memory - @warning you need to set this to something sensible! */
 }; /**< Embed Forth VM structure */

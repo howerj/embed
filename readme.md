@@ -118,6 +118,9 @@ all of these goals, but might fall short.
     extensions.
 * [ ] Virtual Machine and eForth Image/Metacompiler that uses 'uintptr\_t'
 * [x] Port the library to a small microcontroller (see <https://github.com/howerj/arduino>)
+* [ ] Simplify the API. Currently the API is too complex and needs rethinking,
+  it is flexible, but complex, and the user has to think too much about the
+  implementation details.
 
 [MIT License]: LICENSE
 [embed.c]: embed.c

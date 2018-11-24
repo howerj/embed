@@ -17,10 +17,10 @@ CMP=cmp
 AR=ar
 ARFLAGS=rcs
 RM=rm -fv
-TESTAPPS=cpp call mmu rom ref
+TESTAPPS=call mmu rom
 TRACER=
 
-.PHONY: all clean run cross double-cross default test docs apps dist check
+.PHONY: all clean run cross double-cross default test docs apps dist check BIST
 
 default: all
 
@@ -58,8 +58,7 @@ b2c.blk: ${TARGET} b2c.fth embed-1.blk
 	${DF}$< -i embed-1.blk -o $@ b2c.fth
 
 core.gen.c: embed b2c.blk 
-	./$< -i b2c.blk < embed-1.blk > $@
-
+	./$< -i b2c.blk -I embed-1.blk -O $@
 
 ### Meta Compilation ######################################################### 
 
@@ -82,11 +81,11 @@ run: cross
 ${UNIT}: ${FORTH} ${META1} t/unit.fth
 	${DF}${FORTH} -o ${UNIT} -i ${META1} t/unit.fth
 
-unit: t/unit.c util.o libembed.a
-	${CC} ${CFLAGS} $^ -o $@
+# Built in self tests
+BIST: ${FORTH}
+	${DF}${FORTH} -T
 
-test: unit ${UNIT}
-	${DF}unit${EXE}
+test: BIST ${UNIT}
 
 ### Static Code Analysis ##################################################### 
 
@@ -119,16 +118,6 @@ dist: lib${TARGET}.so lib${TARGET}.a ${TARGET}.pdf embed.1 ${FORTH} ${TARGET}.h 
 
 ### Test Applications ######################################################## 
 
-cpp: t/cpp.cpp t/embed.hpp util.o libembed.a
-	${CXX} ${CPPFLAGS} -I. -It -o $@ $^
-
-eforth: CC=musl-gcc
-eforth: CFLAGS=-Wall -Wextra -Os -fno-stack-protector -static -std=c99 -DNDEBUG 
-eforth: LDFLAGS=-Wl,-O1
-eforth: embed.c image.c util.c main.c
-	${CC} ${CFLAGS} $^ -o $@
-	strip $@
-
 unix: CFLAGS=-O2 -Wall -Wextra -std=gnu99 -I.
 unix: t/unix.c util.o libembed.a
 	${CC} ${CFLAGS} $^ -o $@
@@ -148,9 +137,6 @@ mmu: t/mmu.c util.o libembed.a
 rom: CFLAGS=-O2 -Wall -Wextra -std=c99 -I. -g
 rom: t/rom.c util.o libembed.a 
 	${CC} ${CFLAGS} $^ -o $@
-
-ref: t/ref.c embed.blk
-	${CC} ${CFLAGS} $< -o $@
 
 apps: ${TESTAPPS}
 

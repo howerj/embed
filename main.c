@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
 	/**@todo Cleanup logic here, of when things are loaded and such */
 	while ((ch = embed_getopt(&go, argc, argv, "hqtTi:o:I:O:")) != -1) {
 		switch (ch) {
-		case 'h': embed_fatal("%s", help); break;
+		case 'h': fputs(help, stdout); return 0;
 		case 'i': iblk = go.arg; break;
 		case 'o': oblk = go.arg; break;
 		case 'q': option |= EMBED_VM_QUITE_ON; break;
@@ -87,12 +87,12 @@ int main(int argc, char **argv) {
 		case 'O': if (out != stdout) { fclose(out); } out = embed_fopen_or_die(go.arg, "wb"); break;
 		case 'I': if (in  != stdin)  { fclose(in); }  in  = embed_fopen_or_die(go.arg, "rb"); break;
 		case 'T': return embed_tests();
-		default: embed_fatal("%s", help); break;
+		default: fputs(help, stdout); return 1;
 		}
 	}
 
 	for (int i = go.index; i < argc; i++) {
-		if ((r = run_file(&h, option | EMBED_VM_QUITE_ON, !ran, argv[i], out, iblk, oblk) < 0))
+		if ((r = run_file(&h, option | EMBED_VM_QUITE_ON, !ran, argv[i], out, iblk, oblk)) < 0)
 			break;
 		ran = true;
 	}

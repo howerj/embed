@@ -145,10 +145,8 @@ apps: ${TESTAPPS}
 clean:
 	${RM} ${FORTH} *.blk ${B2C}
 	${RM} *.o *.a *.so *.pdf *.htm *.log
-	${RM} *.gen.c
-	${RM} *.tgz
-	${RM} *.bin
-	${RM} ${TESTAPPS} eforth unit
+	${RM} *.gen.c *.tgz *.bin
+	${RM} ${TESTAPPS}
 
 ### EOF ###################################################################### 
 

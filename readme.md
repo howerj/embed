@@ -76,7 +76,6 @@ We can then use the new image to generate a further image:
 
 Ad infinitum, the two newly generated images should be byte for byte equal.
 
-
 Unit tests can be ran typing:
 
 	make test                      # Using make
@@ -100,7 +99,6 @@ functionality or change the input and out mechanisms to the virtual machine.
 * [call.c][]:  Extends the virtual machine with floating point operations
 * [unix.c][]:  Unix non-blocking and raw terminal I/O handling test
 * [win.c][]:   Windows equivalent of [unix.c][].
-* [cpp.cpp][]: C++ test program to make sure library header is C++ compatible
 
 ## Project Goals
 
@@ -116,8 +114,8 @@ all of these goals, but might fall short.
 * [x] C Test programs
   * [x] Test applications for Windows/Unix non-block I/O, and callback
     extensions.
-* [ ] Virtual Machine and eForth Image/Metacompiler that uses 'uintptr\_t'
 * [x] Port the library to a small microcontroller (see <https://github.com/howerj/arduino>)
+* [ ] Virtual Machine and eForth Image/Metacompiler that uses 'uintptr\_t'
 * [ ] Simplify the API. Currently the API is too complex and needs rethinking,
   it is flexible, but complex, and the user has to think too much about the
   implementation details.
@@ -132,7 +130,6 @@ all of these goals, but might fall short.
 [call.c]: t/call.c
 [unix.c]: t/unix.c
 [win.c]: t/win.c
-[cpp.cpp]: t/cpp.cpp
 [C compiler]: https://gcc.gnu.org/
 [make]: https://www.gnu.org/software/make/
 [Windows]: https://en.wikipedia.org/wiki/Microsoft_Windows

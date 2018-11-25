@@ -5,8 +5,7 @@
  *
  *  Do not be afraid to modify things and generally hack around with things,
  *  if you want to port this to a microcontroller you might need to modify
- *  this file and 'embed.c' as well.
- */
+ *  this file and 'embed.c' as well. */
 #ifndef UTIL_H
 #define UTIL_H
 #ifdef __cplusplus

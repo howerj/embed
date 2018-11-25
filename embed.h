@@ -93,9 +93,9 @@ typedef void (*embed_mmu_write_t)(embed_t * const h, cell_t addr, cell_t value);
 typedef int (*embed_yield_t)(void *param);
 
 typedef enum {
-	EMBED_VM_TRACE_ON        = 1u << 0, /**< turn tracing on */
-	EMBED_VM_RAW_TERMINAL    = 1u << 1, /**< raw terminal mode */
-	EMBED_VM_QUITE_ON        = 1u << 2, /**< turn off 'ok' prompt and welcome message */
+	EMBED_VM_TRACE_ON     = 1u << 0, /**< turn tracing on */
+	EMBED_VM_RAW_TERMINAL = 1u << 1, /**< raw terminal mode */
+	EMBED_VM_QUITE_ON     = 1u << 2, /**< turn off 'ok' prompt and welcome message */
 } embed_vm_option_e; /**< VM option enum */
 
 typedef struct {
@@ -194,7 +194,7 @@ cell_t embed_swap(cell_t s);
 
 /**@brief Swap byte order of a buffer of 2-byte values
  * @param b, buffer to change endianess of
- * @param l, length of buffer in cell_t*/
+ * @param l, length of buffer in cell_t */
 void embed_buffer_swap(cell_t *b, size_t l);                  
 
 /**@brief Run the virtual machine directly, with custom options.
@@ -258,7 +258,7 @@ void embed_reset(embed_t *h);
 /**@brief get a pointer to VM core
  * @warning be careful with this!
  * @param h, initialized Virtual Machine image
- * @return point to core image of embed_length() bytes long  */
+ * @return point to core image of embed_length() bytes long */
 cell_t *embed_core_get(embed_t *h);        
 
 /**@brief evaluate a string, each line should be less than 80 chars and end in a newline

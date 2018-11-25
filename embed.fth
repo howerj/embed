@@ -291,7 +291,7 @@ a: #branch  $0000 a; ( unconditional branch )
 \ is the source code for it which weighs in at under two hundred lines of
 \ C code. Unfortunately this would not include that rationale that led to
 \ the virtual machine being the way it is.
-
+\ 
 \ ALU Operations
 a: #t      $0000 a; ( T = t )
 a: #n      $0100 a; ( T = n )
@@ -525,7 +525,7 @@ a: return ( -- : Compile a return into the target )
 \ different way.
 \
 \	: a b h: cd c d ;; ( define 'a', a normal word, and 'cd' )
-\ 	: cde cd e ;       ( use 'cd', and also do 'e' )
+\	: cde cd e ;       ( use 'cd', and also do 'e' )
 \
 \ This is still used for code sharing allowing the tail end of a word to be
 \ used within a definition.
@@ -1388,7 +1388,7 @@ h: colon-space [char] : emit space ;   ( -- )
 \ stack depth. On a platform like this, *pick* can still be implemented,
 \ but it is more complex and can be done like this:
 \
-\   : pick ?dup if swap >r 1- pick r> swap exit then dup ;
+\	: pick ?dup if swap >r 1- pick r> swap exit then dup ;
 \
 
 h: vrelative sp@ swap - ;  ( u -- u : position relative to sp )
@@ -1569,7 +1569,7 @@ h: radix base@ dup 2 - $23 u< ?exit decimal $28 -throw ; ( -- u )
 \ Lets look at how conversion would work for the number 1234 in base 10. We
 \ start of the number to convert and extract the first digit:
 \
-\ 	1234 / 10 = 123, remainder 4 (hold ASCII 4)
+\	1234 / 10 = 123, remainder 4 (hold ASCII 4)
 \
 \ We then add *4* to the hold space, which is the last digit that needs to
 \ be output, hence storage in reverse order. We then continue on with the
@@ -1804,10 +1804,10 @@ h: raw? cpu@ 2 and 0<> ; ( c -- t : raw terminal mode? )
     \ so we should try to keep the stack elements from 'accept' hidden
     >r 2>r key 2r> rot r> swap dup
     raw? if ( we need to handle echoing, and handling delete keys )
-	\ =bl - 95 u< if tap else <tap> @execute then
-	ktap? if tap else <tap> @execute then
+      \ =bl - 95 u< if tap else <tap> @execute then
+      ktap? if tap else <tap> @execute then
     else ( the terminal takes care of it )
-	=lf xor if tap else drop-nip-dup then
+      =lf xor if tap else drop-nip-dup then
     then
   repeat drop over- ;
 
@@ -2452,12 +2452,12 @@ h: set-input <ok> ! id ! in! #tib 2! ;     ( n1...n5 -- )
 \ ## Control Structures and Defining words
 \
 \
-\    Companions the creator seeks, not corpses, not herds and believers.
-\    Fellow creators the creator seeks -- those who write new values on
-\    new tablets.
-\    Companions the creator seeks, and fellow harvesters; for everything about
-\    him is ripe for the harvest.
-\    - Friedrich Nietzsche
+\	Companions the creator seeks, not corpses, not herds and believers.
+\	Fellow creators the creator seeks -- those who write new values on
+\	new tablets.
+\	Companions the creator seeks, and fellow harvesters; for everything
+\	about him is ripe for the harvest.
+\	- Friedrich Nietzsche
 \
 \ The next set of words defines relating to control structures and defining
 \ new words, along with some basic error checking for the control structures
@@ -2480,13 +2480,13 @@ h: set-input <ok> ! id ! in! #tib 2! ;     ( n1...n5 -- )
 \
 \ Using our *unless* example:
 \
-\     : unless ' 0= compile, postpone if ; immediate
+\	: unless ' 0= compile, postpone if ; immediate
 \
 \ We this newly defined control structure like so:
 \
-\     : x unless 99 . cr then ;
-\     0 x ( prints *99* )
-\     1 x ( prints nothing )
+\	: x unless 99 . cr then ;
+\	0 x ( prints *99* )
+\	1 x ( prints nothing )
 \
 \ Not only are the control structures defined in this section, but so are
 \ several defining words. These Nietzschean words create new values and
@@ -3723,19 +3723,21 @@ wrong.
 	/* Embed Forth Virtual Machine, Richard James Howe, 2017-2018, MIT License */
 	#include <assert.h>
 	#include <errno.h>
+	#include <stdarg.h>
 	#include <stdint.h>
 	#include <stdio.h>
 	#include <stdlib.h>
 	#include <string.h>
-	#include <stdarg.h>
 
 	typedef uint16_t m_t;
 	typedef  int16_t s_t;
 	typedef uint32_t d_t;
 	typedef struct forth_t { m_t m[32768]; } forth_t;
 
-	void embed_die(const char *fmt, ...)
-	{
+	static inline size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
+	static inline size_t max_size_t(size_t a, size_t b)       { return a > b ? a : b; }
+
+	static void embed_die(const char *fmt, ...) {
 		assert(fmt);
 		va_list arg;
 		va_start(arg, fmt);
@@ -3745,8 +3747,7 @@ wrong.
 		exit(EXIT_FAILURE);
 	}
 
-	FILE *embed_fopen_or_die(const char *file, const char *mode)
-	{
+	static FILE *embed_fopen_or_die(const char *file, const char *mode) {
 		assert(file && mode);
 		FILE *h = NULL;
 		errno = 0;
@@ -3755,18 +3756,14 @@ wrong.
 		return h;
 	}
 
-	forth_t *embed_new(void)
-	{
+	static forth_t *embed_new(void) {
 		forth_t *h = calloc(1, sizeof(*h));
 		if(!h)
 			embed_die("allocation (of %u) failed", (unsigned)sizeof(*h));
 		return h;
 	}
 
-	static size_t embed_cells(forth_t const * const h) { assert(h); return h->m[5]; } /* count in cells, not bytes */
-
-	static int save(forth_t *h, const char *name, const size_t start, const size_t length)
-	{
+	static int save(forth_t *h, const char *name, const size_t start, const size_t length) {
 		assert(h);
 		if(!name || !(((length - start) <= length) && ((start + length) <= embed_cells(h))))
 			return -69; /* open-file IOR */
@@ -3780,19 +3777,13 @@ wrong.
 		return fclose(out) < 0 ? -62 /* close-file IOR */ : r;
 	}
 
-	forth_t *embed_copy(forth_t const * const h)      { assert(h); return memcpy(embed_new(), h, sizeof(*h)); }
-	int      embed_save(forth_t *h, const char *name) { assert(name); return save(h, name, 0, embed_cells(h)); }
-	size_t   embed_length(forth_t const * const h)    { return embed_cells(h) * sizeof(h->m[0]); }
-	void     embed_free(forth_t *h)                   { assert(h); memset(h, 0, sizeof(*h)); free(h); }
-	char    *embed_core(forth_t *h)                   { assert(h); return (char*)h->m; }
-	static size_t max_size_t(size_t a, size_t b)      { return a > b ? a : b; }
 
-	int embed_load(forth_t *h, const char *name)
-	{
+	static int embed_load(forth_t *h, const char *name) {
 		assert(h && name);
 		FILE *input = embed_fopen_or_die(name, "rb");
-		long r = 0, c1 = 0, c2 = 0;
+		long r = 0;
 		for(size_t i = 0; i < max_size_t(64, embed_cells(h)); i++, r = i) {
+			int c1 = 0, c2 = 0;
 			assert(embed_cells(h) <= 0x8000);
 			if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0)
 				break;
@@ -3802,19 +3793,13 @@ wrong.
 		return r < 64 ? -70 /* read-file IOR */ : 0; /* minimum size checks, 128 bytes */
 	}
 
-	#ifdef NDEBUG
-	#define trace(OUT,M,PC,INSTRUCTION,T,RP,SP)
-	#else
-	static inline void trace(FILE *out, m_t *m, m_t pc, m_t instruction, m_t t, m_t rp, m_t sp)
-	{
-		if(!(m[6] & 1))
+	static inline void trace(FILE *out, m_t opt, m_t *m, m_t pc, m_t instruction, m_t t, m_t rp, m_t sp) {
+		if(!(opt & 1))
 			return;
 		fprintf(out, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, m[2]-rp, sp-m[3]);
 	}
-	#endif
 
-	int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block)
-	{
+	static int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block) {
 		assert(h && in && out);
 		static const m_t delta[] = { 0, 1, -2, -1 };
 		const m_t l = embed_cells(h);
@@ -3822,18 +3807,15 @@ wrong.
 		m_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0, opt = 0;
 		for(d_t d;;) {
 			const m_t instruction = m[pc++];
-
-			trace(out, m, pc, instruction, t, rp, sp);
+			trace(out, opt, m, pc, instruction, t, rp, sp);
 			if((r = -!(sp < l && rp < l && pc < l))) /* critical error */
 				goto finished;
-
 			if(0x8000 & instruction) { /* literal */
 				m[++sp] = t;
 				t       = instruction & 0x7FFF;
 			} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
 				m_t n = m[sp], T = t;
-				pc = instruction & 0x10 ? m[rp] >> 1 : pc;
-
+				pc = (instruction & 0x10) ? m[rp] >> 1 : pc;
 				switch((instruction >> 8u) & 0x1f) {
 				case  0:                           break;
 				case  1: T = n;                    break;
@@ -3862,7 +3844,7 @@ wrong.
 				case 24: m[++sp] = t; T = fgetc(in); t = T; n = 0;    break; /* n = blocking status */
 				case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
 				case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; } else { pc=4; T=10; } break;
-				case 27: if(t) { t = 0; sp--; r = n; goto finished; } T = t; break;
+				case 27: if(m[rp]) { m[rp] = 0; sp--; r = t; t = n; goto finished; }; T = t; break;
 				/* 28 is virtual machine callback mechanism, not implemented here */
 				case 29: T = opt; opt = t; break;
 				default: pc=4; T=21; break;
@@ -3873,7 +3855,7 @@ wrong.
 					m[sp] = t;
 				if(instruction & 0x40)
 					m[rp] = t;
-				t = instruction & 0x20 ? n : T;
+				t = (instruction & 0x20) ? n : T;
 			} else if (0x4000 & instruction) { /* call */
 				m[--rp] = pc << 1;
 				pc      = instruction & 0x1FFF;
@@ -3888,8 +3870,7 @@ wrong.
 		return (s_t)r;
 	}
 
-	int main(int argc, char **argv)
-	{
+	int main(int argc, char **argv) {
 		forth_t *h = embed_new();
 		if(argc > 4)
 			embed_die("usage: %s [in.blk] [out.blk] [file.fth]", argv[0]);

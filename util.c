@@ -439,6 +439,10 @@ static inline int test_embed_file(void) {
 }
 
 int embed_tests(void) {
+#ifdef NDEBUG
+	embed_warning("NDEBUG Defined - unit tests not compiled into program");
+	return 0;
+#else
 	typedef int (*test_func)(void);
 	test_func funcs[] = {
 		test_embed_swap, test_embed_stack,     test_embed_reset,
@@ -451,5 +455,6 @@ int embed_tests(void) {
 		if (funcs[i]() < 0)
 			r = -1;
 	return r;
+#endif
 }
 

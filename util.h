@@ -81,11 +81,6 @@ FILE *embed_fopen_or_die(const char *file, const char *mode);
  * @return pointer to memory of size 'sz', or NULL on failure */
 void *embed_alloc(size_t sz);
 
-/**@brief 'calloc' or die
- * @param sz, number of bytes to allocate
- * @return pointer to memory of size 'sz', never returns NULL */
-void *embed_alloc_or_die(size_t sz);                             
-
 /**@brief Make a new Forth VM, and load with default image. The default image
  * contains a fully working eForth image.
  * @return a pointer to a new Forth VM, loaded with the default image */

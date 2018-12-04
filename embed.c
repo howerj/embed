@@ -23,7 +23,7 @@ int embed_nputc_cb(int ch, void *file)             { (void)file; return ch; }
 int embed_ngetc_cb(void *file, int *no_data)       { (void)file; assert(no_data); *no_data = 0; return -1; }
 m_t *embed_core_get(embed_t *h)                    { assert(h); return h->m; }
 size_t embed_cells(embed_t const * const h)        { assert(h); return MIN(h->o.read(h, 5), EMBED_CORE_SIZE); } /* count in cells, not bytes */
-m_t embed_swap(m_t s)                              { return (s >> 8) | (s << 8); }
+static inline m_t embed_swap(m_t s)                { return (s >> 8) | (s << 8); }
 void embed_buffer_swap(m_t *b, size_t l)           { assert(b); for (size_t i = 0; i < l; i++) b[i] = embed_swap(b[i]); }
 embed_opt_t *embed_opt_get(embed_t *h)             { assert(h); return &h->o; }
 void embed_opt_set(embed_t *h, embed_opt_t *opt)   { assert(h && opt); memcpy(&h->o, opt, sizeof(*opt)); }

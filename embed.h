@@ -187,11 +187,6 @@ size_t embed_length(embed_t const * const h);
  * @return cells in h*/
 size_t embed_cells(embed_t const * const h);
 
-/**@brief Swap byte order of a 'cell_t'
- * @param s, value to swap byte order of
- * @return cell_t with swapped byte order */
-cell_t embed_swap(cell_t s);                               
-
 /**@brief Swap byte order of a buffer of 2-byte values
  * @param b, buffer to change endianess of
  * @param l, length of buffer in cell_t */

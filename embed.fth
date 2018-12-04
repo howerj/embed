@@ -1277,11 +1277,24 @@ h: doNext 2r> ?dup if 1- >r @ >r exit then cell+ >r ;
 \ on signed values. Note how they are factored to use the *mux* word, with
 \ *min* falling through into it, and *max* calling *mux*, all to save on space.
 \
-
+\ A more useful version of 'mux' operates using bitwise logic only, computing
+\ the operation '(~mask & x1) | (mask & x2)', with the word stack comment
+\ being '( x1 x2 mask -- x )'. However, it is slightly longer.
+\
+\	: mux dup >r and swap r> invert and or ; ( x1 x2 mask -- x )
+\
+\ Or:
+\
+\	: mux dup >r invert and swap r> and or ; 
+\
+\ If you want the multiplexing operating to return bits from x1 instead of
+\ x2 if the corresponding mask bit is true.
+\
 : min 2dup< fallthrough;              ( n n -- n )
 h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 : max 2dup > mux ;                    ( n n -- n )
 
+\ : mux dup>r and swap r> invert and or ;
 ( : 2over 2>r 2dup 2r> 2swap ; )
 ( : 2nip 2>r 2drop 2r> nop ; )
 ( : 4dup 2over 2over ; )
@@ -3920,7 +3933,7 @@ Go online for more examples.
 
 This is a game of [Sokoban][], to play, type:
 
-	cat sokoban.fth /dev/stdin | ./embed embed.blk new.blk
+	./embed sokoban.fth /dev/stdin
 
 On the command line. Four maps are provided, more can be found online at
 <https://github.com/begoon/sokoban-maps>, where the four maps were found.
@@ -4175,7 +4188,10 @@ A [Conways Games Of Life][] in a few screens, adapted to this Forth:
 	: game  begin view iterate done? until ;       ( -- )
 
 	variable seed here seed !
+
+	system +order
 	: random seed 1 cells crc ?dup 0= if here then dup seed ! ;
+	system -order
 
 	: randomize ( k -- )
 	  block b/buf
@@ -4197,10 +4213,10 @@ A [Conways Games Of Life][] in a few screens, adapted to this Forth:
 	4 i      *    
 	5 i       *   
 	q
-	hex
+	decimal
 
 	.( Usage: $19 $18 life ) cr
-	.( Or 'random-life' ) cr
+	.( Or:    random-life ) cr
 
 
 Run in the same way as "sokoban.fth".

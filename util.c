@@ -52,13 +52,6 @@ FILE *embed_fopen_or_die(const char *file, const char *mode) {
 	return h;
 }
 
-void *embed_alloc_or_die(size_t sz) {
-	errno = 0;
-	void *r = embed_alloc(sz);
-		embed_fatal("allocation of size %u bytes failed: %s", (unsigned)sz, strerror(errno));
-	return r;
-}
-
 embed_t *embed_new(void) {
 	embed_t *h = calloc(sizeof(struct embed_t), 1);
 	if (!h)
@@ -282,16 +275,6 @@ static inline int unit_test_finish(unit_test_t *t) {
 #define unit_test(T, EXPR)        _unit_test((T), 0 == (EXPR), (# EXPR), __FILE__, __func__, __LINE__, 0)
 #define unit_test_verify(T, EXPR) _unit_test((T), 0 == (EXPR), (# EXPR), __FILE__, __func__, __LINE__, 1)
 
-static inline int test_embed_swap(void) {
-	unit_test_t t = unit_test_start();
-
-	uint16_t v = 0;
-	unit_test_statement(&t, v = 0x1234);
-	unit_test(&t, embed_swap(v) == 0x3412);
-
-	return unit_test_finish(&t);
-}
-
 static inline int test_embed_stack(void) {
 	unit_test_t t = unit_test_start();
 	embed_t *h = NULL;
@@ -445,9 +428,8 @@ int embed_tests(void) {
 #else
 	typedef int (*test_func)(void);
 	test_func funcs[] = {
-		test_embed_swap, test_embed_stack,     test_embed_reset,
-		test_embed_eval, test_embed_callbacks, test_embed_yields,
-		test_embed_file,
+		test_embed_stack,     test_embed_reset,  test_embed_eval, 
+		test_embed_callbacks, test_embed_yields, test_embed_file,
 	};
 
 	int r = 0;

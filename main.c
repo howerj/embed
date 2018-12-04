@@ -39,7 +39,7 @@ static int run_file(embed_t *h, embed_vm_option_e opt, bool load, char *in_file,
 }
 
 static const char *help ="\
-usage: ./embed -i in.blk -o out.blk file.fth...\n\n\
+usage: ./embed [-hqtTa-] -i in.blk -o out.blk file.fth...\n\n\
 Program: Embed Virtual Machine and eForth Image\n\
 Author:  Richard James Howe\n\
 License: MIT\n\
@@ -53,11 +53,12 @@ Options:\n\
 \t-I file.fth set input file\n\
 \t-O file.txt set output file\n\
 \t-T          run built in self tests\n\
+\t-a          read from stdin/file specified by '-I' after files\n\
 \t--          stop processing command arguments\n\
 \tfile.fth    read from 'file.fth'\n\n\
 If no input Forth file is given standard input is read from. If no input\n\
 block is given a built in block containing an eForth interpreter is\n\
-used.\n\
+used.\n\n\
 ";
 
 int main(int argc, char **argv) {
@@ -65,7 +66,7 @@ int main(int argc, char **argv) {
 	embed_vm_option_e option = 0;
 	const char *oblk = NULL, *iblk = NULL;
 	FILE *in = stdin, *out = stdout;
-	bool ran = false;
+	bool ran = false, terminal = false;
 	int r = 0, ch;
 	binary(stdin);
 	binary(stdout);
@@ -76,8 +77,7 @@ int main(int argc, char **argv) {
 	if (embed_default_hosted(&h) < 0)
 		embed_fatal("embed: load failed\n");
 
-	/**@todo Cleanup logic here, of when things are loaded and such */
-	while ((ch = embed_getopt(&go, argc, argv, "hqtTi:o:I:O:")) != -1) {
+	while ((ch = embed_getopt(&go, argc, argv, "hqtTi:o:I:O:a")) != -1) {
 		switch (ch) {
 		case 'h': fputs(help, stdout); return 0;
 		case 'i': iblk = go.arg; break;
@@ -87,6 +87,7 @@ int main(int argc, char **argv) {
 		case 'O': if (out != stdout) { fclose(out); } out = embed_fopen_or_die(go.arg, "wb"); break;
 		case 'I': if (in  != stdin)  { fclose(in); }  in  = embed_fopen_or_die(go.arg, "rb"); break;
 		case 'T': return embed_tests();
+		case 'a': terminal = true; break;
 		default: fputs(help, stdout); return 1;
 		}
 	}
@@ -97,7 +98,7 @@ int main(int argc, char **argv) {
 		ran = true;
 	}
 
-	if (go.index == argc)
+	if (go.index == argc || terminal)
 		r = run(&h, option, !ran, in, out, iblk, oblk);
 	fclose(in);
 	fclose(out);

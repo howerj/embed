@@ -4,7 +4,7 @@
 .SH NAME
 embed \- embed virtual machine
 .SH SYNOPSIS
-embed [-hqtT] -i in.blk -o out.blk -I file.fth -O file.txt file.fth
+embed [-hqtTa] -i in.blk -o out.blk -I file.fth -O file.txt file.fth
 .SH DESCRIPTION
 A simple and compact Forth Virtual machine, derived from the H2 CPU
 (from <https://github.com/howerj/forth-cpu>, which in turn derives from the J1
@@ -85,6 +85,12 @@ be written to this file.
 .B ./embed  -i in.blk
 
 Set the initial VM image to 'in.blk'
+
+.TP
+.B
+
+Read from the standard input stream, or the file specified by '-I', after
+processing the file list.
 
 .TP
 .B ./embed -i in.blk -o out.blk file.fth

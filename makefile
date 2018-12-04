@@ -126,7 +126,7 @@ win: CFLAGS=-Wall -Wextra -std=gnu99 -I.
 win: t/win.c util.o libembed.a
 	${CC} ${CFLAGS} $^ -o $@
 
-call: CFLAGS=-O3 -Wall -Wextra -std=c99 -I.
+call: CFLAGS=-O2 -Wall -Wextra -std=c99 -I.
 call: t/call.c util.o libembed.a
 	${CC} ${CFLAGS} $^ -lm -o $@
 

@@ -65,16 +65,10 @@ core.gen.c: embed b2c.blk
 ${META1}: ${FORTH} embed.fth
 	${DF}${FORTH} -o ${META1} embed.fth
 
-${META2}: ${FORTH} ${META1} embed.fth
-	${DF}${FORTH} -o ${META2} -i ${META1} embed.fth
-
 cross: ${META1}
 
-double-cross: ${META2}
-	${CMP} ${META1} ${META2}
-
-run: cross
-	${TRACER} ${DF}${FORTH} -o ${TEMP} -i ${META1}
+run: cross ref
+	${DF}ref ${META1}
 
 ### Unit Tests ############################################################### 
 
@@ -87,66 +81,18 @@ BIST: ${FORTH}
 
 test: BIST ${UNIT}
 
-### Static Code Analysis ##################################################### 
-
-check:
-	cppcheck --std=c99 -I. --enable=warning,style,performance,portability,information,missingInclude *.c t/*.c
-
-### Documentation ############################################################ 
-
-f2md.blk: ${TARGET} f2md.fth
-	${DF}$< -o $@ f2md.fth
-
-%.md: %.fth f2md.blk ${TARGET}
-	${DF}${TARGET} -i f2md.blk $< > $@
-
-%.pdf: %.md
-	pandoc -V geometry:margin=0.5in --toc $< -o $@
-
-%.htm: %.md t/convert
-	markdown $< > $@
-
-docs: ${TARGET}.pdf ${TARGET}.htm
-
 ### Release Distribution ##################################################### 
 
 embed.blk: embed-1.blk
 	cp $< $@
 
-dist: lib${TARGET}.so lib${TARGET}.a ${TARGET}.pdf embed.1 ${FORTH} ${TARGET}.h embed.blk
-	tar zcf ${TARGET}.tgz $^
-
-### Test Applications ######################################################## 
-
-unix: CFLAGS=-O2 -Wall -Wextra -std=gnu99 -I.
-unix: t/unix.c util.o libembed.a
-	${CC} ${CFLAGS} $^ -o $@
-
-win: CFLAGS=-Wall -Wextra -std=gnu99 -I.
-win: t/win.c util.o libembed.a
-	${CC} ${CFLAGS} $^ -o $@
-
-call: CFLAGS=-O2 -Wall -Wextra -std=c99 -I.
-call: t/call.c util.o libembed.a
-	${CC} ${CFLAGS} $^ -lm -o $@
-
-mmu: CFLAGS=-O2 -Wall -Wextra -std=c99 -I.
-mmu: t/mmu.c util.o libembed.a 
-	${CC} ${CFLAGS} $^ -o $@
-
-rom: CFLAGS=-O2 -Wall -Wextra -std=c99 -I. -g
-rom: t/rom.c util.o libembed.a 
-	${CC} ${CFLAGS} $^ -o $@
-
-apps: ${TESTAPPS}
 
 ### Cleanup ################################################################## 
 
 clean:
-	${RM} ${FORTH} *.blk ${B2C}
+	${RM} ${FORTH} *.blk ref
 	${RM} *.o *.a *.so *.pdf *.htm *.log
 	${RM} *.gen.c *.tgz *.bin
-	${RM} ${TESTAPPS}
 
 ### EOF ###################################################################### 
 

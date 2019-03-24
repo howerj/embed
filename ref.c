@@ -83,7 +83,7 @@ static int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block) {
 	const m_t l = embed_cells(h);
 	m_t * const m = h->m;
 	m_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0, opt = 0;
-	for(d_t d;;) {
+	for(;;) {
 		const m_t instruction = m[pc++];
 		trace(out, opt, m, pc, instruction, t, rp, sp);
 		if((r = -!(sp < l && rp < l && pc < l))) /* critical error */
@@ -97,34 +97,34 @@ static int embed_forth(forth_t *h, FILE *in, FILE *out, const char *block) {
 			switch((instruction >> 8u) & 0x1f) {
 			case  0:                           break;
 			case  1: T = n;                    break;
-			case  2: T = m[rp];                break;
-			case  3: T = m[(t>>1)%l];          break;
-			case  4: m[(t>>1)%l] = n; T = m[--sp]; break;
-			case  5: d = (d_t)t + n; T = d >> 16; m[sp] = d; n = d; break;
-			case  6: d = (d_t)t * n; T = d >> 16; m[sp] = d; n = d; break;
-			case  7: T &= n;                   break;
-			case  8: T |= n;                   break;
-			case  9: T ^= n;                   break;
-			case 10: T = ~t;                   break;
-			case 11: T--;                      break;
-			case 12: T = -(t == 0);            break;
-			case 13: T = -(t == n);            break;
-			case 14: T = -(n < t);             break;
-			case 15: T = -((s_t)n < (s_t)t);   break;
-			case 16: T = n >> t;               break;
-			case 17: T = n << t;               break;
-			case 18: T = sp << 1;              break;
-			case 19: T = rp << 1;              break;
-			case 20: sp = t >> 1;              break;
-			case 21: rp = t >> 1; T = n;       break;
-			case 22: T = save(h, block, n>>1, ((d_t)T+1)>>1); break;
-			case 23: T = fputc(t, out);        break;
-			case 24: m[++sp] = t; T = fgetc(in); t = T; n = 0;    break; /* n = blocking status */
-			case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
-			case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; } else { pc=4; T=10; } break;
-			case 27: if(m[rp]) { m[rp] = 0; sp--; r = t; t = n; goto finished; }; T = t; break;
-			/* 28 is virtual machine callback mechanism, not implemented here */
-			case 29: T = opt; opt = t; break;
+			case  2: T += n;                   break;
+			case  3: T &= n;                   break;
+			case  4: T |= n;                   break;
+			case  5: T ^= n;                   break;
+			case  6: T = ~t;                   break;
+			case  7: T = -(t == n);            break;
+			case  8: T = -((s_t)n < (s_t)t);   break;
+			case  9: T = n >> t;               break;
+			case 10: T--;                      break;
+			case 11: T = m[rp];                break;
+			case 12: T = m[(t>>1)%l];          break;
+			case 13: T = n << t;               break;
+			case 14: T = sp << 1;              break;
+			case 15: T = -(n < t);             break;
+			/* RESERVED: Enable Interrupts */
+			/* RESERVED: Interrupts Enabled? */
+			case 18: T = rp << 1;              break;
+			case 19: T = -(t == 0);            break;
+			case 20: T = 0xD1ED; /* CPU-ID */  break;
+			/* RESERVED: Literal */
+			case 22: m[(t>>1)%l] = n; T = m[--sp]; break;
+			case 23: sp = t >> 1;              break;
+			case 24: rp = t >> 1; T = n;       break;
+			case 25: T = save(h, block, n>>1, ((d_t)T+1)>>1); break;
+			case 26: T = fputc(t, out);        break;
+			case 27: m[++sp] = t; T = fgetc(in); t = T; n = 0;    break; /* n = blocking status */
+			case 28: if(m[rp]) { m[rp] = 0; sp--; r = t; t = n; goto finished; }; T = t; break;
+			case 29: T = opt; opt = T; break;
 			default: pc=4; T=21; break;
 			}
 			sp += delta[ instruction       & 0x3];

@@ -53,25 +53,9 @@ variable header -1 header !  ( if true target headers generated )
 : tnfa nfa ;                   ( PWD -- NFA )
 : meta! ! ;                    ( u a --  )
 : dump-hex #target there $10 + dump ; ( -- )
-( : locations ( -- : list all words and locations in target dictionary )
-(  target.1 @ )
-(  begin )
-(    ?dup )
-(  while )
-(    dup )
-(    nfa count type space dup )
-(    cfa >body @ u. cr )
-(    $3FFF and @ )
-(  repeat ; )
 : display ( -- : display metacompilation and target information )
-(  verbose 0= if exit then )
   hex
   ." COMPILATION COMPLETE" cr
-(   verbose 1 u> if )
-(     dump-hex cr )
-(     ." TARGET DICTIONARY: " cr )
-(     locations )
-(   then )
   ." HOST:   " here        . cr
   ." TARGET: " there       . cr
   ." HEADER: " #target $30 dump cr ;
@@ -95,33 +79,33 @@ a: #?branch $2000 a; ( branch if zero instruction )
 a: #branch  $0000 a; ( unconditional branch )
 a: #t      $0000 a; ( T = t )
 a: #n      $0100 a; ( T = n )
-a: #r      $0200 a; ( T = Top of Return Stack )
-a: #[t]    $0300 a; ( T = memory[t] )
-a: #n->[t] $0400 a; ( memory[t] = n )
-a: #t+n    $0500 a; ( n = n+t, T = carry )
-a: #t*n    $0600 a; ( n = n*t, T = upper bits of multiplication )
-a: #t&n    $0700 a; ( T = T and N )
-a: #t|n    $0800 a; ( T = T  or N )
-a: #t^n    $0900 a; ( T = T xor N )
-a: #~t     $0A00 a; ( Invert T )
-a: #t-1    $0B00 a; ( T == t - 1 )
-a: #t==0   $0C00 a; ( T == 0? )
-a: #t==n   $0D00 a; ( T = n == t? )
-a: #nu<t   $0E00 a; ( T = n < t )
-a: #n<t    $0F00 a; ( T = n < t, signed version )
-a: #n>>t   $1000 a; ( T = n right shift by t places )
-a: #n<<t   $1100 a; ( T = n left  shift by t places )
-a: #sp@    $1200 a; ( T = variable stack depth )
-a: #rp@    $1300 a; ( T = return stack depth )
-a: #sp!    $1400 a; ( set variable stack depth )
-a: #rp!    $1500 a; ( set return stack depth )
-a: #save   $1600 a; ( Save memory disk: n = start, T = end, T' = error )
-a: #tx     $1700 a; ( Transmit Byte: t = byte, T' = error )
-a: #rx     $1800 a; ( Block until byte received, T = byte/error )
-a: #um/mod $1900 a; ( Remainder/Divide: Double Cell )
-a: #/mod   $1A00 a; ( Signed Remainder/Divide: Single Cell )
-a: #bye    $1B00 a; ( Exit Interpreter )
-a: #vm     $1C00 a; ( Arbitrary VM call )
+a: #t+n    $0200 a; ( T = n+t  )
+a: #t&n    $0300 a; ( T = T and N )
+a: #t|n    $0400 a; ( T = T  or N )
+a: #t^n    $0500 a; ( T = T xor N )
+a: #~t     $0600 a; ( Invert T )
+a: #t==n   $0700 a; ( T = n == t? )
+a: #n<t    $0800 a; ( T = n < t, signed version )
+a: #n>>t   $0900 a; ( T = n right shift by t places )
+a: #t-1    $0A00 a; ( T == t - 1 )
+a: #r      $0B00 a; ( T = Top of Return Stack )
+a: #[t]    $0C00 a; ( T = memory[t] )
+a: #n<<t   $0D00 a; ( T = n left  shift by t places )
+a: #sp@    $0E00 a; ( T = variable stack depth )
+a: #nu<t   $0F00 a; ( T = n < t )
+\ RESERVED: Enable Interrupts
+\ RESERVED: Interrupts Enabled?
+a: #rp@    $1200 a; ( T = return stack depth )
+a: #t==0   $1300 a; ( T == 0? )
+\ RESERVED: CPU-ID
+\ RESERVED: Literal
+a: #n->[t] $1600 a; ( memory[t] = n )
+a: #sp!    $1700 a; ( set variable stack depth )
+a: #rp!    $1800 a; ( set return stack depth )
+a: #save   $1900 a; ( Save memory disk: n = start, T = end, T' = error )
+a: #tx     $1A00 a; ( Transmit Byte: t = byte, T' = error )
+a: #rx     $1B00 a; ( Block until byte received, T = byte/error )
+a: #bye    $1C00 a; ( Exit Interpreter )
 a: #cpu    $1D00 a; ( CPU information )
 a: d+1     $0001 or a; ( increment variable stack by one )
 a: d-1     $0003 or a; ( decrement variable stack by one )
@@ -233,7 +217,6 @@ a: return ( -- : Compile a return into the target )
 : dup      ]asm #t      t->n               d+1 alu asm[ ;
 : over     ]asm #n      t->n               d+1 alu asm[ ;
 : invert   ]asm #~t                            alu asm[ ;
-: +        ]asm #t+n              n->t     d-1 alu asm[ ;
 : swap     ]asm #n      t->n                   alu asm[ ;
 : nip      ]asm #t                         d-1 alu asm[ ;
 : drop     ]asm #n                         d-1 alu asm[ ;
@@ -247,6 +230,7 @@ a: return ( -- : Compile a return into the target )
 : =        ]asm #t==n                      d-1 alu asm[ ;
 : u<       ]asm #nu<t                      d-1 alu asm[ ;
 : <        ]asm #n<t                       d-1 alu asm[ ;
+: +        ]asm #t+n                       d-1 alu asm[ ;
 : and      ]asm #t&n                       d-1 alu asm[ ;
 : xor      ]asm #t^n                       d-1 alu asm[ ;
 : or       ]asm #t|n                       d-1 alu asm[ ;
@@ -260,11 +244,6 @@ a: return ( -- : Compile a return into the target )
 : rx?      ]asm #rx     t->n      n->t     d+1 alu asm[ ;
 : tx!      ]asm #tx               n->t     d-1 alu asm[ ;
 : (save)   ]asm #save                      d-1 alu asm[ ;
-: um/mod   ]asm #um/mod t->n                   alu asm[ ;
-: /mod     ]asm #/mod   t->n                   alu asm[ ;
-: /        ]asm #/mod                      d-1 alu asm[ ;
-: mod      ]asm #/mod             n->t     d-1 alu asm[ ;
-: vm       ]asm #vm                            alu asm[ ;
 : cpu-xchg ]asm #cpu                           alu asm[ ;
 : cpu!     ]asm #cpu              n->t     d-1 alu asm[ ;
 : rdrop    ]asm #t                     r-1     alu asm[ ;
@@ -401,10 +380,6 @@ xchange _forth-wordlist _system
 : (save)   (save)   ; ( u1 u2 -- u : save memory from u1 to u2 inclusive )
 : vm       vm       ; ( ??? -- ??? : perform arbitrary VM call )
 xchange _system _forth-wordlist
-: um/mod   um/mod   ; ( d  u2 -- rem div : mixed unsigned divide/modulo )
-: /mod     /mod     ; ( u1 u2 -- rem div : signed divide/modulo )
-: /        /        ; ( u1 u2 -- u : u1 divided by u2 )
-: mod      mod      ; ( u1 u2 -- u : remainder of u1 divided by u2 )
 there constant inline-start
 : exit  exit  fallthrough; compile-only ( -- )
 : >r    >r    fallthrough; compile-only ( u --, R: -- u )
@@ -510,8 +485,8 @@ h: nchars                              ( +n c -- : emit c n times )
 h: colon-space [char] : emit space ;   ( -- )
 h: vrelative sp@ swap - ;  ( u -- u : position relative to sp )
 : depth sp0 vrelative cell- chars ; ( -- u : get current depth )
-: pick cells vrelative @ ;          ( vn...v0 u -- vn...v0 vu )
-h: ndrop cells vrelative sp! drop ; ( 0u...nu n -- : drop n cells )
+: pick ?dup if swap >r 1- pick r> swap exit then dup ; 
+h: ndrop for aft drop then next ; ( 0u...nu n -- : drop n cells )
 h: >char dup $7F =bl within if drop [char] _ then ; ( c -- c )
 : type 0 fallthrough;                  ( b u -- )
 h: typist                              ( b u f -- : print a string )
@@ -546,6 +521,31 @@ h: -throw negate throw ;  ( u -- : negate and throw )
 [t] -throw 2/ 4 tcells t!
 h: 1depth 1 fallthrough; ( ??? -- : check depth is at least one )
 h: ?depth depth < ?exit 4 -throw ; ( ??? n -- check depth )
+
+: um/mod ( ud u -- ur uq )
+  ?dup 0= if $A -throw exit then
+  2dup u<
+  if negate $F
+    for >r dup um+ >r >r dup um+ r> + dup
+      r> r@ swap >r um+ r> or
+      if >r drop 1 + r> else drop then r>
+    next
+    drop swap exit
+  then 2drop drop [-1] dup ;
+: m/mod ( d n -- r q ) \ floored division
+  dup 0< dup >r
+  if
+    negate >r dnegate r>
+  then
+  >r dup 0< if r@ + then r> um/mod r>
+  if swap negate swap exit then ;
+\ : */ >r um* r> m/mod nip ; ( n n n -- )
+: /mod  over 0< swap m/mod ; ( n n -- r q )
+: mod  /mod drop ;           ( n n -- r )
+: /    /mod nip ;            ( n n -- q )
+
+
+
 : decimal  $A fallthrough;  ( -- : set base to decimal )
 h: base! base ! ;           ( u -- : set base )
 : hex     $10 base! ;                      ( -- )
@@ -816,8 +816,6 @@ h: hand
      ' emit  ' ktap
    then fallthrough;
 h: xio  ' accept <expect> ! <tap> ! <echo> ! <ok> ! ;
-h: pace 11 emit ;
-: file ' pace ' drop ' ktap xio ;
 xchange _system _forth-wordlist
 : ] [-1] state !    ;                                ( -- : compile mode )
 : [      state zero ; immediate                      ( -- : command mode )
@@ -900,11 +898,6 @@ xchange _system _forth-wordlist
 ( \ Force tail call )
 ( : ;tail [compile] ; -2 cells allot here @ $1FFF and here ! 1 cells allot ; )
 ( immediate )
-xchange _forth-wordlist _system
-h: trace-execute cpu! >r ; ( u xt -- )
-: trace ( "name" -- : trace a word )
-  find-cfa cpu@ dup>r 1 or ( ' ) trace-execute ( catch ) r> cpu! ( throw ) ;
-xchange _system _forth-wordlist
 h: find-empty-cell 0 fallthrough; ( a -- )
 h: find-cell >r begin dup@ r@ <> while cell+ repeat rdrop ; ( u a -- a )
 : get-order ( -- widn ... wid1 n : get the current search order )

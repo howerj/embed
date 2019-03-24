@@ -20,8 +20,8 @@ variable fence               ( Do not peephole optimize before this point )
 -1   constant optimize       ( Turn optimizations on [-1] or off [0] )
 0    constant swap-endianess ( if true, swap the endianess )
 $4100 constant pad-area      ( area for pad storage )
-$7FFF constant (rp0)         ( start of return stack in *cells* )
-$2400 constant (sp0)         ( start of variable stack in *cells* )
+0     constant (rp0)         ( start of return stack in *cells* )
+0     constant (sp0)         ( start of variable stack in *cells* )
 variable header -1 header !  ( if true target headers generated )
 ( 1   constant verbose ( verbosity level, higher is more verbose )
 #target #max 0 fill    ( Erase the target memory location )
@@ -99,9 +99,8 @@ a: #rp@    $1200 a; ( T = return stack depth )
 a: #t==0   $1300 a; ( T == 0? )
 \ RESERVED: CPU-ID
 \ RESERVED: Literal
-a: #n->[t] $1600 a; ( memory[t] = n )
-a: #sp!    $1700 a; ( set variable stack depth )
-a: #rp!    $1800 a; ( set return stack depth )
+\ UNUSED
+\ UNUSED
 a: #save   $1900 a; ( Save memory disk: n = start, T = end, T' = error )
 a: #tx     $1A00 a; ( Transmit Byte: t = byte, T' = error )
 a: #rx     $1B00 a; ( Block until byte received, T = byte/error )
@@ -114,7 +113,7 @@ a: r+1     $0004 or a; ( increment variable stack by one )
 a: r-1     $000C or a; ( decrement variable stack by one )
 ( a: r-2   $0008 or a; ( decrement variable stack by two, not used )
 a: r->pc   $0010 or a; ( Set Program Counter to Top of Return Stack )
-a: n->t    $0020 or a; ( Set Top of Variable Stack to Next on Variable Stack )
+a: n->[t]  $0020 or a; ( Set Top of Variable Stack to Next on Variable Stack )
 a: t->r    $0040 or a; ( Set Top of Return Stack to Top on Variable Stack )
 a: t->n    $0080 or a; ( Set Next on Variable Stack to Top on Variable Stack )
 : ?set dup $E000 and abort" argument too large " ; ( u -- )
@@ -224,7 +223,6 @@ a: return ( -- : Compile a return into the target )
 : r>       ]asm #r      t->n           r-1 d+1 alu asm[ ;
 : r@       ]asm #r      t->n               d+1 alu asm[ ;
 : @        ]asm #[t]                           alu asm[ ;
-: !        ]asm #n->[t]                    d-1 alu asm[ ;
 : rshift   ]asm #n>>t                      d-1 alu asm[ ;
 : lshift   ]asm #n<<t                      d-1 alu asm[ ;
 : =        ]asm #t==n                      d-1 alu asm[ ;
@@ -235,23 +233,21 @@ a: return ( -- : Compile a return into the target )
 : xor      ]asm #t^n                       d-1 alu asm[ ;
 : or       ]asm #t|n                       d-1 alu asm[ ;
 : sp@      ]asm #sp@    t->n               d+1 alu asm[ ;
-: sp!      ]asm #sp!                           alu asm[ ;
 : 1-       ]asm #t-1                           alu asm[ ;
 : rp@      ]asm #rp@    t->n               d+1 alu asm[ ;
-: rp!      ]asm #rp!                       d-1 alu asm[ ;
+
 : 0=       ]asm #t==0                          alu asm[ ;
 : yield?   ]asm #bye                           alu asm[ ;
-: rx?      ]asm #rx     t->n      n->t     d+1 alu asm[ ;
-: tx!      ]asm #tx               n->t     d-1 alu asm[ ;
+: rx?      ]asm #rx     t->n               d+1 alu asm[ ;
+: tx!      ]asm #tx                            alu asm[ ;
 : (save)   ]asm #save                      d-1 alu asm[ ;
-: cpu-xchg ]asm #cpu                           alu asm[ ;
-: cpu!     ]asm #cpu              n->t     d-1 alu asm[ ;
 : rdrop    ]asm #t                     r-1     alu asm[ ;
 : dup@     ]asm #[t]    t->n               d+1 alu asm[ ;
 : dup0=    ]asm #t==0   t->n               d+1 alu asm[ ;
 : dup>r    ]asm #t           t->r      r+1     alu asm[ ;
 : 2dup=    ]asm #t==n   t->n               d+1 alu asm[ ;
 : 2dupxor  ]asm #t^n    t->n               d+1 alu asm[ ;
+: store    ]asm #n      n->[t]             d-1 alu asm[ ;
 : 2dup<    ]asm #n<t    t->n               d+1 alu asm[ ;
 : rxchg    ]asm #r             t->r            alu asm[ ;
 : over-and ]asm #t&n                           alu asm[ ;
@@ -279,8 +275,8 @@ $40   constant word-length ( maximum length of a word )
 $40   constant c/l         ( characters per line in a block )
 $10   constant l/b         ( lines in a block )
 $F    constant l/b-1       ( lines in a block, less one )
-(rp0) 2* constant rp0      ( start of return stack )
-(sp0) 2* constant sp0      ( start of variable stack )
+0     constant rp0      ( start of return stack )
+0     constant sp0      ( start of variable stack )
 $2BAD constant magic       ( magic number for compiler security )
 $F    constant #highest    ( highest bit in cell )
 ( Volatile variables )
@@ -363,7 +359,7 @@ xchange _system _forth-wordlist
 : nip      nip      ; ( n1 n2 -- n2 : remove second item on stack )
 : drop     drop     ; ( n -- : remove item on stack )
 : @        @        ; ( a -- u : load value at address )
-: !        !        ; ( u a -- : store *u* at address *a* )
+: !     store drop  ; ( u a -- : store *u* at address *a* )
 : rshift   rshift   ; ( u1 u2 -- u : shift u2 by u1 places to the right )
 : lshift   lshift   ; ( u1 u2 -- u : shift u2 by u1 places to the left )
 : =        =        ; ( u1 u2 -- t : does u2 equal u1? )
@@ -375,8 +371,8 @@ xchange _system _forth-wordlist
 : 1-       1-       ; ( u -- u : decrement top of stack )
 : 0=       0=       ; ( u -- t : if top of stack equal to zero )
 xchange _forth-wordlist _system
-: rx?     rx?       ; ( -- c t | -1 t : fetch a single character, or EOF )
-: tx!     tx!       ; ( c -- : transmit single character )
+: rx?     rx?  0    ; ( -- c t | -1 t : fetch a single character, or EOF )
+: tx!     tx! drop  ; ( c -- : transmit single character )
 : (save)   (save)   ; ( u1 u2 -- u : save memory from u1 to u2 inclusive )
 : vm       vm       ; ( ??? -- ??? : perform arbitrary VM call )
 xchange _system _forth-wordlist
@@ -397,7 +393,6 @@ h: first-bit 1 and ;         ( u -- u )
 h: in@ >in @ ;               ( -- u )
 h: base@ base @ ;            ( -- u )
 h: yield!? >r yield? rdrop ; ( u u -- : )
-h: cpu@    0 cpu-xchg dup cpu! ; ( -- u : get CPU options register )
 h: ?exit if rdrop exit then ; ( u --, R: xt -- xt| : conditional return )
 : 2drop drop drop ;         ( n n -- )
 : 1+ 1 + ;                  ( n -- n : increment a value  )
@@ -459,11 +454,13 @@ h: 2r> r> r> swap rxchg nop ;          ( -- u1 u2, R: u1 u2 -- )
 h: doNext 2r> ?dup if 1- >r @ >r exit then cell+ >r ;
 [t] doNext tdoNext meta!
 : um* ( u u -- ud )
-	0 swap ( u1 0 u2 ) $F
-	for dup um+ >r >r dup um+ r> + r>
-		if >r over um+ r> + then
-	next rot drop ;
+  0 swap ( u1 0 u2 ) $F
+  for dup um+ >r >r dup um+ r> + r>
+  if >r over um+ r> + then
+  next rot drop ;
 : *    um* drop ;                     ( n n -- n )
+h: rp! ( n -- , R: ??? -- ??? : set the return stack pointer )
+  r> swap begin dup rp@ = 0= while rdrop repeat drop >r ;
 : min 2dup< fallthrough;              ( n n -- n )
 h: mux if drop exit then nip ;        ( n1 n2 b -- n : multiplex operation )
 : max 2dup > mux ;                    ( n n -- n )
@@ -515,13 +512,13 @@ h: $type [-1] typist ;                   ( b u --  )
     handler @ rp!
     r> handler !
     rxchg ( *rxchg* is equivalent to 'r> swap >r' )
-    sp! drop r>
+    sp@ swap - ndrop r>
   then ;
 h: -throw negate throw ;  ( u -- : negate and throw )
 [t] -throw 2/ 4 tcells t!
 h: 1depth 1 fallthrough; ( ??? -- : check depth is at least one )
 h: ?depth depth < ?exit 4 -throw ; ( ??? n -- check depth )
-
+\ h: ?depth dup 0= if drop exit then sp@ 1- u> if 4 -throw exit then ; ( u -- )
 : um/mod ( ud u -- ur uq )
   ?dup 0= if $A -throw exit then
   2dup u<
@@ -543,9 +540,6 @@ h: ?depth depth < ?exit 4 -throw ; ( ??? n -- check depth )
 : /mod  over 0< swap m/mod ; ( n n -- r q )
 : mod  /mod drop ;           ( n n -- r )
 : /    /mod nip ;            ( n n -- q )
-
-
-
 : decimal  $A fallthrough;  ( -- : set base to decimal )
 h: base! base ! ;           ( u -- : set base )
 : hex     $10 base! ;                      ( -- )
@@ -619,8 +613,6 @@ h: ktap                                  ( bot eot cur c -- bot eot cur )
    if =bl tap exit then ^h exit
  then fallthrough;
 h: drop-nip-dup drop nip dup ;
-h: ktap? dup =bl - 95 u< swap =del <> and ; ( c -- t : possible ktap? )
-h: raw? cpu@ 2 and 0<> ; ( c -- t : raw terminal mode? )
 : accept ( b u -- b u )
   over+ over
   begin
@@ -630,12 +622,7 @@ h: raw? cpu@ 2 and 0<> ; ( c -- t : raw terminal mode? )
     \ is exhausted it is an exit and potential entry point into the program,
     \ so we should try to keep the stack elements from 'accept' hidden
     >r 2>r key 2r> rot r> swap dup
-    raw? if ( we need to handle echoing, and handling delete keys )
-      \ =bl - 95 u< if tap else <tap> @execute then
-      ktap? if tap else <tap> @execute then
-    else ( the terminal takes care of it )
-      =lf xor if tap else drop-nip-dup then
-    then
+    =lf xor if tap else drop-nip-dup then
   repeat drop over- ;
 : expect <expect> @execute span ! drop ;   ( b u -- )
 : query tib tib-length <expect> @execute #tib ! drop-0 fallthrough;
@@ -806,20 +793,17 @@ xchange _forth-wordlist _system
 h: (ok) state@ ?exit ."  ok" cr ;  ( -- : default state aware prompt )
 ( : ok <ok> @execute ; )
 h: preset tib-start #tib cell+ ! 0 in! id zero ;  ( -- : reset input )
-h: quite? 4 cpu@ and 0<> ; ( -- t : are we operating in quite mode? )
-: io! preset fallthrough;  ( -- : initialize I/O )
+: io! ( preset ) fallthrough;  ( -- : initialize I/O )
 h: console ' rx? <key> ! ' tx! <emit> ! fallthrough;
 h: hand
-   quite? 0= ' (ok) and
+   ' (ok)
    ' drop ' tap
-   raw? if 2drop
-     ' emit  ' ktap
-   then fallthrough;
+   fallthrough;
 h: xio  ' accept <expect> ! <tap> ! <echo> ! <ok> ! ;
 xchange _system _forth-wordlist
 : ] [-1] state !    ;                                ( -- : compile mode )
 : [      state zero ; immediate                      ( -- : command mode )
-h: empty sp0 sp! ; ( 0..n -- : empty variable stack )
+h: empty sp@ ndrop ; ( 0..n -- : empty variable stack )
 h: ?error ( n -- : perform actions on error )
   ?dup 0= ?exit
   .             ( print error number )
@@ -976,54 +960,54 @@ h: cold ( -- : performs a cold boot  )
    empty
    rp0 rp!
    <boot> @execute ;
-h: hi quite? ?exit  hex ." eFORTH v" ver 0 u.r cr decimal here . fallthrough;
+h: hi hex ." eFORTH v" ver 0 u.r cr decimal here . fallthrough;
 h: .free $4000 here - u. cr ;             ( -- : print unused program space )
 h: normal-running hi quit ;                                ( -- : boot word )
-h: validate over cfa <> if drop-0 exit then nfa ; ( pwd cfa -- nfa | 0 )
-h: address $1FFF and ; ( u -- u : mask off address bits )
-h: search-for-cfa ( wid cfa -- nfa | 0 : search for CFA in a word list )
-  cells address >r
-  begin
-    dup
-  while
-    dup@ over r@ -rot  within
-    if dup@ r@ validate ?dup if rdrop nip exit then then
-    @
-  repeat rdrop ;
-h: name ( cwf -- a | 0 )
-   >r
-   get-order
-   begin
-     dup
-   while
-     swap r@ search-for-cfa ?dup if >r 1- ndrop r> rdrop exit then
-   1- repeat rdrop ;
-h: ?instruction ( i m e -- i t )
-   >r over-and r> = ;
-( a -- : find word by address, and print )
-h: .name dup address cells 5u.r space  ( a -- )
-         name ?dup if word.count type then ;
-h: .instruction                    ( u -- : decompile a single instruction )
-   0x8000  0x8000 ?instruction if [char] L emit $7FFF and 5u.r exit then
-    $6000   $6000 ?instruction if [char] A emit  drop ( .alu ) exit then
-    $6000   $4000 ?instruction if [char] C emit .name exit then
-    $6000   $2000 ?instruction if [char] Z emit .name exit then
-   [char] B emit .name ;
-h: decompiler ( previous current -- : decompile starting at address )
-  >r
-  begin dup r@ u< while
-    d5u.r colon-space
-    dup@
-    d5u.r space .instruction cr cell+
-  repeat rdrop drop ;
-: see ( --, <string> : decompile a word )
-  token (find) ?not-found
-  swap      2dup= if drop here then >r
-  cr colon-space dup .id dup cr
-  cfa r> decompiler space [char] ; emit
-  dup compile-only? if ."  compile-only" then
-  dup inline?       if ."  inline"       then
-      immediate?    if ."  immediate"    then cr ;
+\ h: validate over cfa <> if drop-0 exit then nfa ; ( pwd cfa -- nfa | 0 )
+\ h: address $1FFF and ; ( u -- u : mask off address bits )
+\ h: search-for-cfa ( wid cfa -- nfa | 0 : search for CFA in a word list )
+\   cells address >r
+\   begin
+\     dup
+\   while
+\     dup@ over r@ -rot  within
+\     if dup@ r@ validate ?dup if rdrop nip exit then then
+\     @
+\   repeat rdrop ;
+\ h: name ( cwf -- a | 0 )
+\    >r
+\    get-order
+\    begin
+\      dup
+\    while
+\      swap r@ search-for-cfa ?dup if >r 1- ndrop r> rdrop exit then
+\    1- repeat rdrop ;
+\ h: ?instruction ( i m e -- i t )
+\    >r over-and r> = ;
+\ ( a -- : find word by address, and print )
+\ h: .name dup address cells 5u.r space  ( a -- )
+\          name ?dup if word.count type then ;
+\ h: .instruction                    ( u -- : decompile a single instruction )
+\    0x8000  0x8000 ?instruction if [char] L emit $7FFF and 5u.r exit then
+\     $6000   $6000 ?instruction if [char] A emit  drop ( .alu ) exit then
+\     $6000   $4000 ?instruction if [char] C emit .name exit then
+\     $6000   $2000 ?instruction if [char] Z emit .name exit then
+\    [char] B emit .name ;
+\ h: decompiler ( previous current -- : decompile starting at address )
+\   >r
+\   begin dup r@ u< while
+\     d5u.r colon-space
+\     dup@
+\     d5u.r space .instruction cr cell+
+\   repeat rdrop drop ;
+\ : see ( --, <string> : decompile a word )
+\   token (find) ?not-found
+\   swap      2dup= if drop here then >r
+\   cr colon-space dup .id dup cr
+\   cfa r> decompiler space [char] ; emit
+\   dup compile-only? if ."  compile-only" then
+\   dup inline?       if ."  inline"       then
+\       immediate?    if ."  immediate"    then cr ;
 : .s depth begin ?dup while dup pick . 1- repeat ."  <sp" cr ; ( -- )
 h: dm+ chars for aft dup@ 5u.r cell+ then next ;        ( a u -- a )
 ( h: dc+ chars for aft dup@ space decompile cell+ then next ; ( a u -- a )

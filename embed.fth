@@ -480,8 +480,6 @@ h: spaces =bl fallthrough;             ( +n -- )
 h: nchars                              ( +n c -- : emit c n times )
    swap 0 max for aft dup emit then next drop ;
 h: colon-space [char] : emit space ;   ( -- )
-h: vrelative sp@ swap - ;  ( u -- u : position relative to sp )
-: depth sp0 vrelative cell- chars ; ( -- u : get current depth )
 : pick ?dup if swap >r 1- pick r> swap exit then dup ; 
 h: ndrop for aft drop then next ; ( 0u...nu n -- : drop n cells )
 h: >char dup $7F =bl within if drop [char] _ then ; ( c -- c )
@@ -517,8 +515,7 @@ h: $type [-1] typist ;                   ( b u --  )
 h: -throw negate throw ;  ( u -- : negate and throw )
 [t] -throw 2/ 4 tcells t!
 h: 1depth 1 fallthrough; ( ??? -- : check depth is at least one )
-h: ?depth depth < ?exit 4 -throw ; ( ??? n -- check depth )
-\ h: ?depth dup 0= if drop exit then sp@ 1- u> if 4 -throw exit then ; ( u -- )
+h: ?depth dup 0= if drop exit then sp@ 1- u> if 4 -throw exit then ; ( u -- )
 : um/mod ( ud u -- ur uq )
   ?dup 0= if $A -throw exit then
   2dup u<
@@ -1008,7 +1005,7 @@ h: normal-running hi quit ;                                ( -- : boot word )
 \   dup compile-only? if ."  compile-only" then
 \   dup inline?       if ."  inline"       then
 \       immediate?    if ."  immediate"    then cr ;
-: .s depth begin ?dup while dup pick . 1- repeat ."  <sp" cr ; ( -- )
+: .s ( -- ) cr sp@ for aft r@ pick . then next ."  <sp" cr ; ( -- )
 h: dm+ chars for aft dup@ 5u.r cell+ then next ;        ( a u -- a )
 ( h: dc+ chars for aft dup@ space decompile cell+ then next ; ( a u -- a )
 : dump ( a u -- )

@@ -13,15 +13,12 @@ variable tdoNext             ( Location of doNext in target )
 variable tdoPrintString      ( Location of .string in target )
 variable tdoStringLit        ( Location of string-literal in target )
 variable fence               ( Do not peephole optimize before this point )
-1984 constant #version       ( Version number )
-5000 constant #target        ( Location where target image will be built )
+6000 constant #target        ( Location where target image will be built )
 2000 constant #max           ( Max number of cells in generated image )
 2    constant =cell          ( Target cell size )
 -1   constant optimize       ( Turn optimizations on [-1] or off [0] )
 0    constant swap-endianess ( if true, swap the endianess )
-$4100 constant pad-area      ( area for pad storage )
-0     constant (rp0)         ( start of return stack in *cells* )
-0     constant (sp0)         ( start of variable stack in *cells* )
+$5100 constant pad-area      ( area for pad storage )
 variable header -1 header !  ( if true target headers generated )
 ( 1   constant verbose ( verbosity level, higher is more verbose )
 #target #max 0 fill    ( Erase the target memory location )
@@ -59,7 +56,6 @@ variable header -1 header !  ( if true target headers generated )
   ." HOST:   " here        . cr
   ." TARGET: " there       . cr
   ." HEADER: " #target $30 dump cr ;
-$26 constant (header-options)
 : checksum #target there crc ; ( -- u : calculate CRC of target image )
 : save-hex ( -- : save target binary to file )
    #target #target there + (save) throw ;
@@ -275,53 +271,41 @@ $40   constant word-length ( maximum length of a word )
 $40   constant c/l         ( characters per line in a block )
 $10   constant l/b         ( lines in a block )
 $F    constant l/b-1       ( lines in a block, less one )
-0     constant rp0      ( start of return stack )
-0     constant sp0      ( start of variable stack )
 $2BAD constant magic       ( magic number for compiler security )
 $F    constant #highest    ( highest bit in cell )
 ( Volatile variables )
-$4002 constant last-def    ( last, possibly unlinked, word definition )
-$4006 constant id          ( used for source id )
-$4008 constant seed        ( seed used for the PRNG )
-$400A constant handler     ( current handler for throw/catch )
-$400C constant block-dirty ( -1 if loaded block buffer is modified )
-$4010 constant <key>       ( -- c : new character, blocking input )
-$4012 constant <emit>      ( c -- : emit character )
-$4014 constant <expect>    ( "accept" vector )
-$4016 constant <tap>       ( "tap" vector, for terminal handling )
-$4018 constant <echo>      ( c -- : emit character )
-$401A constant context     ( holds current context for search order )
+$5002 constant last-def    ( last, possibly unlinked, word definition )
+$5006 constant id          ( used for source id )
+$5008 constant seed        ( seed used for the PRNG )
+$500A constant handler     ( current handler for throw/catch )
+$500C constant block-dirty ( -1 if loaded block buffer is modified )
+$5010 constant <key>       ( -- c : new character, blocking input )
+$5012 constant <emit>      ( c -- : emit character )
+$5014 constant <expect>    ( "accept" vector )
+$5016 constant <tap>       ( "tap" vector, for terminal handling )
+$5018 constant <echo>      ( c -- : emit character )
+$501A constant context     ( holds current context for search order )
   ( area for context is #vocs large )
-$402A constant #tib        ( Current count of terminal input buffer )
-$402C constant tib-buf     ( ... and address )
-$402E constant tib-start   ( backup tib-buf value )
-$1E   constant header-length ( location of length in header )
-$20   constant header-crc    ( location of CRC in header )
-(header-options) constant header-options ( location of options bits in header )
+$502A constant #tib        ( Current count of terminal input buffer )
+$502C constant tib-buf     ( ... and address )
+$502E constant tib-start   ( backup tib-buf value )
+$10   constant header-length ( location of length in header )
+$12   constant header-crc    ( location of CRC in header )
 target.1         +order ( Add target word dictionary to search order )
 meta -order meta +order ( Reorder so *meta* has a higher priority )
 system           -order ( Remove system vocabulary to previously accidents )
 forth-wordlist   -order ( Remove normal Forth words to prevent accidents )
-0        t, \  $0: PC: program counter, jump to start / reset vector
-0        t, \  $2: T, top of stack
-(rp0)    t, \  $4: RP0, return stack pointer
-(sp0)    t, \  $6: SP0, variable stack pointer
-0        t, \  $8: Instruction exception vector
-$8000    t, \  $A: VM Memory Size in cells
-$0000    t, \  $C: VM Options
-0        t, \  $E: Shadow PC
-0        t, \ $10: Shadow T
-(rp0)    t, \ $12: Shadow RP0
-(sp0)    t, \ $14: Shadow SP0
-$4689    t, \ $16: 0x89 'F'
-$4854    t, \ $18: 'T'  'H'
-$0A0D    t, \ $1A: '\r' '\n'
-$0A1A    t, \ $1C: ^Z   '\n'
-0        t, \ $1E: For Length of Forth image, different from VM size
-0        t, \ $20: For CRC of Forth image, not entire VM memory
-$0001    t, \ $22: Endianess check
-#version t, \ $24: Version information
-$0001    t, \ $26: Header options
+0     t, \  $0: PC: program counter, jump to start / reset vector
+0     t, \  $2:
+0     t, \  $4:
+0     t, \  $6: 
+0     t, \  $8:
+0     t, \  $A:
+0     t, \  $C:
+0     t, \  $E:
+0     t, \ $10: For Length of Forth image, different from VM size
+0     t, \ $12: For CRC of Forth image, not entire VM memory
+$0001 t, \ $14: Header options
 0 tlocation    <cold> ( location of 'cold' )
 [t] <cold> 2/ 0  t!   ( set starting word )
 [t] <cold> 2/ $E t!   ( set shadow register starting location )
@@ -330,7 +314,6 @@ h: doConst r> @ ;  ( -- u : push value at return address and exit to caller )
 [t] doVar   tdoVar   meta!
 [t] doConst tdoConst meta!
 0 tlocation root-voc          ( root vocabulary )
-#version constant  ver   ( eForth version )
 pad-area tconstant pad   ( pad variable - offset into temporary storage )
 $8       constant  #vocs ( number of vocabularies in allowed )
 $2       tconstant cell  ( size of a cell in bytes )
@@ -955,9 +938,9 @@ h: cold ( -- : performs a cold boot  )
    $12 retrieve io!
    forth
    empty
-   rp0 rp!
+   0 rp!
    <boot> @execute ;
-h: hi hex ." eFORTH v" ver 0 u.r cr decimal here . fallthrough;
+h: hi hex ." eFORTH v" $1984 0 u.r cr decimal here . fallthrough;
 h: .free $4000 here - u. cr ;             ( -- : print unused program space )
 h: normal-running hi quit ;                                ( -- : boot word )
 \ h: validate over cfa <> if drop-0 exit then nfa ; ( pwd cfa -- nfa | 0 )

@@ -14,12 +14,12 @@
 typedef uint16_t m_t;
 typedef  int16_t s_t;
 typedef uint32_t d_t;
-typedef struct forth_t { m_t m[32768], vs[STK], rs[STK], pc, t, rp, sp, cpu; } forth_t;
+typedef struct forth_t { m_t m[32768], vs[STK], rs[STK], pc, t, rp, sp, cpu; int ch; } forth_t;
 typedef int (*cb)(forth_t *h, void *param); 
 
 static inline size_t cells(forth_t const * const h) { 
 	assert(h); 
-	return sizeof(h->m)/sizeof(h->m[0]); 
+	return sizeof(h->m) / sizeof(h->m[0]); 
 }
 
 static void die(const char *fmt, ...) {
@@ -53,7 +53,7 @@ static int save(forth_t *h, const char *name, const size_t start, const size_t l
 		if (USE_HEX_OUT) {
 			fprintf(out, "%02x%02x\n", ((unsigned)(h->m[i] >> 8) & 255u), (unsigned)(h->m[i] >> 0) & 255u);
 		} else {
-			if (fputc(h->m[i]&255, out) < 0 || fputc(h->m[i]>>8, out) < 0)
+			if (fputc(h->m[i] & 255, out) < 0 || fputc(h->m[i] >> 8, out) < 0)
 				r = -76; /* write-file IOR */
 		}
 	}
@@ -90,6 +90,26 @@ static inline void trace(FILE *out, m_t opt, m_t *m, m_t pc, m_t instruction, m_
 	fprintf(out, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, rp, sp);
 }
 
+static void put(forth_t *h, FILE *in, FILE *out, m_t addr, m_t val) {
+	assert(h && in && out);
+	if (addr < 0x4000/2 || addr > 0x5000/2)
+		h->m[addr] = val;
+	switch (addr) {
+	default:
+		return;
+	}
+}
+
+static m_t get(forth_t *h, FILE *in, FILE *out, m_t addr) {
+	assert(h && in && out);
+	if (addr < 0x4000/2 || addr > 0x5000/2)
+		return h->m[addr];
+	switch (addr) {
+	default:
+		return 0;
+	}
+}
+
 static int run(forth_t *h, m_t opt, FILE *in, FILE *out, const char *block, cb func, void *param) {
 	assert(h && in && out);
 	static const m_t delta[] = { 0, 1, -2, -1 };
@@ -120,7 +140,7 @@ static int run(forth_t *h, m_t opt, FILE *in, FILE *out, const char *block, cb f
 			case  9: T = n >> t;               break;
 			case 10: T--;                      break;
 			case 11: T = rs[rp % STK];         break;
-			case 12: T = m[(t>>1)%l];          break;
+			case 12: T = get(h, in, out, (t>>1)%l); break;
 			case 13: T = n << t;               break;
 			case 14: T = sp;                   break;
 			case 15: T = -(n < t);             break;
@@ -130,9 +150,7 @@ static int run(forth_t *h, m_t opt, FILE *in, FILE *out, const char *block, cb f
 			case 19: T = -(t == 0);            break;
 			case 20: T = 0xD1ED; /* CPU-ID */  break;
 			case 21: T = instruction & 0x7FFF; break; /* lit: internal use only */
-			/* 22: UNUSED */
-			/* 23: UNUSED */
-			/* 24: UNUSED */
+			/* 22-24: UNUSED */
 			/* Hosted instructions only */
 			case 25: if (opt & 2) { T = save(h, block, n>>1, ((d_t)T+1)>>1); } break;
 			case 26: if (opt & 2) { T = fputc(t, out); }       break;
@@ -150,7 +168,7 @@ static int run(forth_t *h, m_t opt, FILE *in, FILE *out, const char *block, cb f
 			if (instruction & 0x40)
 				rs[rp % STK] = t;
 			if (instruction & 0x20)
-				m[(t >> 1) % l] = n;
+				put(h, in, out, (t >> 1) % l, n);
 			t = T;
 		} else if (0x4000 & instruction) { /* call */
 			rs[++rp % STK] = pc << 1;

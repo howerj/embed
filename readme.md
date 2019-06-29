@@ -115,6 +115,15 @@ all of these goals, but might fall short.
   * [x] Test applications for Windows/Unix non-block I/O, and callback
     extensions.
 * [x] Port the library to a small microcontroller (see <https://github.com/howerj/arduino>)
+* [x] Create a cross compiler for the H2 Forth CPU (see the 'h2' branch of this
+  project and <https://github.com/howerj/forth-cpu>).
+* [ ] Change the 'embed' virtual machine so it more closely resembles the 'H2
+  CPU' (see the 'h2' branch for this).
+* [ ] Restructure the dictionary so that word names/code are kept separately 
+  like in most traditional Forth systems. This should make code reused easier
+  and the implementation of 'FORGET' easier as well. This may also require
+  Run Length Encoding of the image to keep its size down as the code and
+  dictionary would be stored in non-contiguous memory locations.
 * [ ] Virtual Machine and eForth Image/Metacompiler that uses 'uintptr\_t'
 * [ ] Simplify the API. Currently the API is too complex and needs rethinking,
   it is flexible, but complex, and the user has to think too much about the

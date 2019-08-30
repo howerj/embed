@@ -2,7 +2,7 @@
 .\" Contact howe.r.j.89@gmail.com to correct errors or typos.
 .TH embed 1 "17 Jun 2018" "0.1.0" "embed man page"
 .SH NAME
-embed \- embed virtual machine
+embed \- embed virtual machine and eForth image
 .SH SYNOPSIS
 embed [-hqtTa] -i in.blk -o out.blk -I file.fth -O file.txt file.fth
 .SH DESCRIPTION
@@ -36,12 +36,12 @@ Print a help message and exit indicating failure.
 .B -q
 
 Turn quite mode on. It is up to the virtual machine image to respect this
-option if it is given, this option justs set the bit to indicate a quite mode.
+option if it is given, this option just sets the bit to indicate a quite mode.
 
 .TP 
 .B -t
 
-Turn tracing on, this sets an option turn on tracing in the virtual machine.
+Turn tracing on, this sets an option to turn on tracing in the virtual machine.
 This will do anything if the library has been compiled with the NDEBUG macro
 defined.
 
@@ -154,7 +154,7 @@ without the source code.
 .TP
 .B save
 
-Save the current image to disk, this will fail if you do not specify and
+Save the current image to disk, this will fail if you do not specify an
 output file when you ran the interpreter with the '-o' option.
 
 .SH COMPILATION

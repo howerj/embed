@@ -118,7 +118,9 @@ all of these goals, but might fall short.
 * [x] Create a cross compiler for the H2 Forth CPU (see the 'h2' branch of this
   project and <https://github.com/howerj/forth-cpu>).
 * [ ] Change the 'embed' virtual machine so it more closely resembles the 'H2
-  CPU' (see the 'h2' branch for this).
+  CPU' (see the 'h2' branch for this here <https://github.com/howerj/embed/tree/h2>). There
+  are some problems with this branch, like the fact that it gets rid of most of
+  the documentation, which should have been reworked instead.
 * [ ] Restructure the dictionary so that word names/code are kept separately 
   like in most traditional Forth systems. This should make code reused easier
   and the implementation of 'FORGET' easier as well. This may also require

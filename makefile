@@ -17,22 +17,19 @@ CMP=cmp
 AR=ar
 ARFLAGS=rcs
 RM=rm -fv
-TESTAPPS=call mmu rom
 TRACER=
 
-.PHONY: all clean run cross double-cross default test docs apps dist check BIST
+.PHONY: all clean run cross double-cross default test dist check
 
 default: all
 
 ifeq ($(OS),Windows_NT)
 DF=
 EXE=.exe
-TESTAPPS+= win
 .PHONY: ${TARGET}
 else # assume unixen
 DF=./
 EXE=
-TESTAPPS+= unix
 endif
 
 FORTH=${TARGET}${EXE}
@@ -72,14 +69,8 @@ run: cross ref
 
 ### Unit Tests ############################################################### 
 
-${UNIT}: ${FORTH} ${META1} t/unit.fth
-	${DF}${FORTH} -o ${UNIT} -i ${META1} t/unit.fth
-
-# Built in self tests
-BIST: ${FORTH}
+test:
 	${DF}${FORTH} -T
-
-test: BIST ${UNIT}
 
 ### Release Distribution ##################################################### 
 

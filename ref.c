@@ -90,7 +90,7 @@ static inline void trace(FILE *out, m_t opt, m_t *m, m_t pc, m_t instruction, m_
 	fprintf(out, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, rp, sp);
 }
 
-static void put(forth_t *h, FILE *in, FILE *out, m_t addr, m_t val) {
+static inline void put(forth_t *h, FILE *in, FILE *out, m_t addr, m_t val) {
 	assert(h && in && out);
 	if (addr < 0x4000/2 || addr > 0x5000/2)
 		h->m[addr] = val;
@@ -100,7 +100,7 @@ static void put(forth_t *h, FILE *in, FILE *out, m_t addr, m_t val) {
 	}
 }
 
-static m_t get(forth_t *h, FILE *in, FILE *out, m_t addr) {
+static inline m_t get(forth_t *h, FILE *in, FILE *out, m_t addr) {
 	assert(h && in && out);
 	if (addr < 0x4000/2 || addr > 0x5000/2)
 		return h->m[addr];
@@ -157,7 +157,7 @@ static int run(forth_t *h, m_t opt, FILE *in, FILE *out, const char *block, cb f
 			case 27: if (opt & 2) { T = fgetc(in); }           break;
 			case 28: if (opt & 2) { if (rs[rp % STK]) { rs[rp % STK] = 0; sp--; r = t; t = n; goto finished; }; T = t; } break;
 			case 29: if (opt & 2) { T = opt; opt = T; } break;
-			case 30: if (opt & 2) { if (func) { T = func(h, param); } else { pc=4; T=21; } }
+			case 30: if (opt & 2) { if (func) { T = func(h, param); } else { pc=4; T=21; } } break;
 			/* 31: UNUSED */
 			default: if (opt & 2) { pc=4; T=21; } break;
 			}

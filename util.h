@@ -46,7 +46,7 @@ void embed_log_level_set(embed_log_level_e level);
 
 /**@brief Get the global log level
 *  @return Global log level */
-embed_log_level_e embed_log_level_get(void);           
+embed_log_level_e embed_log_level_get(void);
 
 /**@brief Exit system with failure */
 void embed_die(void);
@@ -74,7 +74,7 @@ void embed_logger(embed_log_level_e level, const char *file, const char *func, u
  * @param file, name of file to open
  * @param mode, mode to open file in
  * @return An open file handle, this never returns NULL */
-FILE *embed_fopen_or_die(const char *file, const char *mode);        
+FILE *embed_fopen_or_die(const char *file, const char *mode);
 
 /**@brief 'calloc' of size 'sz'
  * @param sz, number of bytes to allocate
@@ -88,7 +88,7 @@ embed_t  *embed_new(void);
 
 /**@brief Free a Forth VM
  * @param h,     initialized Virtual Machine image to free */
-void embed_free(embed_t *h);                                     
+void embed_free(embed_t *h);
 
 /**@brief 'embed_fputc_t' callback to write to a file
  * @param file, a 'FILE*' object to write to
@@ -147,7 +147,7 @@ embed_opt_t embed_opt_default_hosted(void);
  * @param h,      uninitialized Virtual Machine image
  * @param input,  open file to read from to load a disk image
  * @return zero on success, negative on failure */
-int embed_load_file(embed_t *h, FILE *input);                     
+int embed_load_file(embed_t *h, FILE *input);
 
 /**@brief Save VM image to disk, 0 == success
  * @param h,     Virtual Machine image to save to disk

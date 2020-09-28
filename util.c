@@ -134,14 +134,14 @@ int embed_fgetc_cb(void *file, int *no_data) {
 	return fgetc(file);
 }
 
-static inline int is_big_endian(void) { 
-	return (*(uint16_t *)"\0\xff" < 0x100); 
+static inline int is_big_endian(void) {
+	return (*(uint16_t *)"\0\xff" < 0x100);
 }
 
-static void embed_normalize(embed_t *h, size_t l)  { 
-	assert(h); 
-	if (is_big_endian()) 
-		embed_buffer_swap(h->m, l); 
+static void embed_normalize(embed_t *h, size_t l)  {
+	assert(h);
+	if (is_big_endian())
+		embed_buffer_swap(h->m, l);
 }
 
 int embed_load_file(embed_t *h, FILE *input) {
@@ -190,7 +190,7 @@ int embed_getopt(embed_getopt_t *opt, const int argc, char *const argv[], const 
 			opt->place = string_empty;
 			return -1;
 		}
-	} 
+	}
 
 	const char *oli; /* option letter list index */
 	if ((opt->option = *opt->place++) == ':' || !(oli = strchr(fmt, opt->option))) { /* option letter okay? */
@@ -230,7 +230,7 @@ int embed_getopt(embed_getopt_t *opt, const int argc, char *const argv[], const 
 /* --- Built In Self Test --- */
 
 typedef struct {
-	unsigned passed, 
+	unsigned passed,
 		 run;
 } unit_test_t;
 
@@ -428,7 +428,7 @@ int embed_tests(void) {
 #else
 	typedef int (*test_func)(void);
 	test_func funcs[] = {
-		test_embed_stack,     test_embed_reset,  test_embed_eval, 
+		test_embed_stack,     test_embed_reset,  test_embed_eval,
 		test_embed_callbacks, test_embed_yields, test_embed_file,
 	};
 

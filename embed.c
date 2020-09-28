@@ -133,7 +133,7 @@ embed_opt_t embed_opt_default(void) {
 	embed_opt_t o = {
 		.get      = embed_ngetc_cb, .put   = embed_nputc_cb, .save = NULL,
 		.in       = NULL,           .out   = NULL,           .name = NULL,
-		.write    = embed_mmu_write_cb,   
+		.write    = embed_mmu_write_cb,
 		.read     = embed_mmu_read_cb,
 		.yield    = embed_yield_cb
 	};

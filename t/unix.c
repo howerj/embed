@@ -54,7 +54,7 @@ static int getch(int fd, bool *eagain) { /* Set terminal to raw mode */
 	bool again = false;
 	errno = 0;
 	int r = read(fd, &b, 1);
-	if(r < 0)
+	if (r < 0)
 		again = errno == EAGAIN || errno == EWOULDBLOCK;
 	*eagain = again;
 	return r == 1 ? (int)b : EOF;
@@ -62,17 +62,17 @@ static int getch(int fd, bool *eagain) { /* Set terminal to raw mode */
 
 static int raw(int fd) {
 	errno = 0;
-	if(tcgetattr(fd, &old) < 0)
+	if (tcgetattr(fd, &old) < 0)
 		return -1;
 	new          = old;
 	new.c_iflag &= ~(ICRNL);
 	new.c_lflag &= ~(ICANON | ECHO);
 	/* fprintf(stdout, "erase = %u\n", (unsigned)old.c_cc[VERASE]); */
 	errno = 0;
-	if(tcsetattr(fd, TCSANOW, &new) < 0)
+	if (tcsetattr(fd, TCSANOW, &new) < 0)
 		return -1;
 	errno = 0;
-	if(fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK) < 0)
+	if (fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK) < 0)
 		return -1;
 	return 0;
 }
@@ -103,11 +103,11 @@ int main(void) {
 	FILE *out = stdout;
 
 	fd = STDIN_FILENO;
-	if(isatty(fd)) {
+	if (isatty(fd)) {
 		embed_info("TTY RAW/NO-BLOCKING - UART Simulation");
 		embed_info("Hit ESCAPE or type 'bye' to quit");
 		options |= EMBED_VM_RAW_TERMINAL;
-		if(raw(fd) < 0)
+		if (raw(fd) < 0)
 			embed_fatal("failed to set terminal attributes: %s", strerror(errno));
 		atexit(cooked);
 	} else {
@@ -121,7 +121,7 @@ int main(void) {
 	o.options  = options;
 
 	embed_t *h = embed_new();
-	if(!h)
+	if (!h)
 		embed_fatal("embed: allocate failed");
 	embed_opt_set(h, &o);
 	/* NB. The eForth image will return '1' if there is more work to do,
@@ -130,7 +130,7 @@ int main(void) {
 	 * another image that is not the default image is free to return
 	 * whatever it likes. Also, we call 'usleep()' here, but we could do
 	 * other work if we wanted to. */
-	for(r = 0; (r = embed_vm(h)) > 0; )
+	for (r = 0; (r = embed_vm(h)) > 0; )
 		usleep(10 * 1000uLL);
 	return r;
 }

@@ -13,9 +13,9 @@
  *
  * Proper floating point number input has not been implemented, but floating point
  * output has been (with the word 'f.'). Floating point number can be input
- * only as integers (with the word 's>f'). There is no plan to add more 
- * floating point number words, as this program is here only as a 
- * demonstration that new functionality can be added, that is, that is 
+ * only as integers (with the word 's>f'). There is no plan to add more
+ * floating point number words, as this program is here only as a
+ * demonstration that new functionality can be added, that is, that is
  * extension is possible.
  *
  * A number of helper routines are added that make dealing with the library
@@ -139,7 +139,7 @@ static inline size_t number_of_callbacks(void) { return sizeof(callbacks) / size
 
 static inline cell_t eset(vm_extension_t * const v, const cell_t error) { /**< set error register if not set */
 	assert(v);
-	if(!(v->error))
+	if (!(v->error))
 		v->error = error;
 	return v->error;
 }
@@ -158,21 +158,21 @@ static inline cell_t eclr(vm_extension_t * const v) { /**< clear error register 
 
 static inline cell_t pop(vm_extension_t *v) {
 	assert(v);
-	if(eget(v))
+	if (eget(v))
 		return 0;
 	cell_t rv = 0;
 	int e = 0;
-	if((e = embed_pop(v->h, &rv)) < 0)
+	if ((e = embed_pop(v->h, &rv)) < 0)
 		eset(v, e);
 	return rv;
 }
 
 static inline void push(vm_extension_t * const v, const cell_t value) {
 	assert(v);
-	if(eget(v))
+	if (eget(v))
 		return;
 	int e = 0;
-	if((e = embed_push(v->h, value)) < 0)
+	if ((e = embed_push(v->h, value)) < 0)
 		eset(v, e);
 }
 
@@ -224,7 +224,7 @@ static int cb_dsub(vm_extension_t * const v) {
 static int cb_ddiv(vm_extension_t * const v) {
 	const sdc_t d1 = dpop(v);
 	const sdc_t d2 = dpop(v);
-	if(!d1) {
+	if (!d1) {
 		eset(v, 10); /* division by zero */
 		return eclr(v);
 	}
@@ -258,7 +258,7 @@ static int cb_dequal(vm_extension_t * const v) {
 
 static int cb_dprint(vm_extension_t * const v) {
 	const long d = dpop(v);
-	if(eget(v))
+	if (eget(v))
 		return eclr(v);
 	char buf[80] = { 0 };
 	snprintf(buf, sizeof(buf)-1, "%ld", d); /**@bug does not respect eForth base */
@@ -269,7 +269,7 @@ static int cb_dprint(vm_extension_t * const v) {
 static int cb_flt_print(vm_extension_t * const v) {
 	const vm_float_t flt = fpop(v);
 	char buf[512] = { 0 }; /* floats can be quite large */
-	if(eget(v))
+	if (eget(v))
 		return eclr(v);
 	snprintf(buf, sizeof(buf)-1, "%e", flt);
 	embed_puts(v->h, buf);
@@ -296,7 +296,7 @@ static int cb_fsub(vm_extension_t * const v) {
 static int cb_fdiv(vm_extension_t * const v) {
 	const vm_float_t f1 = fpop(v);
 	const vm_float_t f2 = fpop(v);
-	if(f1 == 0.0f) {
+	if (f1 == 0.0f) {
 		eset(v, 42); /* floating point division by zero */
 		return eclr(v);
 	}
@@ -305,7 +305,7 @@ static int cb_fdiv(vm_extension_t * const v) {
 }
 
 /*// 'd>f' would need take into account the 'dpl' variable
-static int cb_d2f(vm_extension_t * const v) { 
+static int cb_d2f(vm_extension_t * const v) {
 	fpush(v, dpop(v));
 	return eclr(v);
 }*/
@@ -427,7 +427,7 @@ static int cb_fpow(vm_extension_t * const v) {
 
 static int cb_fsqrt(vm_extension_t * const v) {
 	const vm_float_t f = fpop(v);
-	if(f < 0.0f)
+	if (f < 0.0f)
 		return eset(v, 43);
 	fpush(v, sqrtf(f));
 	return eclr(v);
@@ -435,7 +435,7 @@ static int cb_fsqrt(vm_extension_t * const v) {
 
 static int cb_flog(vm_extension_t * const v) {
 	const vm_float_t f = fpop(v);
-	if(f <= 0.0f)
+	if (f <= 0.0f)
 		return eset(v, 43);
 	fpush(v, logf(f));
 	return eclr(v);
@@ -443,7 +443,7 @@ static int cb_flog(vm_extension_t * const v) {
 
 static int cb_flog10(vm_extension_t * const v) {
 	const vm_float_t f = fpop(v);
-	if(f <= 0.0f)
+	if (f <= 0.0f)
 		return eset(v, 43);
 	fpush(v, log10f(f));
 	return eclr(v);
@@ -453,7 +453,7 @@ static int get_a_char(vm_extension_t * const v) {
 	embed_fgetc_t get = v->o.get;
 	void *getp = v->o.in;
 	int ch, no_data = 0;
-	do { ch = get(getp, &no_data); } while(no_data);
+	do { ch = get(getp, &no_data); } while (no_data);
 	return ch;
 }
 
@@ -462,23 +462,23 @@ static int cb_fget(vm_extension_t * const v) {
 	int ch = 0;
 	vm_float_t f = 0.0;
 
-	while(isspace(ch = get_a_char(v)))
+	while (isspace(ch = get_a_char(v)))
 		;
 
-	if(ch == EOF)
+	if (ch == EOF)
 		return 57;
 
 	buf[0] = ch;
 
-	for(size_t i = 1; i < (sizeof(buf)-1); i++) {
-		if((ch = get_a_char(v)) == EOF)
+	for (size_t i = 1; i < (sizeof(buf)-1); i++) {
+		if ((ch = get_a_char(v)) == EOF)
 			return 57;
-		if(isspace(ch))
+		if (isspace(ch))
 			break;
 		buf[i] = ch;
 	}
 
-	if(sscanf(buf, "%f", &f) != 1)
+	if (sscanf(buf, "%f", &f) != 1)
 		return 13;
 
 	fpush(v, f);
@@ -513,11 +513,11 @@ static int cb_ferf(vm_extension_t * const v) {
 
 static int cb_ferfc(vm_extension_t * const v) {
 	vm_float_t f = fpop(v);
-	if(eget(v))
+	if (eget(v))
 		return eclr(v);
 	errno = 0;
 	f = erff(f);
-	if(errno == ERANGE)
+	if (errno == ERANGE)
 		return eset(v, 43);
 	fpush(v, f);
 	return eclr(v);
@@ -527,7 +527,7 @@ static int cb_flgamma(vm_extension_t * const v) {
 	vm_float_t f = fpop(v);
 	errno = 0;
 	f = lgammaf(f);
-	if(errno == ERANGE)
+	if (errno == ERANGE)
 		return eset(v, 43);
 	fpush(v, f);
 	return eclr(v);
@@ -537,7 +537,7 @@ static int cb_ftgamma(vm_extension_t * const v) {
 	vm_float_t f = fpop(v);
 	errno = 0;
 	f = tgammaf(f);
-	if(errno == ERANGE || errno == EDOM)
+	if (errno == ERANGE || errno == EDOM)
 		return eset(v, 43);
 	fpush(v, f);
 	return eclr(v);
@@ -562,16 +562,16 @@ static int callback_selector(embed_t *h, void *param) {
 	assert(h);
 	assert(param);
 	vm_extension_t *e = (vm_extension_t*)param;
-	if(e->h != h)
+	if (e->h != h)
 		embed_fatal("embed extensions: instance corruption");
 	eclr(e);
 	const cell_t func = pop(e);
-	if(eget(e))
+	if (eget(e))
 		return eclr(e);
-	if(func >= e->callbacks_length)
+	if (func >= e->callbacks_length)
 		return -21;
 	const callbacks_t *cb = &e->callbacks[func];
-	if(!(cb->use))
+	if (!(cb->use))
 		return -21;
 	return cb->cb(e);
 }
@@ -583,22 +583,22 @@ static int callbacks_add(embed_t * const h, const bool optimize,  callbacks_t *c
 	const char *optimizer = optimize ? "-2 cells allot ' vm chars ," : "";
 	static const char *preamble = "only forth definitions system +order\n";
 	int r = 0;
-	if((r = embed_eval(h, preamble)) < 0) {
+	if ((r = embed_eval(h, preamble)) < 0) {
 		embed_error("embed: eval(%s) returned %d", preamble, r);
 		return r;
 	}
 
-	for(size_t i = 0; i < number; i++) {
+	for (size_t i = 0; i < number; i++) {
 		char line[80] = { 0 };
-		if(!cb[i].use)
+		if (!cb[i].use)
 			continue;
 		r = snprintf(line, sizeof(line), ": %s %u vm ; %s\n", cb[i].name, (unsigned)i, optimizer);
 		assert(strlen(line) < sizeof(line) - 1);
-		if(r < 0) {
+		if (r < 0) {
 			embed_error("format error in snprintf (returned %d)", r);
 			return -1;
 		}
-		if((r = embed_eval(h, line)) < 0) {
+		if ((r = embed_eval(h, line)) < 0) {
 			embed_error("embed: eval(%s) returned %d", line, r);
 			return r;
 		}
@@ -609,10 +609,10 @@ static int callbacks_add(embed_t * const h, const bool optimize,  callbacks_t *c
 
 static vm_extension_t *vm_extension_new(void) {
 	vm_extension_t *v = embed_alloc(sizeof(*v));
-	if(!v)
+	if (!v)
 		return NULL;
 	v->h = embed_new();
-	if(!(v->h))
+	if (!(v->h))
 		goto fail;
 
 	v->callbacks_length = number_of_callbacks(),
@@ -622,14 +622,14 @@ static vm_extension_t *vm_extension_new(void) {
 	v->o.param          = v;
 	embed_opt_set(v->h, &v->o);
 
-	if(callbacks_add(v->h, true, v->callbacks, v->callbacks_length) < 0) {
+	if (callbacks_add(v->h, true, v->callbacks, v->callbacks_length) < 0) {
 		embed_error("adding callbacks failed");
 		goto fail;
 	}
 
 	return v;
 fail:
-	if(v->h)
+	if (v->h)
 		embed_free(v->h);
 	return NULL;
 }
@@ -649,7 +649,7 @@ static void vm_extension_free(vm_extension_t *v) {
 int main(void) {
 	BUILD_BUG_ON(sizeof(double_cell_t) != sizeof(sdc_t));
 	vm_extension_t *v = vm_extension_new();
-	if(!v)
+	if (!v)
 		embed_fatal("embed extensions: load failed");
 	const int r = vm_extension_run(v);
 	vm_extension_free(v);

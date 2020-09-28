@@ -34,7 +34,7 @@ static bool a_tty = false;
 static int getch_wrapper(bool *eagain) {
 	bool again = false;
 	int ch = EOF;
-	if(kbhit())
+	if (kbhit())
 		ch = getch();
 	else
 		again = true;
@@ -45,7 +45,7 @@ static int getch_wrapper(bool *eagain) {
 static int win_getch(void *file, int *no_data) {
 	assert(no_data); /*zero is a valid file descriptor*/
 	FILE *in = file;
-	if(!a_tty) {
+	if (!a_tty) {
 		assert(in);
 		*no_data = 0;
 		return fgetc(in);
@@ -75,7 +75,7 @@ int main(void) {
 	binary(stdout);
 	binary(stderr);
 
-	if(_isatty(_fileno(stdin))) {
+	if (_isatty(_fileno(stdin))) {
 		embed_info("TTY RAW/NO-BLOCKING - UART Simulation");
 		embed_info("Hit ESCAPE or type 'bye' to quit");
 		options |= EMBED_VM_RAW_TERMINAL;
@@ -92,11 +92,11 @@ int main(void) {
 	o.options  = options;
 
 	embed_t *h = embed_new();
-	if(!h)
+	if (!h)
 		embed_fatal("embed: allocate failed");
 	embed_opt_set(h, &o);
 
-	for(r = 0; (r = embed_vm(h)) > 0; Sleep(10/*milliseconds*/))
+	for (r = 0; (r = embed_vm(h)) > 0; Sleep(10/*milliseconds*/))
 		/*fputc('.', stdout)*/ /*do nothing*/;
 	return r;
 }

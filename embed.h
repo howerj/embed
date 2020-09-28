@@ -190,7 +190,7 @@ size_t embed_cells(embed_t const * const h);
 /**@brief Swap byte order of a buffer of 2-byte values
  * @param b, buffer to change endianess of
  * @param l, length of buffer in cell_t */
-void embed_buffer_swap(cell_t *b, size_t l);                  
+void embed_buffer_swap(cell_t *b, size_t l);
 
 /**@brief Run the virtual machine directly, with custom options.
  * 'embed_opt_default()' can be used to get a copy of a structure
@@ -254,7 +254,7 @@ void embed_reset(embed_t *h);
  * @warning be careful with this!
  * @param h, initialized Virtual Machine image
  * @return point to core image of embed_length() bytes long */
-cell_t *embed_core_get(embed_t *h);        
+cell_t *embed_core_get(embed_t *h);
 
 /**@brief evaluate a string, each line should be less than 80 chars and end in a newline
  * @param h,   an initialized virtual machine

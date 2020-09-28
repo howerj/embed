@@ -52,7 +52,7 @@ bitmap_t *bitmap_new(size_t bits) {
 	assert(length < (SIZE_MAX/bits));
 	assert((length + sizeof(bitmap_t)) > length);
 	bitmap_t *r = calloc(sizeof(bitmap_t) + length, 1);
-	if(!r)
+	if (!r)
 		return NULL;
 	r->bits = bits;
 	return r;
@@ -61,7 +61,7 @@ bitmap_t *bitmap_new(size_t bits) {
 bitmap_t *bitmap_copy(bitmap_t *b) {
 	assert(b);
 	bitmap_t *r = bitmap_new(b->bits);
-	if(!r)
+	if (!r)
 		return NULL;
 	return memcpy(r, b, bitmap_sizeof(b));
 }
@@ -107,7 +107,7 @@ static cell_t  mmu_read_cb(embed_t const * const h, cell_t addr) {
 
 static void mmu_write_cb(embed_t * const h, cell_t addr, cell_t value) {
 	assert(!(0x8000 & addr));
-	/*if(m[addr] != value)*/
+	/*if (m[addr] != value)*/
 	bitmap_set(write_map, addr);
 	((cell_t*)h->m)[addr] = value;
 }
@@ -119,12 +119,12 @@ static void mmu_write_cb(embed_t * const h, cell_t addr, cell_t value) {
 static bitmap_t *bitmap_union(bitmap_t *a, bitmap_t *b) {
 	const size_t al = bitmap_bits(a), bl = bitmap_bits(b);
 	bitmap_t *u = (al > bl) ? bitmap_copy(a) : bitmap_copy(b);
-	if(!u)
+	if (!u)
 		return NULL;
 	bitmap_t *m = (al > bl) ? b : a;
 	const size_t ml = MIN(al, bl);
-	for(size_t i = 0; i < ml; i++)
-		if(bitmap_get(m, i))
+	for (size_t i = 0; i < ml; i++)
+		if (bitmap_get(m, i))
 			bitmap_set(u, i);
 	return u;
 }
@@ -133,19 +133,19 @@ static void bitmap_print_range(bitmap_t *b, FILE *out) {
 	assert(b);
 	assert(out);
 	size_t total = 0;
-	for(size_t i = 0; i < bitmap_bits(b);) {
+	for (size_t i = 0; i < bitmap_bits(b);) {
 		size_t start = i, end = i, j = i;
-		if(!bitmap_get(b, i)) {
+		if (!bitmap_get(b, i)) {
 			i++;
 			continue;
 		}
 
-		for(j = i; j < bitmap_bits(b); j++)
-			if(!bitmap_get(b, j))
+		for (j = i; j < bitmap_bits(b); j++)
+			if (!bitmap_get(b, j))
 				break;
 		end = bitmap_get(b, j) ? j :
 			j > (i+1)      ? j-1 : i;
-		if(start == end) {
+		if (start == end) {
 			total++;
 			fprintf(out, "    1\t%zu\n", end);
 		} else {
@@ -162,7 +162,7 @@ static void bitmap_print_range(bitmap_t *b, FILE *out) {
 /*static int bitmap_print(bitmap_t *b, size_t bit, void *param)
 {
 	FILE *out = (FILE*)param;
-	if(bitmap_get(b, bit))
+	if (bitmap_get(b, bit))
 		return fprintf(out, "%zu\n", bit) > 0;
 	return 0;
 }*/
@@ -172,7 +172,7 @@ static int bitmap_report(const char *name, bitmap_t *read_map, bitmap_t *write_m
 	assert(read_map);
 	assert(write_map);
 	bitmap_t *u = bitmap_union(read_map, write_map);
-	if(!u)
+	if (!u)
 		embed_fatal("report: union allocation failed");
 	FILE *report = embed_fopen_or_die(name, "wb");
 	fprintf(report, "write:\n");
@@ -190,7 +190,7 @@ int main(int argc, char **argv) {
 	int r = 0;
 	read_map  = bitmap_new(UINT16_MAX);
 	write_map = bitmap_new(UINT16_MAX);
-	if(!read_map || !write_map)
+	if (!read_map || !write_map)
 		embed_fatal("bitmap: allocate failed");
 
 	embed_opt_t o = embed_opt_default_hosted();
@@ -198,14 +198,14 @@ int main(int argc, char **argv) {
 	o.write = mmu_write_cb;
 
 	embed_t *h = embed_new();
-	if(!h)
+	if (!h)
 		embed_fatal("embed: allocate failed");
 
 	embed_opt_set(h, &o);
 
-	if(argc > 1) {
+	if (argc > 1) {
 		o.options |= EMBED_VM_QUITE_ON;
-		for(int i = 1; i < argc; i++) {
+		for (int i = 1; i < argc; i++) {
 			FILE *in = embed_fopen_or_die(argv[i], "rb");
 			o.in = in;
 			embed_opt_set(h, &o);
@@ -213,7 +213,7 @@ int main(int argc, char **argv) {
 			fclose(in);
 			o.in = stdin;
 			embed_opt_set(h, &o);
-			if(r < 0)
+			if (r < 0)
 				return r;
 		}
 	} else {

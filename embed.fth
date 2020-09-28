@@ -3764,28 +3764,28 @@ wrong.
 		assert(file && mode);
 		FILE *h = NULL;
 		errno = 0;
-		if(!(h = fopen(file, mode)))
+		if (!(h = fopen(file, mode)))
 			embed_die("file open %s (mode %s) failed: %s", file, mode, strerror(errno));
 		return h;
 	}
 
 	static forth_t *embed_new(void) {
 		forth_t *h = calloc(1, sizeof(*h));
-		if(!h)
+		if (!h)
 			embed_die("allocation (of %u) failed", (unsigned)sizeof(*h));
 		return h;
 	}
 
 	static int save(forth_t *h, const char *name, const size_t start, const size_t length) {
 		assert(h);
-		if(!name || !(((length - start) <= length) && ((start + length) <= embed_cells(h))))
+		if (!name || !(((length - start) <= length) && ((start + length) <= embed_cells(h))))
 			return -69; /* open-file IOR */
 		FILE *out = fopen(name, "wb");
-		if(!out)
+		if (!out)
 			return -69; /* open-file IOR */
 		int r = 0;
-		for(size_t i = start; i < length; i++)
-			if(fputc(h->m[i]&255, out) < 0 || fputc(h->m[i]>>8, out) < 0)
+		for (size_t i = start; i < length; i++)
+			if (fputc(h->m[i]&255, out) < 0 || fputc(h->m[i]>>8, out) < 0)
 				r = -76; /* write-file IOR */
 		return fclose(out) < 0 ? -62 /* close-file IOR */ : r;
 	}
@@ -3795,10 +3795,10 @@ wrong.
 		assert(h && name);
 		FILE *input = embed_fopen_or_die(name, "rb");
 		long r = 0;
-		for(size_t i = 0; i < max_size_t(64, embed_cells(h)); i++, r = i) {
+		for (size_t i = 0; i < max_size_t(64, embed_cells(h)); i++, r = i) {
 			int c1 = 0, c2 = 0;
 			assert(embed_cells(h) <= 0x8000);
-			if((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0)
+			if ((c1 = fgetc(input)) < 0 || (c2 = fgetc(input)) < 0)
 				break;
 			h->m[i] = ((c1 & 0xffu)) | ((c2 & 0xffu) << 8u);
 		}
@@ -3807,7 +3807,7 @@ wrong.
 	}
 
 	static inline void trace(FILE *out, m_t opt, m_t *m, m_t pc, m_t instruction, m_t t, m_t rp, m_t sp) {
-		if(!(opt & 1))
+		if (!(opt & 1))
 			return;
 		fprintf(out, "[ %4x %4x %4x %2x %2x ]\n", pc-1, instruction, t, m[2]-rp, sp-m[3]);
 	}
@@ -3818,12 +3818,12 @@ wrong.
 		const m_t l = embed_cells(h);
 		m_t * const m = h->m;
 		m_t pc = m[0], t = m[1], rp = m[2], sp = m[3], r = 0, opt = 0;
-		for(d_t d;;) {
+		for (d_t d;;) {
 			const m_t instruction = m[pc++];
 			trace(out, opt, m, pc, instruction, t, rp, sp);
-			if((r = -!(sp < l && rp < l && pc < l))) /* critical error */
+			if ((r = -!(sp < l && rp < l && pc < l))) /* critical error */
 				goto finished;
-			if(0x8000 & instruction) { /* literal */
+			if (0x8000 & instruction) { /* literal */
 				m[++sp] = t;
 				t       = instruction & 0x7FFF;
 			} else if ((0xE000 & instruction) == 0x6000) { /* ALU */
@@ -3855,18 +3855,18 @@ wrong.
 				case 22: T = save(h, block, n>>1, ((d_t)T+1)>>1); break;
 				case 23: T = fputc(t, out);        break;
 				case 24: m[++sp] = t; T = fgetc(in); t = T; n = 0;    break; /* n = blocking status */
-				case 25: if(t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
-				case 26: if(t) { T=(s_t)n/t; t=(s_t)n%t; n=t; } else { pc=4; T=10; } break;
-				case 27: if(m[rp]) { m[rp] = 0; sp--; r = t; t = n; goto finished; }; T = t; break;
+				case 25: if (t) { d = m[--sp]|((d_t)n<<16); T=d/t; t=d%t; n=t; } else { pc=4; T=10; } break;
+				case 26: if (t) { T=(s_t)n/t; t=(s_t)n%t; n=t; } else { pc=4; T=10; } break;
+				case 27: if (m[rp]) { m[rp] = 0; sp--; r = t; t = n; goto finished; }; T = t; break;
 				/* 28 is virtual machine callback mechanism, not implemented here */
 				case 29: T = opt; opt = t; break;
 				default: pc=4; T=21; break;
 				}
 				sp += delta[ instruction       & 0x3];
 				rp -= delta[(instruction >> 2) & 0x3];
-				if(instruction & 0x80)
+				if (instruction & 0x80)
 					m[sp] = t;
-				if(instruction & 0x40)
+				if (instruction & 0x40)
 					m[rp] = t;
 				t = (instruction & 0x20) ? n : T;
 			} else if (0x4000 & instruction) { /* call */
@@ -3885,12 +3885,12 @@ wrong.
 
 	int main(int argc, char **argv) {
 		forth_t *h = embed_new();
-		if(argc > 4)
+		if (argc > 4)
 			embed_die("usage: %s [in.blk] [out.blk] [file.fth]", argv[0]);
-		if(embed_load(h, argc < 2 ? "embed.blk" : argv[1]) < 0)
+		if (embed_load(h, argc < 2 ? "embed.blk" : argv[1]) < 0)
 			embed_die("embed: load failed");
 		FILE *in = argc <= 3 ? stdin : embed_fopen_or_die(argv[3], "rb");
-		if(embed_forth(h, in, stdout, argc < 3 ? NULL : argv[2]))
+		if (embed_forth(h, in, stdout, argc < 3 ? NULL : argv[2]))
 			embed_die("embed: run failed");
 		return 0; /* exiting takes care of closing files, freeing memory */
 	}

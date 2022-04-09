@@ -21,7 +21,7 @@ decimal
 variable line
 variable start-line
 variable code-block
-variable paragraph
+variable verbatim
 10 constant nl
 9 constant tab
 create queue 4 c, 0 c, 0 c, 0 c, 0 c,
@@ -41,11 +41,12 @@ create nbye 4 c, nl c, char b c, char y c, char e , ( "\nbye" )
 : .nl nl emit ;
 : .nl? if .nl then ;
 : slash? dup [char] \ = ;
-: start? start-line @ 0= 0= ;
+: start? start-line @ 0= 0= ; ( -- start-line  )
 : aswap 2dup c@ >r c@  swap c!  r> swap c! ; ( b b -- )
 : enqueue queue count 1- for aft dup dup 1+ aswap 1+ then next c! ;
 \ : .queue queue count .tab .pipe type .pipe cr ;
 : end? queue count nbye count compare 0= ;
+: verbatim! dup verbatim @ <> if verbatim ! .nl else drop then ;
 : escape ( c -- )
 	code? if emit exit then
 	dup [char] _ = if [char] \ emit emit exit then 
@@ -56,15 +57,15 @@ create nbye 4 c, nl c, char b c, char y c, char e , ( "\nbye" )
 	nl? if emit =line exit then
 	start? if 
 		slash? if 
-			paragraph @ 0= .nl? 1 paragraph !
 			drop key 
-			nl?  if emit =line exit then 
-			tab? if emit encode exit else drop then 
-			<>line exit 
+			tab? if 1 verbatim! encode exit else 0 verbatim! then
+			nl?  if emit =line exit else drop then
+			<>line exit
+		else
+		    1 verbatim!
+		    tab? if encode else <>line then
+		    .line emit +line exit
 		then
-		paragraph @ .nl? 0 paragraph !
-		tab? if encode else <>line then
-		.line emit +line exit
 	then
 	emit ;
 : converter begin key dup enqueue end? if emit exit then filter again ;

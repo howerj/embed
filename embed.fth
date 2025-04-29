@@ -3938,11 +3938,10 @@ This is a game of [Sokoban][], to play, type:
 On the command line. Four maps are provided, more can be found online at
 <https://github.com/begoon/sokoban-maps>, where the four maps were found.
 
-
 	\ Author:  Richard James Howe
 	\ License: MIT (excluding the maps)
 	only forth definitions hex
-	\ NB. 'blk' has the last block retrieved by 'block', not 'load' in this Forth
+	\ N.B. 'blk' has the last block retrieved by 'block', not 'load' in this Forth
 
 	variable sokoban-wordlist
 	sokoban-wordlist +order definitions
@@ -4068,6 +4067,10 @@ On the command line. Four maps are provided, more can be found online at
 	sokoban-wordlist -order definitions
 	sokoban-wordlist +order
 
+	editor
+        : level update 1 blk @ + l z ;
+	q
+
 	: sokoban ( k -- )
 	  maze! start
 	  begin
@@ -4077,7 +4080,7 @@ On the command line. Four maps are provided, more can be found online at
 	$18 maze!
 	only forth definitions
 
-	editor decimal z blk @
+	editor decimal z
 	 1 i            XXXXX            
 	 2 i            X   X            
 	 3 i            X*  X            
@@ -4090,7 +4093,7 @@ On the command line. Four maps are provided, more can be found online at
 	10 i            X      XXX  XXXXXX
 	11 i            XXXXXXXX         
 	12 i       
-	dup 1+ l z
+	level
 	 1 i       XXXXXXXXXXXX 
 	 2 i       X..  X     XXX
 	 3 i       X..  X *  *  X
@@ -4102,7 +4105,7 @@ On the command line. Four maps are provided, more can be found online at
 	 9 i         X    X     X
 	10 i         XXXXXXXXXXXX
 	11 i      
-	dup 1+ l z
+	level
 	 1 i               XXXXXXXX
 	 2 i               X     @X
 	 3 i               X *X* XX
@@ -4113,7 +4116,7 @@ On the command line. Four maps are provided, more can be found online at
 	 8 i       XX...    *  *   X
 	 9 i       X....  XXXXXXXXXX
 	10 i       XXXXXXXX        
-	dup 1+ l z
+	level
 	 1 i                     XXXXXXXX
 	 2 i                     X  ....X
 	 3 i          XXXXXXXXXXXX  ....X
@@ -4127,8 +4130,7 @@ On the command line. Four maps are provided, more can be found online at
 	11 i       X **X** @X           
 	12 i       X   X   XX           
 	13 i       XXXXXXXXX            
-	drop
-	q hex
+	update q hex
 
 	.( Type '# sokoban' to play, where '#' is a block number ) cr
 	.( For example "$18 sokoban" ) cr
